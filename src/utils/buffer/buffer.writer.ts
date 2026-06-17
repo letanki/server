@@ -1,38 +1,49 @@
 import { IVector3 } from "@/shared/types/geom/ivector3";
 
 export class BufferWriter {
-  private chunks: Buffer[] = [];
-  private totalLength: number = 0;
+  private buffer: Buffer;
+  private length: number = 0;
+
+  constructor(initialCapacity: number = 64) {
+    this.buffer = Buffer.allocUnsafe(initialCapacity);
+  }
+
+  /** Ensures at least `extra` more bytes fit, growing (capacity doubling) if needed. */
+  private ensureCapacity(extra: number): void {
+    const required = this.length + extra;
+    if (required <= this.buffer.length) {
+      return;
+    }
+    let newCapacity = this.buffer.length * 2;
+    while (newCapacity < required) {
+      newCapacity *= 2;
+    }
+    const grown = Buffer.allocUnsafe(newCapacity);
+    this.buffer.copy(grown, 0, 0, this.length);
+    this.buffer = grown;
+  }
 
   public writeUInt8(value: number): this {
-    const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(value, 0);
-    this.chunks.push(buffer);
-    this.totalLength += 1;
+    this.ensureCapacity(1);
+    this.length = this.buffer.writeUInt8(value, this.length);
     return this;
   }
 
   public writeInt8(value: number): this {
-    const buffer = Buffer.alloc(1);
-    buffer.writeInt8(value, 0);
-    this.chunks.push(buffer);
-    this.totalLength += 1;
+    this.ensureCapacity(1);
+    this.length = this.buffer.writeInt8(value, this.length);
     return this;
   }
 
   public writeInt16BE(value: number): this {
-    const buffer = Buffer.alloc(2);
-    buffer.writeInt16BE(value, 0);
-    this.chunks.push(buffer);
-    this.totalLength += 2;
+    this.ensureCapacity(2);
+    this.length = this.buffer.writeInt16BE(value, this.length);
     return this;
   }
 
   public writeInt32BE(value: number): this {
-    const buffer = Buffer.alloc(4);
-    buffer.writeInt32BE(value, 0);
-    this.chunks.push(buffer);
-    this.totalLength += 4;
+    this.ensureCapacity(4);
+    this.length = this.buffer.writeInt32BE(value, this.length);
     return this;
   }
 
@@ -49,10 +60,8 @@ export class BufferWriter {
   }
 
   public writeFloatBE(value: number): this {
-    const buffer = Buffer.alloc(4);
-    buffer.writeFloatBE(value, 0);
-    this.chunks.push(buffer);
-    this.totalLength += 4;
+    this.ensureCapacity(4);
+    this.length = this.buffer.writeFloatBE(value, this.length);
     return this;
   }
 
@@ -60,9 +69,10 @@ export class BufferWriter {
     const isNull = value === null || value === undefined;
     this.writeUInt8(isNull ? 1 : 0);
     if (!isNull) {
-      const valueBuffer = Buffer.from(value, "utf8");
-      this.writeInt32BE(valueBuffer.length);
-      this.writeBuffer(valueBuffer);
+      const byteLength = Buffer.byteLength(value, "utf8");
+      this.writeInt32BE(byteLength);
+      this.ensureCapacity(byteLength);
+      this.length += this.buffer.write(value, this.length, "utf8");
     }
     return this;
   }
@@ -117,8 +127,9 @@ export class BufferWriter {
   }
 
   public writeBuffer(buffer: Buffer): this {
-    this.chunks.push(buffer);
-    this.totalLength += buffer.length;
+    this.ensureCapacity(buffer.length);
+    buffer.copy(this.buffer, this.length);
+    this.length += buffer.length;
     return this;
   }
 
@@ -134,10 +145,10 @@ export class BufferWriter {
   }
 
   public getBuffer(): Buffer {
-    return Buffer.concat(this.chunks, this.totalLength);
+    return this.buffer.subarray(0, this.length);
   }
 
   public getLength(): number {
-    return this.totalLength;
+    return this.length;
   }
 }
