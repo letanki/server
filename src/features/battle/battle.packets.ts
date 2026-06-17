@@ -73,6 +73,14 @@ export class BonusDataPacket extends BasePacket implements BattleTypes.IBonusDat
     static getId(): number { return 228171466; }
 }
 
+export class InitBonusesPacket extends BasePacket {
+    jsonData: string | null;
+    constructor(jsonData: string | null = "[]") { super(); this.jsonData = jsonData; }
+    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
+    static getId(): number { return 870278784; }
+}
+
 export class BonusRegionsPacket extends BasePacket implements BattleTypes.IBonusRegions {
     bonusRegionResources: BattleTypes.IBonusRegionResource[]; bonusRegionData: BattleTypes.IBonusRegionData[];
     constructor(data?: BattleTypes.IBonusRegionsData) { super(); this.bonusRegionResources = data?.bonusRegionResources ?? []; this.bonusRegionData = data?.bonusRegionData ?? []; }
@@ -157,8 +165,8 @@ export class InitBattleUsersDMPacket extends BasePacket implements BattleTypes.I
     constructor(users?: BattleTypes.IBattleUser[]) { super(); if (users) this.users = users; }
     read(buffer: Buffer): void { this.users = this.readUsers(new BufferReader(buffer)); }
     write(): Buffer { const w = new BufferWriter(); this.writeUsers(w, this.users); return w.getBuffer(); }
-    private readUsers(r: BufferReader): BattleTypes.IBattleUser[] { const c = r.readInt32BE(); const a: BattleTypes.IBattleUser[] = []; for (let i = 0; i < c; i++) a.push({ chatModeratorLevel: r.readInt32BE(), deaths: r.readInt32BE(), kills: r.readInt32BE(), rank: r.readInt8(), score: r.readInt32BE(), uid: r.readOptionalString() }); return a; }
-    private writeUsers(w: BufferWriter, u: BattleTypes.IBattleUser[]): void { w.writeInt32BE(u.length); for (const i of u) { w.writeInt32BE(i.chatModeratorLevel); w.writeInt32BE(i.deaths); w.writeInt32BE(i.kills); w.writeInt8(i.rank); w.writeInt32BE(i.score); w.writeOptionalString(i.uid); } }
+    private readUsers(r: BufferReader): BattleTypes.IBattleUser[] { const c = r.readInt32BE(); const a: BattleTypes.IBattleUser[] = []; for (let i = 0; i < c; i++) a.push({ chatModeratorLevel: 0, deaths: r.readInt32BE(), kills: r.readInt32BE(), rank: r.readUInt8(), score: r.readInt32BE(), uid: r.readOptionalString() }); return a; }
+    private writeUsers(w: BufferWriter, u: BattleTypes.IBattleUser[]): void { w.writeInt32BE(u.length); for (const i of u) { w.writeInt32BE(i.deaths); w.writeInt32BE(i.kills); w.writeUInt8(i.rank); w.writeInt32BE(i.score); w.writeOptionalString(i.uid); } }
     static getId(): number { return -1959138292; }
 }
 
@@ -167,8 +175,8 @@ export class InitBattleUsersTeamPacket extends BasePacket implements BattleTypes
     constructor(scoreBlue: number = 0, scoreRed: number = 0, usersBlue: BattleTypes.IBattleUser[] = [], usersRed: BattleTypes.IBattleUser[] = []) { super(); this.scoreBlue = scoreBlue; this.scoreRed = scoreRed; this.usersBlue = usersBlue; this.usersRed = usersRed; }
     read(buffer: Buffer): void { const r = new BufferReader(buffer); this.scoreBlue = r.readInt32BE(); this.scoreRed = r.readInt32BE(); this.usersBlue = this.readUsers(r); this.usersRed = this.readUsers(r); }
     write(): Buffer { const w = new BufferWriter(); w.writeInt32BE(this.scoreBlue); w.writeInt32BE(this.scoreRed); this.writeUsers(w, this.usersBlue); this.writeUsers(w, this.usersRed); return w.getBuffer(); }
-    private readUsers(r: BufferReader): BattleTypes.IBattleUser[] { const c = r.readInt32BE(); const a: BattleTypes.IBattleUser[] = []; for (let i = 0; i < c; i++) a.push({ chatModeratorLevel: r.readInt32BE(), deaths: r.readInt32BE(), kills: r.readInt32BE(), rank: r.readInt8(), score: r.readInt32BE(), uid: r.readOptionalString() }); return a; }
-    private writeUsers(w: BufferWriter, u: BattleTypes.IBattleUser[]): void { w.writeInt32BE(u.length); for (const i of u) { w.writeInt32BE(i.chatModeratorLevel); w.writeInt32BE(i.deaths); w.writeInt32BE(i.kills); w.writeInt8(i.rank); w.writeInt32BE(i.score); w.writeOptionalString(i.uid); } }
+    private readUsers(r: BufferReader): BattleTypes.IBattleUser[] { const c = r.readInt32BE(); const a: BattleTypes.IBattleUser[] = []; for (let i = 0; i < c; i++) a.push({ chatModeratorLevel: 0, deaths: r.readInt32BE(), kills: r.readInt32BE(), rank: r.readUInt8(), score: r.readInt32BE(), uid: r.readOptionalString() }); return a; }
+    private writeUsers(w: BufferWriter, u: BattleTypes.IBattleUser[]): void { w.writeInt32BE(u.length); for (const i of u) { w.writeInt32BE(i.deaths); w.writeInt32BE(i.kills); w.writeUInt8(i.rank); w.writeInt32BE(i.score); w.writeOptionalString(i.uid); } }
     static getId(): number { return -1233891872; }
 }
 
@@ -351,16 +359,16 @@ export class UnloadSpaceBattlePacket extends BasePacket implements BattleTypes.I
 export class UpdateBattleUserDMPacket extends BasePacket implements BattleTypes.IUpdateBattleUserDM {
     deaths: number; kills: number; score: number; nickname: string | null;
     constructor(data?: BattleTypes.IUpdateBattleUserDMData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt32BE(); this.kills = r.readInt32BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt32BE(this.deaths); w.writeInt32BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); return w.getBuffer(); }
+    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt16BE(); this.kills = r.readInt16BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); }
+    write(): Buffer { const w = new BufferWriter(); w.writeInt16BE(this.deaths); w.writeInt16BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); return w.getBuffer(); }
     static getId(): number { return 696140460; }
 }
 
 export class UpdateBattleUserTeamPacket extends BasePacket implements BattleTypes.IUpdateBattleUserTeam {
     deaths: number; kills: number; score: number; nickname: string | null; team: number;
     constructor(data?: BattleTypes.IUpdateBattleUserTeamData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; this.team = data?.team ?? 2; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt32BE(); this.kills = r.readInt32BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); this.team = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt32BE(this.deaths); w.writeInt32BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); w.writeInt32BE(this.team); return w.getBuffer(); }
+    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt16BE(); this.kills = r.readInt16BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); this.team = r.readInt32BE(); }
+    write(): Buffer { const w = new BufferWriter(); w.writeInt16BE(this.deaths); w.writeInt16BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); w.writeInt32BE(this.team); return w.getBuffer(); }
     static getId(): number { return -497293992; }
 }
 
@@ -375,8 +383,8 @@ export class UpdateSpectatorListPacket extends BasePacket implements BattleTypes
 export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUserConnectDM {
     nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[];
     constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); const c = r.readInt32BE(); this.usersInfo = []; for (let i = 0; i < c; i++) { this.usersInfo.push({ ChatModeratorLevel: r.readInt32BE(), deaths: r.readInt32BE(), kills: r.readInt32BE(), rank: r.readUInt8(), score: r.readInt32BE(), nickname: r.readOptionalString() }); } }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeInt32BE(this.usersInfo.length); for (const u of this.usersInfo) { w.writeInt32BE(u.ChatModeratorLevel); w.writeInt32BE(u.deaths); w.writeInt32BE(u.kills); w.writeUInt8(u.rank); w.writeInt32BE(u.score); w.writeOptionalString(u.nickname); } return w.getBuffer(); }
+    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); const c = r.readInt32BE(); this.usersInfo = []; for (let i = 0; i < c; i++) { this.usersInfo.push({ ChatModeratorLevel: r.readInt32BE(), deaths: r.readInt16BE(), kills: r.readInt16BE(), rank: r.readUInt8(), score: r.readInt32BE(), nickname: r.readOptionalString() }); } }
+    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeInt32BE(this.usersInfo.length); for (const u of this.usersInfo) { w.writeInt32BE(u.ChatModeratorLevel); w.writeInt16BE(u.deaths); w.writeInt16BE(u.kills); w.writeUInt8(u.rank); w.writeInt32BE(u.score); w.writeOptionalString(u.nickname); } return w.getBuffer(); }
     static getId(): number { return 862913394; }
 }
 

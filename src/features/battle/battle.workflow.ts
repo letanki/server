@@ -150,7 +150,7 @@ export class BattleWorkflow {
             engineIdleSound: ResourceManager.getIdlowById("sounds/hull/engine_idle"),
             engineStartMovingSound: ResourceManager.getIdlowById("sounds/hull/engine_start"),
             engineMovingSound: ResourceManager.getIdlowById("sounds/hull/engine_move"),
-            turretSound: ResourceManager.getIdlowById("sounds/turret/turn"),
+            turretRotationSound: ResourceManager.getIdlowById("sounds/turret/turn"),
         };
 
         const sfxKey = `${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`;
@@ -186,6 +186,18 @@ export class BattleWorkflow {
             hullResource: ResourceManager.getIdlowById(`hull/${user.equippedHull}/m${user.hulls.get(user.equippedHull) ?? 0}/model` as ResourceId),
             turretResource: ResourceManager.getIdlowById(`turret/${user.equippedTurret}/m${user.turrets.get(user.equippedTurret) ?? 0}/model` as ResourceId),
             sfxData: JSON.stringify(finalSfxData),
+            // The current client reads these as Resources during InitTank decode;
+            // omitting them yields undefined -> TypeError #1009.
+            deadColoring: ResourceManager.getIdlowById("paint/destroyed/texture"),
+            // Rank-up beam effect resources (rare event). Our old resource map lacks
+            // dedicated entries. The client casts beam/wave/spark to the same texture
+            // type as deadColoring, so reuse that texture to keep the cast valid
+            // (a wrong resource type triggers a #1034 coercion error). levelUpSound is
+            // cast to a Sound type, so reuse a loaded sound.
+            beamTexture: ResourceManager.getIdlowById("paint/destroyed/texture"),
+            waveTexture: ResourceManager.getIdlowById("paint/destroyed/texture"),
+            sparkTexture: ResourceManager.getIdlowById("paint/destroyed/texture"),
+            levelUpSound: ResourceManager.getIdlowById("sounds/battle/tank_explosion"),
             tank_id: user.username,
             nickname: user.username,
             state: client.battleState,
@@ -303,10 +315,20 @@ export class BattleWorkflow {
         };
 
         const themeConfig = mapThemeConfigs[settings.mapTheme];
+        const gc: any = themeConfig.graphicConfig;
+        // The current client reads these exact keys; missing fields -> TypeError #1009.
         const mapGraphicData = {
-            mapId: mapIdWithPrefix,
-            mapTheme: MapTheme[settings.mapTheme],
-            ...themeConfig.graphicConfig,
+            lightColor: gc.lightColor,
+            shadowColor: gc.shadowColor,
+            shadowAngleX: gc.angleX,
+            shadowAngleZ: gc.angleZ,
+            ssaoColor: gc.ssaoColor,
+            fogAlpha: gc.fogAlpha,
+            fogColor: gc.fogColor,
+            fogFarLimit: gc.farLimit,
+            fogNearLimit: gc.nearLimit,
+            gravity: gc.gravity,
+            skyboxRevolutionSpeed: gc.skyboxRevolutionSpeed,
         };
 
         const lightingData = {
@@ -326,8 +348,17 @@ export class BattleWorkflow {
             minRank: settings.minRank,
             maxRank: settings.maxRank,
             skybox: JSON.stringify(skyboxData),
-            sound_id: ResourceManager.getIdlowById("sounds/maps/sandbox_ambient"),
+            ambientSound: ResourceManager.getIdlowById("sounds/maps/sandbox_ambient"),
+            tankExplosionSound: ResourceManager.getIdlowById("sounds/battle/tank_explosion"),
+            explosionTextureId: ResourceManager.getIdlowById("effects/explosions/fire"),
+            shockWaveTextureId: ResourceManager.getIdlowById("effects/explosions/shockwave"),
+            smokeTextureId: ResourceManager.getIdlowById("effects/explosions/smoke"),
             map_graphic_data: JSON.stringify(mapGraphicData),
+            dustAlpha: gc.dustAlpha,
+            dustDensity: gc.dustDensity,
+            dustFarDistance: gc.dustFarDistance,
+            dustNearDistance: gc.dustNearDistance,
+            dustSize: gc.dustSize,
             reArmorEnabled: settings.reArmorEnabled,
             bonusLightIntensity: themeConfig.bonusLightIntensity ?? 0,
             lighting: JSON.stringify(lightingData),
@@ -362,6 +393,11 @@ export class BattleWorkflow {
 
         client.sendPacket(new BattlePackets.BattleStatsPacket(battleStatsData));
         client.sendPacket(new BattlePackets.LoadBattleChatPacket());
+
+        // Mines properties must be sent before InitBattleDM/Team and InitModelPost
+        // (the client finalizes its battle models in InitModelPost; sending mines
+        // afterwards leaves the mines model uninitialized -> TypeError #1009).
+        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps()));
 
         if (battle.settings.battleMode === BattleMode.CTF) {
             const adjustZ = (pos: IVector3 | null): IVector3 | null => {
@@ -501,9 +537,8 @@ export class BattleWorkflow {
         }
     }
 
-    private static _sendFinalBattlePackets(client: GameClient, battle: Battle): void {
-        const user = client.user!;
-        const mineProps = {
+    private static _buildMineProps() {
+        return {
             activateSound: ResourceManager.getIdlowById("sounds/mine_activate"),
             activateTimeMsec: 1000,
             battleMines: [],
@@ -523,7 +558,10 @@ export class BattleWorkflow {
             radius: 0.5,
             redMineTexture: ResourceManager.getIdlowById("effects/mine/red_mine_texture"),
         };
-        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(mineProps));
+    }
+
+    private static _sendFinalBattlePackets(client: GameClient, battle: Battle): void {
+        const user = client.user!;
         const withoutSupplies = battle.settings.withoutSupplies;
         const userHasNoSupplies = Array.from(user.supplies.values()).every((count) => count === 0);
         if (!withoutSupplies && !userHasNoSupplies && !client.isSpectator) {
@@ -534,6 +572,10 @@ export class BattleWorkflow {
             const consumableItems = availableSupplies.map((si) => ({ id: si.id, count: userSupplies.get(si.id) || 0, slotId: si.slotId, itemEffectTime: si.itemEffectTime, itemRestSec: si.itemRestSec }));
             client.sendPacket(new BattlePackets.BattleConsumablesPacket(JSON.stringify({ items: consumableItems })));
         }
+        if (!client.isSpectator) {
+            client.sendPacket(new BattlePackets.UpdateBattleUserDMPacket({ deaths: 0, kills: 0, score: 0, nickname: user.username }));
+        }
+
         const effectsData = { effects: [] };
         client.sendPacket(new BattlePackets.BattleUserEffectsPacket(JSON.stringify(effectsData)));
         const bonusMarkerResource = ResourceManager.getIdlowById("effects/bonus/drop_location_marker");
@@ -547,6 +589,7 @@ export class BattleWorkflow {
             bonusRegionData: [],
         });
         client.sendPacket(bonusRegionsPacket);
+        client.sendPacket(new BattlePackets.InitBonusesPacket("[]"));
         client.sendPacket(new ConfirmLayoutChange(3, 3));
         client.isJoiningBattle = false;
     }
