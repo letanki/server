@@ -55,7 +55,7 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
                 canSkipForFree: reader.readUInt8() === 1,
                 description: reader.readOptionalString(),
                 finishCriteria: reader.readInt32BE(),
-                image: reader.readInt32BE(),
+                image: reader.readResource(),
                 prizes: [],
                 progress: 0,
                 questId: 0,
@@ -79,8 +79,8 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
         this.currentQuestLevel = reader.readInt32BE();
         this.currentQuestStreak = reader.readInt32BE();
         this.doneForToday = reader.readUInt8() === 1;
-        this.questImage = reader.readInt32BE();
-        this.rewardImage = reader.readInt32BE();
+        this.questImage = reader.readResource();
+        this.rewardImage = reader.readResource();
     }
 
     write(): Buffer {
@@ -91,7 +91,7 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
             writer.writeUInt8(quest.canSkipForFree ? 1 : 0);
             writer.writeOptionalString(quest.description);
             writer.writeInt32BE(quest.finishCriteria);
-            writer.writeInt32BE(quest.image);
+            writer.writeResource(quest.image);
 
             writer.writeInt32BE(quest.prizes.length);
             for (const prize of quest.prizes) {
@@ -107,8 +107,8 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
         writer.writeInt32BE(this.currentQuestLevel);
         writer.writeInt32BE(this.currentQuestStreak);
         writer.writeUInt8(this.doneForToday ? 1 : 0);
-        writer.writeInt32BE(this.questImage);
-        writer.writeInt32BE(this.rewardImage);
+        writer.writeResource(this.questImage);
+        writer.writeResource(this.rewardImage);
 
         return writer.getBuffer();
     }
@@ -166,7 +166,7 @@ export class ReplaceQuest extends BasePacket implements IReplaceQuest {
         newQuestData.canSkipForFree = reader.readUInt8() === 1;
         newQuestData.description = reader.readOptionalString();
         newQuestData.finishCriteria = reader.readInt32BE();
-        newQuestData.image = reader.readInt32BE();
+        newQuestData.image = reader.readResource();
 
         const prizesCount = reader.readInt32BE();
         newQuestData.prizes = [];
@@ -193,7 +193,7 @@ export class ReplaceQuest extends BasePacket implements IReplaceQuest {
         writer.writeUInt8(quest.canSkipForFree ? 1 : 0);
         writer.writeOptionalString(quest.description);
         writer.writeInt32BE(quest.finishCriteria);
-        writer.writeInt32BE(quest.image);
+        writer.writeResource(quest.image);
 
         writer.writeInt32BE(quest.prizes.length);
         for (const prize of quest.prizes) {

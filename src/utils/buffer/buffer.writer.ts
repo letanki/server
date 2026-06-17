@@ -36,6 +36,18 @@ export class BufferWriter {
     return this;
   }
 
+  /**
+   * Writes a client Resource id (idHigh int32 + idLow int32). Our resources
+   * always have idHigh = 0, so only the idLow is meaningful. The current client
+   * reads every binary resource field as 8 bytes; writing a single int32 desyncs
+   * the packet and yields "Resource <garbage id> not found".
+   */
+  public writeResource(idLow: number): this {
+    this.writeInt32BE(0);
+    this.writeInt32BE(idLow);
+    return this;
+  }
+
   public writeFloatBE(value: number): this {
     const buffer = Buffer.alloc(4);
     buffer.writeFloatBE(value, 0);

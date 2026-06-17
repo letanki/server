@@ -26,12 +26,12 @@ export class SetLoadingScreenImagePacket extends BasePacket implements LoaderTyp
 
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
-        this.resourceImageIdLow = reader.readInt32BE();
+        this.resourceImageIdLow = reader.readResource();
     }
 
     write(): Buffer {
         const writer = new BufferWriter();
-        writer.writeInt32BE(this.resourceImageIdLow);
+        writer.writeResource(this.resourceImageIdLow);
         return writer.getBuffer();
     }
     static getId(): number {

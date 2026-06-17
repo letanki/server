@@ -46,6 +46,12 @@ export class BufferReader {
     return value;
   }
 
+  /** Reads a client Resource id (idHigh int32 + idLow int32), returning the idLow. */
+  public readResource(): number {
+    this.readInt32BE(); // idHigh (always 0 for our resources)
+    return this.readInt32BE(); // idLow
+  }
+
   public readFloatBE(): number {
     this.checkCanRead(4);
     const value = this.buffer.readFloatBE(this.offset);
