@@ -55,6 +55,20 @@ export class ReturnFlagPacket extends BasePacket implements BattleTypes.IReturnF
     }
 }
 
+// Sent after a CTF capture to update the capturing team's flag score (red = 0, blue = 1).
+export class SetCtfScorePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "team", type: "i32" },
+        { name: "score", type: "i32" },
+    ];
+    team: number;
+    score: number;
+    constructor(team: number = 0, score: number = 0) { super(); this.team = team; this.score = score; }
+    read(buffer: Buffer): void { readSchema(this, SetCtfScorePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, SetCtfScorePacket.schema); }
+    static getId(): number { return 561771020; }
+}
+
 export class CaptureFlagPacket extends BasePacket implements BattleTypes.ICaptureFlag {
     static readonly schema: PacketSchema = [
         { name: "team", type: "i32" },

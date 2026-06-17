@@ -907,24 +907,24 @@ export const mapCtfFlags: { [key: string]: ICtfFlags } = {
     "map/island/summer/xml": {
         "red": {
             "x": 2250,
-            "y": -1750,
+            "y": -2750,
             "z": 0
         },
         "blue": {
             "x": -1750,
-            "y": 2250,
+            "y": 1250,
             "z": 0
         }
     },
     "map/island/winter/xml": {
         "red": {
             "x": 2250,
-            "y": -1750,
+            "y": -2750,
             "z": 0
         },
         "blue": {
             "x": -1750,
-            "y": 2250,
+            "y": 1250,
             "z": 0
         }
     },

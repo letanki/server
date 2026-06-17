@@ -404,15 +404,22 @@ export class BattleWorkflow {
                 if (!pos) return null;
                 return { x: pos.x, y: pos.y, z: pos.z + 80 };
             };
+            // flagPosition must be null when the flag sits on its base (client renders it
+            // static); a non-null position makes the client show the "dropped" (slow-blink)
+            // state. Only send a position when the flag is actually dropped away from base.
+            const droppedPosition = (pos: IVector3 | null, base: IVector3 | null): IVector3 | null => {
+                if (!pos || pos === base) return null;
+                return adjustZ(pos);
+            };
             const ctfPacket = new BattlePackets.InitCtfFlagsPacket({
                 flagBasePositionBlue: adjustZ(battle.flagBasePositionBlue),
                 flagCarrierIdBlue: battle.flagCarrierBlue?.username ?? null,
-                flagPositionBlue: adjustZ(battle.flagPositionBlue),
+                flagPositionBlue: droppedPosition(battle.flagPositionBlue, battle.flagBasePositionBlue),
                 blueFlagSprite: ResourceManager.getIdlowById("flags/blue_flag_sprite"),
                 bluePedestalModel: ResourceManager.getIdlowById("flags/blue_pedestal"),
                 flagBasePositionRed: adjustZ(battle.flagBasePositionRed),
                 flagCarrierIdRed: battle.flagCarrierRed?.username ?? null,
-                flagPositionRed: adjustZ(battle.flagPositionRed),
+                flagPositionRed: droppedPosition(battle.flagPositionRed, battle.flagBasePositionRed),
                 redFlagSprite: ResourceManager.getIdlowById("flags/red_flag_sprite"),
                 redPedestalModel: ResourceManager.getIdlowById("flags/red_pedestal"),
                 flagDropSound: ResourceManager.getIdlowById("sounds/flags/flag_drop"),

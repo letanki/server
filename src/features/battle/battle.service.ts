@@ -9,7 +9,7 @@ import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, RemoveTankPacket, ReturnFlagPacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket } from "./battle.packets";
+import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket } from "./battle.packets";
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -87,6 +87,15 @@ export class BattleService {
 
         const capturePacket = new CaptureFlagPacket({ team: capturingTeamId, nickname: user.username });
         this.broadcastToBattle(battle, capturePacket);
+
+        // Update and broadcast the capturing team's flag score (CTF scoreboard).
+        if (capturingTeamName === "RED") {
+            battle.scoreRed++;
+        } else {
+            battle.scoreBlue++;
+        }
+        const newScore = capturingTeamName === "RED" ? battle.scoreRed : battle.scoreBlue;
+        this.broadcastToBattle(battle, new SetCtfScorePacket(capturingTeamId, newScore));
 
         this._resetFlagState(battle, capturedFlagTeam);
     }
