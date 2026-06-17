@@ -21,6 +21,12 @@ export interface IPremiumNotifierData extends IPacket {
     nickname: string;
 }
 
+export interface IClanNotifierData extends IPacket {
+    inClan: boolean;
+    clanTag: string | null;
+    nickname: string;
+}
+
 export interface IAchievementTips extends IPacket {
     achievementIds: Achievement[];
 }

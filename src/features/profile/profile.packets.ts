@@ -113,6 +113,39 @@ export class PremiumNotifierData extends BasePacket implements ProfileTypes.IPre
     }
 }
 
+export class ClanNotifierData extends BasePacket implements ProfileTypes.IClanNotifierData {
+    inClan: boolean = false;
+    clanTag: string | null = null;
+    nickname: string = "";
+
+    constructor(nickname?: string, clanTag?: string | null) {
+        super();
+        if (nickname) this.nickname = nickname;
+        if (clanTag) {
+            this.clanTag = clanTag;
+            this.inClan = true;
+        }
+    }
+
+    read(buffer: Buffer): void {
+        const reader = new BufferReader(buffer);
+        this.inClan = reader.readUInt8() === 1;
+        this.clanTag = reader.readOptionalString();
+        this.nickname = reader.readOptionalString() ?? "";
+    }
+
+    write(): Buffer {
+        const writer = new BufferWriter();
+        writer.writeUInt8(this.inClan ? 1 : 0);
+        writer.writeOptionalString(this.clanTag);
+        writer.writeOptionalString(this.nickname);
+        return writer.getBuffer();
+    }
+    static getId(): number {
+        return -117055417;
+    }
+}
+
 export class AchievementTips extends BasePacket implements ProfileTypes.IAchievementTips {
     achievementIds: Achievement[] = [];
 
