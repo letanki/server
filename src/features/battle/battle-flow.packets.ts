@@ -1,25 +1,36 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as BattleTypes from "./battle.types";
 
 export class BattleChatMessagePacket extends BasePacket implements BattleTypes.IBattleChatMessage {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "message", type: "string" },
+        { name: "team", type: "i32" },
+    ];
     nickname: string | null;
     message: string | null;
     team: number;
     constructor(data?: BattleTypes.IBattleChatMessageData) { super(); this.nickname = data?.nickname ?? null; this.message = data?.message ?? null; this.team = data?.team ?? 2; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.message = r.readOptionalString(); this.team = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeOptionalString(this.message); w.writeInt32BE(this.team); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, BattleChatMessagePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, BattleChatMessagePacket.schema); }
     static getId(): number { return 1259981343; }
 }
 
 export class BattleChatTeamMessagePacket extends BasePacket implements BattleTypes.IBattleChatMessage {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "message", type: "string" },
+        { name: "team", type: "i32" },
+    ];
     nickname: string | null;
     message: string | null;
     team: number;
     constructor(data?: BattleTypes.IBattleChatMessageData) { super(); this.nickname = data?.nickname ?? null; this.message = data?.message ?? null; this.team = data?.team ?? 2; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.message = r.readOptionalString(); this.team = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeOptionalString(this.message); w.writeInt32BE(this.team); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, BattleChatTeamMessagePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, BattleChatTeamMessagePacket.schema); }
     static getId(): number { return -449356094; }
 }
 
@@ -52,42 +63,67 @@ export class ExitFromBattlePacket extends BasePacket implements BattleTypes.IExi
 }
 
 export class SendBattleChatMessagePacket extends BasePacket implements BattleTypes.ISendBattleChatMessage {
+    static readonly schema: PacketSchema = [
+        { name: "message", type: "string" },
+        { name: "team", type: "bool" },
+    ];
     message: string | null; team: boolean;
     constructor(message: string | null = null, team: boolean = false) { super(); this.message = message; this.team = team; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.message = r.readOptionalString(); this.team = r.readUInt8() === 1; }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.message); w.writeUInt8(this.team ? 1 : 0); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, SendBattleChatMessagePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, SendBattleChatMessagePacket.schema); }
     static getId(): number { return 945463181; }
 }
 
 export class TimeCheckerPacket extends BasePacket implements BattleTypes.ITimeChecker {
+    static readonly schema: PacketSchema = [
+        { name: "value1", type: "i32" },
+        { name: "value2", type: "i32" },
+    ];
     value1: number; value2: number;
     constructor(value1: number = 0, value2: number = 0) { super(); this.value1 = value1; this.value2 = value2; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.value1 = r.readInt32BE(); this.value2 = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt32BE(this.value1); w.writeInt32BE(this.value2); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, TimeCheckerPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, TimeCheckerPacket.schema); }
     static getId(): number { return 34068208; }
 }
 
 export class TimeCheckerResponsePacket extends BasePacket implements BattleTypes.ITimeCheckerResponse {
+    static readonly schema: PacketSchema = [
+        { name: "clientTime", type: "i32" },
+        { name: "serverTime", type: "i32" },
+    ];
     clientTime: number; serverTime: number;
     constructor(clientTime: number = 0, serverTime: number = 0) { super(); this.clientTime = clientTime; this.serverTime = serverTime; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.clientTime = r.readInt32BE(); this.serverTime = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt32BE(this.clientTime); w.writeInt32BE(this.serverTime); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, TimeCheckerResponsePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, TimeCheckerResponsePacket.schema); }
     static getId(): number { return 2074243318; }
 }
 
 export class UpdateBattleUserDMPacket extends BasePacket implements BattleTypes.IUpdateBattleUserDM {
+    static readonly schema: PacketSchema = [
+        { name: "deaths", type: "i16" },
+        { name: "kills", type: "i16" },
+        { name: "score", type: "i32" },
+        { name: "nickname", type: "string" },
+    ];
     deaths: number; kills: number; score: number; nickname: string | null;
     constructor(data?: BattleTypes.IUpdateBattleUserDMData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt16BE(); this.kills = r.readInt16BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt16BE(this.deaths); w.writeInt16BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, UpdateBattleUserDMPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdateBattleUserDMPacket.schema); }
     static getId(): number { return 696140460; }
 }
 
 export class UpdateBattleUserTeamPacket extends BasePacket implements BattleTypes.IUpdateBattleUserTeam {
+    static readonly schema: PacketSchema = [
+        { name: "deaths", type: "i16" },
+        { name: "kills", type: "i16" },
+        { name: "score", type: "i32" },
+        { name: "nickname", type: "string" },
+        { name: "team", type: "i32" },
+    ];
     deaths: number; kills: number; score: number; nickname: string | null; team: number;
     constructor(data?: BattleTypes.IUpdateBattleUserTeamData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; this.team = data?.team ?? 2; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.deaths = r.readInt16BE(); this.kills = r.readInt16BE(); this.score = r.readInt32BE(); this.nickname = r.readOptionalString(); this.team = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeInt16BE(this.deaths); w.writeInt16BE(this.kills); w.writeInt32BE(this.score); w.writeOptionalString(this.nickname); w.writeInt32BE(this.team); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, UpdateBattleUserTeamPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdateBattleUserTeamPacket.schema); }
     static getId(): number { return -497293992; }
 }
 
@@ -100,10 +136,21 @@ export class UpdateSpectatorListPacket extends BasePacket implements BattleTypes
 }
 
 export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUserConnectDM {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "usersInfo", type: "list", of: [
+            { name: "ChatModeratorLevel", type: "i32" },
+            { name: "deaths", type: "i16" },
+            { name: "kills", type: "i16" },
+            { name: "rank", type: "u8" },
+            { name: "score", type: "i32" },
+            { name: "nickname", type: "string" },
+        ] },
+    ];
     nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[];
     constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); const c = r.readInt32BE(); this.usersInfo = []; for (let i = 0; i < c; i++) { this.usersInfo.push({ ChatModeratorLevel: r.readInt32BE(), deaths: r.readInt16BE(), kills: r.readInt16BE(), rank: r.readUInt8(), score: r.readInt32BE(), nickname: r.readOptionalString() }); } }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeInt32BE(this.usersInfo.length); for (const u of this.usersInfo) { w.writeInt32BE(u.ChatModeratorLevel); w.writeInt16BE(u.deaths); w.writeInt16BE(u.kills); w.writeUInt8(u.rank); w.writeInt32BE(u.score); w.writeOptionalString(u.nickname); } return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, UserConnectDMPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UserConnectDMPacket.schema); }
     static getId(): number { return 862913394; }
 }
 

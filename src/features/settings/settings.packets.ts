@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -55,6 +56,9 @@ export class UserSettingsSocial extends BasePacket implements SettingsTypes.IUse
 }
 
 export class UserSettingsNotifications extends BasePacket implements SettingsTypes.IUserSettingsNotifications {
+    static readonly schema: PacketSchema = [
+        { name: "notificationsEnabled", type: "bool" },
+    ];
     notificationsEnabled: boolean = false;
 
     constructor(enabled?: boolean) {
@@ -62,16 +66,9 @@ export class UserSettingsNotifications extends BasePacket implements SettingsTyp
         if (enabled !== undefined) this.notificationsEnabled = enabled;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.notificationsEnabled = reader.readUInt8() === 1;
-    }
+    read(buffer: Buffer): void { readSchema(this, UserSettingsNotifications.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.notificationsEnabled ? 1 : 0);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, UserSettingsNotifications.schema); }
     static getId(): number {
         return 1447082276;
     }
@@ -91,25 +88,24 @@ export class SetNotifications extends BasePacket implements SettingsTypes.ISetNo
 }
 
 export class UpdatePassword extends BasePacket implements SettingsTypes.IUpdatePassword {
+    static readonly schema: PacketSchema = [
+        { name: "password", type: "string" },
+        { name: "email", type: "string" },
+    ];
     password: string | null = null;
     email: string | null = null;
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.password = r.readOptionalString();
-        this.email = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.password);
-        w.writeOptionalString(this.email);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdatePassword.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdatePassword.schema); }
     static getId() {
         return 762959326;
     }
 }
 
 export class UpdatePasswordResult extends BasePacket implements SettingsTypes.IUpdatePasswordResult {
+    static readonly schema: PacketSchema = [
+        { name: "isError", type: "bool" },
+        { name: "message", type: "string" },
+    ];
     isError: boolean = false;
     message: string | null = null;
     constructor(isError?: boolean, message?: string | null) {
@@ -117,17 +113,8 @@ export class UpdatePasswordResult extends BasePacket implements SettingsTypes.IU
         if (isError !== undefined) this.isError = isError;
         if (message) this.message = message;
     }
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.isError = r.readUInt8() === 1;
-        this.message = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeUInt8(this.isError ? 1 : 0);
-        w.writeOptionalString(this.message);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdatePasswordResult.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdatePasswordResult.schema); }
     static getId() {
         return 1570555748;
     }

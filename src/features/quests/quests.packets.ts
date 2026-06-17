@@ -1,8 +1,24 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import { DailyQuestData } from "./quests.service";
 import { INotifyDailyQuestGenerated, IQuest, IReplaceQuest, IRequestQuestsWindow, IShowQuestsWindow, ISkipQuest } from "./quests.types";
+
+// Quest fields shared by ShowQuestsWindow (as a list item) and ReplaceQuest (as a single object).
+const QUEST_FIELDS: PacketSchema = [
+    { name: "canSkipForFree", type: "bool" },
+    { name: "description", type: "string" },
+    { name: "finishCriteria", type: "i32" },
+    { name: "image", type: "resource" },
+    { name: "prizes", type: "list", of: [
+        { name: "itemCount", type: "i32" },
+        { name: "itemName", type: "string" },
+    ] },
+    { name: "progress", type: "i32" },
+    { name: "questId", type: "i32" },
+    { name: "skipCost", type: "i32" },
+];
 
 export class RequestQuestsWindow extends BasePacket implements IRequestQuestsWindow {
     read(buffer: Buffer): void { }
@@ -46,72 +62,17 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        const questsCount = reader.readInt32BE();
-        this.quests = [];
-        for (let i = 0; i < questsCount; i++) {
-            const quest: IQuest = {
-                canSkipForFree: reader.readUInt8() === 1,
-                description: reader.readOptionalString(),
-                finishCriteria: reader.readInt32BE(),
-                image: reader.readResource(),
-                prizes: [],
-                progress: 0,
-                questId: 0,
-                skipCost: 0,
-            };
+    static readonly schema: PacketSchema = [
+        { name: "quests", type: "list", of: QUEST_FIELDS },
+        { name: "currentQuestLevel", type: "i32" },
+        { name: "currentQuestStreak", type: "i32" },
+        { name: "doneForToday", type: "bool" },
+        { name: "questImage", type: "resource" },
+        { name: "rewardImage", type: "resource" },
+    ];
 
-            const prizesCount = reader.readInt32BE();
-            for (let j = 0; j < prizesCount; j++) {
-                quest.prizes.push({
-                    itemCount: reader.readInt32BE(),
-                    itemName: reader.readOptionalString() ?? "",
-                });
-            }
-
-            quest.progress = reader.readInt32BE();
-            quest.questId = reader.readInt32BE();
-            quest.skipCost = reader.readInt32BE();
-            this.quests.push(quest);
-        }
-
-        this.currentQuestLevel = reader.readInt32BE();
-        this.currentQuestStreak = reader.readInt32BE();
-        this.doneForToday = reader.readUInt8() === 1;
-        this.questImage = reader.readResource();
-        this.rewardImage = reader.readResource();
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-
-        writer.writeInt32BE(this.quests.length);
-        for (const quest of this.quests) {
-            writer.writeUInt8(quest.canSkipForFree ? 1 : 0);
-            writer.writeOptionalString(quest.description);
-            writer.writeInt32BE(quest.finishCriteria);
-            writer.writeResource(quest.image);
-
-            writer.writeInt32BE(quest.prizes.length);
-            for (const prize of quest.prizes) {
-                writer.writeInt32BE(prize.itemCount);
-                writer.writeOptionalString(prize.itemName);
-            }
-
-            writer.writeInt32BE(quest.progress);
-            writer.writeInt32BE(quest.questId);
-            writer.writeInt32BE(quest.skipCost);
-        }
-
-        writer.writeInt32BE(this.currentQuestLevel);
-        writer.writeInt32BE(this.currentQuestStreak);
-        writer.writeUInt8(this.doneForToday ? 1 : 0);
-        writer.writeResource(this.questImage);
-        writer.writeResource(this.rewardImage);
-
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, ShowQuestsWindow.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ShowQuestsWindow.schema); }
 
     static getId(): number {
         return 809822533;
@@ -158,55 +119,13 @@ export class ReplaceQuest extends BasePacket implements IReplaceQuest {
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.missionToReplaceId = reader.readInt32BE();
+    static readonly schema: PacketSchema = [
+        { name: "missionToReplaceId", type: "i32" },
+        { name: "newQuest", type: "object", of: QUEST_FIELDS },
+    ];
 
-        const newQuestData = createDefaultQuest();
-        newQuestData.canSkipForFree = reader.readUInt8() === 1;
-        newQuestData.description = reader.readOptionalString();
-        newQuestData.finishCriteria = reader.readInt32BE();
-        newQuestData.image = reader.readResource();
-
-        const prizesCount = reader.readInt32BE();
-        newQuestData.prizes = [];
-        for (let i = 0; i < prizesCount; i++) {
-            newQuestData.prizes.push({
-                itemCount: reader.readInt32BE(),
-                itemName: reader.readOptionalString() ?? "",
-            });
-        }
-
-        newQuestData.progress = reader.readInt32BE();
-        newQuestData.questId = reader.readInt32BE();
-        newQuestData.skipCost = reader.readInt32BE();
-
-        this.newQuest = newQuestData;
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-
-        writer.writeInt32BE(this.missionToReplaceId);
-
-        const quest = this.newQuest;
-        writer.writeUInt8(quest.canSkipForFree ? 1 : 0);
-        writer.writeOptionalString(quest.description);
-        writer.writeInt32BE(quest.finishCriteria);
-        writer.writeResource(quest.image);
-
-        writer.writeInt32BE(quest.prizes.length);
-        for (const prize of quest.prizes) {
-            writer.writeInt32BE(prize.itemCount);
-            writer.writeOptionalString(prize.itemName);
-        }
-
-        writer.writeInt32BE(quest.progress);
-        writer.writeInt32BE(quest.questId);
-        writer.writeInt32BE(quest.skipCost);
-
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, ReplaceQuest.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ReplaceQuest.schema); }
 
     static getId(): number {
         return -1266665816;

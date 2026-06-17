@@ -1,10 +1,14 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as ProfileTypes from "./profile.types";
 
 export class GetUserInfo extends BasePacket implements ProfileTypes.IGetUserInfo {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+    ];
     nickname: string | null;
 
     constructor(nickname: string | null = null) {
@@ -12,16 +16,9 @@ export class GetUserInfo extends BasePacket implements ProfileTypes.IGetUserInfo
         this.nickname = nickname;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.nickname = reader.readOptionalString();
-    }
+    read(buffer: Buffer): void { readSchema(this, GetUserInfo.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, GetUserInfo.schema); }
 
     static getId(): number {
         return 1774907609;
@@ -29,6 +26,11 @@ export class GetUserInfo extends BasePacket implements ProfileTypes.IGetUserInfo
 }
 
 export class OnlineNotifierData extends BasePacket implements ProfileTypes.IOnlineNotifierData {
+    static readonly schema: PacketSchema = [
+        { name: "isOnline", type: "bool" },
+        { name: "server", type: "i32" },
+        { name: "nickname", type: "string" },
+    ];
     isOnline: boolean = false;
     server: number = 0;
     nickname: string = "";
@@ -40,26 +42,18 @@ export class OnlineNotifierData extends BasePacket implements ProfileTypes.IOnli
         if (nickname) this.nickname = nickname;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.isOnline = reader.readUInt8() === 1;
-        this.server = reader.readInt32BE();
-        this.nickname = reader.readOptionalString() ?? "";
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.isOnline ? 1 : 0);
-        writer.writeInt32BE(this.server);
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, OnlineNotifierData.schema, buffer); }
+    write(): Buffer { return writeSchema(this, OnlineNotifierData.schema); }
     static getId(): number {
         return 2041598093;
     }
 }
 
 export class RankNotifierData extends BasePacket implements ProfileTypes.IRankNotifierData {
+    static readonly schema: PacketSchema = [
+        { name: "rank", type: "u8" },
+        { name: "nickname", type: "string" },
+    ];
     rank: number = 0;
     nickname: string = "";
 
@@ -69,24 +63,18 @@ export class RankNotifierData extends BasePacket implements ProfileTypes.IRankNo
         if (nickname) this.nickname = nickname;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.rank = reader.readUInt8();
-        this.nickname = reader.readOptionalString() ?? "";
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.rank);
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, RankNotifierData.schema, buffer); }
+    write(): Buffer { return writeSchema(this, RankNotifierData.schema); }
     static getId(): number {
         return -962759489;
     }
 }
 
 export class PremiumNotifierData extends BasePacket implements ProfileTypes.IPremiumNotifierData {
+    static readonly schema: PacketSchema = [
+        { name: "premiumTimeLeftInSeconds", type: "i32" },
+        { name: "nickname", type: "string" },
+    ];
     premiumTimeLeftInSeconds: number = 0;
     nickname: string = "";
 
@@ -96,24 +84,19 @@ export class PremiumNotifierData extends BasePacket implements ProfileTypes.IPre
         if (nickname) this.nickname = nickname;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.premiumTimeLeftInSeconds = reader.readInt32BE();
-        this.nickname = reader.readOptionalString() ?? "";
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.premiumTimeLeftInSeconds);
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, PremiumNotifierData.schema, buffer); }
+    write(): Buffer { return writeSchema(this, PremiumNotifierData.schema); }
     static getId(): number {
         return -2069508071;
     }
 }
 
 export class ClanNotifierData extends BasePacket implements ProfileTypes.IClanNotifierData {
+    static readonly schema: PacketSchema = [
+        { name: "inClan", type: "bool" },
+        { name: "clanTag", type: "string" },
+        { name: "nickname", type: "string" },
+    ];
     inClan: boolean = false;
     clanTag: string | null = null;
     nickname: string = "";
@@ -127,20 +110,8 @@ export class ClanNotifierData extends BasePacket implements ProfileTypes.IClanNo
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.inClan = reader.readUInt8() === 1;
-        this.clanTag = reader.readOptionalString();
-        this.nickname = reader.readOptionalString() ?? "";
-    }
-
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.inClan ? 1 : 0);
-        writer.writeOptionalString(this.clanTag);
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, ClanNotifierData.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ClanNotifierData.schema); }
     static getId(): number {
         return -117055417;
     }
@@ -179,6 +150,10 @@ export class AchievementTips extends BasePacket implements ProfileTypes.IAchieve
 }
 
 export class EmailInfo extends BasePacket implements ProfileTypes.IEmailInfo {
+    static readonly schema: PacketSchema = [
+        { name: "email", type: "string" },
+        { name: "emailConfirmed", type: "bool" },
+    ];
     email: string | null = null;
     emailConfirmed: boolean = false;
 
@@ -188,24 +163,23 @@ export class EmailInfo extends BasePacket implements ProfileTypes.IEmailInfo {
         if (emailConfirmed) this.emailConfirmed = emailConfirmed;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.email = reader.readOptionalString();
-        this.emailConfirmed = reader.readUInt8() === 1;
-    }
+    read(buffer: Buffer): void { readSchema(this, EmailInfo.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.email);
-        writer.writeUInt8(this.emailConfirmed ? 1 : 0);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, EmailInfo.schema); }
     static getId(): number {
         return 613462801;
     }
 }
 
 export class PremiumInfo extends BasePacket implements ProfileTypes.IPremiumInfo {
+    static readonly schema: PacketSchema = [
+        { name: "needShowNotificationCompletionPremium", type: "bool" },
+        { name: "needShowWelcomeAlert", type: "bool" },
+        { name: "reminderCompletionPremiumTime", type: "f32" },
+        { name: "wasShowAlertForFirstPurchasePremium", type: "bool" },
+        { name: "wasShowReminderCompletionPremium", type: "bool" },
+        { name: "lifeTimeInSeconds", type: "i32" },
+    ];
     needShowNotificationCompletionPremium: boolean = false;
     needShowWelcomeAlert: boolean = false;
     reminderCompletionPremiumTime: number = 0;
@@ -220,32 +194,18 @@ export class PremiumInfo extends BasePacket implements ProfileTypes.IPremiumInfo
         if (needShowWelcome !== undefined) this.needShowWelcomeAlert = needShowWelcome;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.needShowNotificationCompletionPremium = reader.readUInt8() === 1;
-        this.needShowWelcomeAlert = reader.readUInt8() === 1;
-        this.reminderCompletionPremiumTime = reader.readFloatBE();
-        this.wasShowAlertForFirstPurchasePremium = reader.readUInt8() === 1;
-        this.wasShowReminderCompletionPremium = reader.readUInt8() === 1;
-        this.lifeTimeInSeconds = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, PremiumInfo.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.needShowNotificationCompletionPremium ? 1 : 0);
-        writer.writeUInt8(this.needShowWelcomeAlert ? 1 : 0);
-        writer.writeFloatBE(this.reminderCompletionPremiumTime);
-        writer.writeUInt8(this.wasShowAlertForFirstPurchasePremium ? 1 : 0);
-        writer.writeUInt8(this.wasShowReminderCompletionPremium ? 1 : 0);
-        writer.writeInt32BE(this.lifeTimeInSeconds);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, PremiumInfo.schema); }
     static getId(): number {
         return 1405859779;
     }
 }
 
 export class UpdateCrystals extends BasePacket implements ProfileTypes.IUpdateCrystals {
+    static readonly schema: PacketSchema = [
+        { name: "crystals", type: "i32" },
+    ];
     crystals: number = 0;
 
     constructor(crystals?: number) {
@@ -255,22 +215,18 @@ export class UpdateCrystals extends BasePacket implements ProfileTypes.IUpdateCr
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.crystals = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdateCrystals.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.crystals);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, UpdateCrystals.schema); }
     static getId(): number {
         return -593513288;
     }
 }
 
 export class UpdateScorePacket extends BasePacket implements ProfileTypes.IUpdateScore {
+    static readonly schema: PacketSchema = [
+        { name: "score", type: "i32" },
+    ];
     score: number;
 
     constructor(score: number = 0) {
@@ -278,22 +234,22 @@ export class UpdateScorePacket extends BasePacket implements ProfileTypes.IUpdat
         this.score = score;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.score = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdateScorePacket.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.score);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, UpdateScorePacket.schema); }
     static getId(): number {
         return 2116086491;
     }
 }
 
 export class UpdateRankPacket extends BasePacket implements ProfileTypes.IUpdateRank {
+    static readonly schema: PacketSchema = [
+        { name: "rank", type: "i32" },
+        { name: "score", type: "i32" },
+        { name: "currentRankScore", type: "i32" },
+        { name: "nextRankScore", type: "i32" },
+        { name: "reward", type: "i32" },
+    ];
     rank: number;
     score: number;
     currentRankScore: number;
@@ -309,30 +265,18 @@ export class UpdateRankPacket extends BasePacket implements ProfileTypes.IUpdate
         this.reward = data?.reward ?? 0;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.rank = reader.readInt32BE();
-        this.score = reader.readInt32BE();
-        this.currentRankScore = reader.readInt32BE();
-        this.nextRankScore = reader.readInt32BE();
-        this.reward = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdateRankPacket.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.rank);
-        writer.writeInt32BE(this.score);
-        writer.writeInt32BE(this.currentRankScore);
-        writer.writeInt32BE(this.nextRankScore);
-        writer.writeInt32BE(this.reward);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, UpdateRankPacket.schema); }
     static getId(): number {
         return 1989173907;
     }
 }
 
 export class UpdatePremiumTimePacket extends BasePacket implements ProfileTypes.IUpdatePremiumTime {
+    static readonly schema: PacketSchema = [
+        { name: "timeLeft", type: "i32" },
+    ];
     timeLeft: number = 0;
 
     constructor(timeLeft?: number) {
@@ -342,16 +286,9 @@ export class UpdatePremiumTimePacket extends BasePacket implements ProfileTypes.
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.timeLeft = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, UpdatePremiumTimePacket.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.timeLeft);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, UpdatePremiumTimePacket.schema); }
     static getId(): number {
         return 1391146385;
     }

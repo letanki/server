@@ -1,14 +1,20 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as GarageTypes from "./garage.types";
 
 export class BuyItemPacket extends BasePacket implements GarageTypes.IBuyItem {
+    static readonly schema: PacketSchema = [
+        { name: "itemId", type: "string" },
+        { name: "quantity", type: "i32" },
+        { name: "price", type: "i32" },
+    ];
     itemId: string | null = null;
     quantity: number = 0;
     price: number = 0;
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.itemId = r.readOptionalString(); this.quantity = r.readInt32BE(); this.price = r.readInt32BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.itemId); w.writeInt32BE(this.quantity); w.writeInt32BE(this.price); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, BuyItemPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, BuyItemPacket.schema); }
     static getId(): number { return -1961983005; }
 }
 
@@ -28,11 +34,15 @@ export class GarageItemsPacket extends BasePacket implements GarageTypes.IGarage
 }
 
 export class MountItemPacket extends BasePacket implements GarageTypes.IMountItem {
+    static readonly schema: PacketSchema = [
+        { name: "itemId", type: "string" },
+        { name: "unknown", type: "bool" },
+    ];
     itemId: string | null;
     unknown: boolean;
     constructor(itemId: string | null = null, unknown: boolean = false) { super(); this.itemId = itemId; this.unknown = unknown; }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.itemId = r.readOptionalString(); this.unknown = r.readUInt8() === 1; }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.itemId); w.writeUInt8(this.unknown ? 1 : 0); return w.getBuffer(); }
+    read(buffer: Buffer): void { readSchema(this, MountItemPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, MountItemPacket.schema); }
     static getId(): number { return 2062201643; }
 }
 

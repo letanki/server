@@ -1,10 +1,15 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as ReferralTypes from "./referral.types";
 
 export class ReferralInfo extends BasePacket implements ReferralTypes.IReferralInfo {
+    static readonly schema: PacketSchema = [
+        { name: "hash", type: "string" },
+        { name: "host", type: "string" },
+    ];
     hash: string = "";
     host: string = "";
 
@@ -14,18 +19,9 @@ export class ReferralInfo extends BasePacket implements ReferralTypes.IReferralI
         if (host) this.host = host;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.hash = reader.readOptionalString() ?? "";
-        this.host = reader.readOptionalString() ?? "";
-    }
+    read(buffer: Buffer): void { readSchema(this, ReferralInfo.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.hash);
-        writer.writeOptionalString(this.host);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, ReferralInfo.schema); }
     static getId(): number {
         return 832270655;
     }

@@ -1,4 +1,5 @@
 import { BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -62,6 +63,37 @@ export class BattleDetails extends BasePacket implements LobbyTypes.IBattleDetai
 }
 
 export class CreateBattleRequest extends BasePacket implements LobbyTypes.ICreateBattleRequest {
+    static readonly schema: PacketSchema = [
+        { name: "autoBalance", type: "bool" },
+        { name: "battleMode", type: "i32" },
+        { name: "equipmentConstraintsMode", type: "i32" },
+        { name: "friendlyFire", type: "bool" },
+        { name: "scoreLimit", type: "i32" },
+        { name: "timeLimitInSec", type: "i32" },
+        { name: "mapId", type: "string" },
+        { name: "maxPeopleCount", type: "i32" },
+        { name: "name", type: "string" },
+        { name: "parkourMode", type: "bool" },
+        { name: "privateBattle", type: "bool" },
+        { name: "proBattle", type: "bool" },
+        { name: "maxRank", type: "i32" },
+        { name: "minRank", type: "i32" },
+        { name: "reArmorEnabled", type: "bool" },
+        { name: "mapTheme", type: "i32" },
+        { name: "withoutBonuses", type: "bool" },
+        { name: "withoutCrystals", type: "bool" },
+        { name: "withoutSupplies", type: "bool" },
+        { name: "withoutUpgrades", type: "bool" },
+        { name: "reducedResistances", type: "bool" },
+        { name: "esportDropTiming", type: "bool" },
+        { name: "withoutGoldBoxes", type: "bool" },
+        { name: "withoutGoldSiren", type: "bool" },
+        { name: "withoutGoldZone", type: "bool" },
+        { name: "withoutMedkit", type: "bool" },
+        { name: "withoutMines", type: "bool" },
+        { name: "randomGold", type: "bool" },
+        { name: "dependentCooldownEnabled", type: "bool" },
+    ];
     autoBalance: boolean = false;
     battleMode: BattleMode = BattleMode.DM;
     equipmentConstraintsMode: EquipmentConstraintsMode = EquipmentConstraintsMode.NONE;
@@ -91,71 +123,8 @@ export class CreateBattleRequest extends BasePacket implements LobbyTypes.ICreat
     withoutMines: boolean = false;
     randomGold: boolean = false;
     dependentCooldownEnabled: boolean = false;
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.autoBalance = r.readUInt8() === 1;
-        this.battleMode = r.readInt32BE();
-        this.equipmentConstraintsMode = r.readInt32BE();
-        this.friendlyFire = r.readUInt8() === 1;
-        this.scoreLimit = r.readInt32BE();
-        this.timeLimitInSec = r.readInt32BE();
-        this.mapId = r.readOptionalString() ?? "";
-        this.maxPeopleCount = r.readInt32BE();
-        this.name = r.readOptionalString() ?? "";
-        this.parkourMode = r.readUInt8() === 1;
-        this.privateBattle = r.readUInt8() === 1;
-        this.proBattle = r.readUInt8() === 1;
-        this.maxRank = r.readInt32BE();
-        this.minRank = r.readInt32BE();
-        this.reArmorEnabled = r.readUInt8() === 1;
-        this.mapTheme = r.readInt32BE();
-        this.withoutBonuses = r.readUInt8() === 1;
-        this.withoutCrystals = r.readUInt8() === 1;
-        this.withoutSupplies = r.readUInt8() === 1;
-        this.withoutUpgrades = r.readUInt8() === 1;
-        this.reducedResistances = r.readUInt8() === 1;
-        this.esportDropTiming = r.readUInt8() === 1;
-        this.withoutGoldBoxes = r.readUInt8() === 1;
-        this.withoutGoldSiren = r.readUInt8() === 1;
-        this.withoutGoldZone = r.readUInt8() === 1;
-        this.withoutMedkit = r.readUInt8() === 1;
-        this.withoutMines = r.readUInt8() === 1;
-        this.randomGold = r.readUInt8() === 1;
-        this.dependentCooldownEnabled = r.readUInt8() === 1;
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeUInt8(this.autoBalance ? 1 : 0);
-        w.writeInt32BE(this.battleMode);
-        w.writeInt32BE(this.equipmentConstraintsMode);
-        w.writeUInt8(this.friendlyFire ? 1 : 0);
-        w.writeInt32BE(this.scoreLimit);
-        w.writeInt32BE(this.timeLimitInSec);
-        w.writeOptionalString(this.mapId);
-        w.writeInt32BE(this.maxPeopleCount);
-        w.writeOptionalString(this.name);
-        w.writeUInt8(this.parkourMode ? 1 : 0);
-        w.writeUInt8(this.privateBattle ? 1 : 0);
-        w.writeUInt8(this.proBattle ? 1 : 0);
-        w.writeInt32BE(this.maxRank);
-        w.writeInt32BE(this.minRank);
-        w.writeUInt8(this.reArmorEnabled ? 1 : 0);
-        w.writeInt32BE(this.mapTheme);
-        w.writeUInt8(this.withoutBonuses ? 1 : 0);
-        w.writeUInt8(this.withoutCrystals ? 1 : 0);
-        w.writeUInt8(this.withoutSupplies ? 1 : 0);
-        w.writeUInt8(this.withoutUpgrades ? 1 : 0);
-        w.writeUInt8(this.reducedResistances ? 1 : 0);
-        w.writeUInt8(this.esportDropTiming ? 1 : 0);
-        w.writeUInt8(this.withoutGoldBoxes ? 1 : 0);
-        w.writeUInt8(this.withoutGoldSiren ? 1 : 0);
-        w.writeUInt8(this.withoutGoldZone ? 1 : 0);
-        w.writeUInt8(this.withoutMedkit ? 1 : 0);
-        w.writeUInt8(this.withoutMines ? 1 : 0);
-        w.writeUInt8(this.randomGold ? 1 : 0);
-        w.writeUInt8(this.dependentCooldownEnabled ? 1 : 0);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, CreateBattleRequest.schema, buffer); }
+    write(): Buffer { return writeSchema(this, CreateBattleRequest.schema); }
     static getId(): number {
         return -2135234426;
     }
@@ -246,6 +215,20 @@ export class ValidateBattleNameResponse extends BasePacket implements LobbyTypes
 }
 
 export class LobbyData extends BasePacket implements LobbyTypes.ILobbyData {
+    static readonly schema: PacketSchema = [
+        { name: "crystals", type: "i32" },
+        { name: "currentRankScore", type: "i32" },
+        { name: "durationCrystalAbonement", type: "i32" },
+        { name: "hasDoubleCrystal", type: "bool" },
+        { name: "nextRankScore", type: "i32" },
+        { name: "place", type: "i32" },
+        { name: "rank", type: "u8" },
+        { name: "rating", type: "f32" },
+        { name: "score", type: "i32" },
+        { name: "serverNumber", type: "i32" },
+        { name: "nickname", type: "string" },
+        { name: "userProfileUrl", type: "string" },
+    ];
     crystals: number = 0;
     currentRankScore: number = 0;
     durationCrystalAbonement: number = 0;
@@ -264,37 +247,8 @@ export class LobbyData extends BasePacket implements LobbyTypes.ILobbyData {
             Object.assign(this, data);
         }
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.crystals = r.readInt32BE();
-        this.currentRankScore = r.readInt32BE();
-        this.durationCrystalAbonement = r.readInt32BE();
-        this.hasDoubleCrystal = r.readUInt8() === 1;
-        this.nextRankScore = r.readInt32BE();
-        this.place = r.readInt32BE();
-        this.rank = r.readUInt8();
-        this.rating = r.readFloatBE();
-        this.score = r.readInt32BE();
-        this.serverNumber = r.readInt32BE();
-        this.nickname = r.readOptionalString() ?? "";
-        this.userProfileUrl = r.readOptionalString() ?? "";
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeInt32BE(this.crystals);
-        w.writeInt32BE(this.currentRankScore);
-        w.writeInt32BE(this.durationCrystalAbonement);
-        w.writeUInt8(this.hasDoubleCrystal ? 1 : 0);
-        w.writeInt32BE(this.nextRankScore);
-        w.writeInt32BE(this.place);
-        w.writeUInt8(this.rank);
-        w.writeFloatBE(this.rating);
-        w.writeInt32BE(this.score);
-        w.writeInt32BE(this.serverNumber);
-        w.writeOptionalString(this.nickname);
-        w.writeOptionalString(this.userProfileUrl);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, LobbyData.schema, buffer); }
+    write(): Buffer { return writeSchema(this, LobbyData.schema); }
     static getId(): number {
         return 907073245;
     }
@@ -318,6 +272,10 @@ export class UserNotInBattlePacket extends BasePacket implements LobbyTypes.IUse
 }
 
 export class ReleasePlayerSlotDmPacket extends BasePacket implements LobbyTypes.IReleasePlayerSlotDm {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+    ];
     battleId: string | null;
     nickname: string | null;
     constructor(data?: LobbyTypes.IReleasePlayerSlotDmData) {
@@ -325,23 +283,18 @@ export class ReleasePlayerSlotDmPacket extends BasePacket implements LobbyTypes.
         this.battleId = data?.battleId ?? null;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.battleId = r.readOptionalString();
-        this.nickname = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.battleId);
-        w.writeOptionalString(this.nickname);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, ReleasePlayerSlotDmPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ReleasePlayerSlotDmPacket.schema); }
     static getId(): number {
         return 504016996;
     }
 }
 
 export class ReservePlayerSlotDmPacket extends BasePacket implements LobbyTypes.IReservePlayerSlotDm {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+    ];
     battleId: string | null;
     nickname: string | null;
     constructor(battleId: string | null = null, nickname: string | null = null) {
@@ -349,23 +302,21 @@ export class ReservePlayerSlotDmPacket extends BasePacket implements LobbyTypes.
         this.battleId = battleId;
         this.nickname = nickname;
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.battleId = r.readOptionalString();
-        this.nickname = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.battleId);
-        w.writeOptionalString(this.nickname);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, ReservePlayerSlotDmPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ReservePlayerSlotDmPacket.schema); }
     static getId(): number {
         return -2133657895;
     }
 }
 
 export class AddUserToBattleDmPacket extends BasePacket implements LobbyTypes.IAddUserToBattleDm {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "kills", type: "i32" },
+        { name: "score", type: "i32" },
+        { name: "suspicious", type: "bool" },
+        { name: "nickname", type: "string" },
+    ];
     battleId: string | null;
     nickname: string | null;
     kills: number;
@@ -379,29 +330,18 @@ export class AddUserToBattleDmPacket extends BasePacket implements LobbyTypes.IA
         this.score = data?.score ?? 0;
         this.suspicious = data?.suspicious ?? false;
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.battleId = r.readOptionalString();
-        this.kills = r.readInt32BE();
-        this.score = r.readInt32BE();
-        this.suspicious = r.readUInt8() === 1;
-        this.nickname = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.battleId);
-        w.writeInt32BE(this.kills);
-        w.writeInt32BE(this.score);
-        w.writeUInt8(this.suspicious ? 1 : 0);
-        w.writeOptionalString(this.nickname);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, AddUserToBattleDmPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, AddUserToBattleDmPacket.schema); }
     static getId(): number {
         return -911626491;
     }
 }
 
 export class RemoveUserFromBattleLobbyPacket extends BasePacket implements LobbyTypes.IRemoveUserFromBattleLobby {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+    ];
     battleId: string | null;
     nickname: string | null;
     constructor(data?: LobbyTypes.IRemoveUserFromBattleLobbyData) {
@@ -409,23 +349,25 @@ export class RemoveUserFromBattleLobbyPacket extends BasePacket implements Lobby
         this.battleId = data?.battleId ?? null;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.battleId = r.readOptionalString();
-        this.nickname = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.battleId);
-        w.writeOptionalString(this.nickname);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, RemoveUserFromBattleLobbyPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, RemoveUserFromBattleLobbyPacket.schema); }
     static getId(): number {
         return 1924874982;
     }
 }
 
 export class NotifyFriendOfBattlePacket extends BasePacket implements LobbyTypes.INotifyFriendOfBattle {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "mapName", type: "string" },
+        { name: "mode", type: "i32" },
+        { name: "privateBattle", type: "bool" },
+        { name: "probattle", type: "bool" },
+        { name: "maxRank", type: "i32" },
+        { name: "minRank", type: "i32" },
+        { name: "serverNumber", type: "i32" },
+        { name: "nickname", type: "string" },
+    ];
     battleId: string | null;
     mapName: string | null;
     mode: BattleMode;
@@ -447,31 +389,8 @@ export class NotifyFriendOfBattlePacket extends BasePacket implements LobbyTypes
         this.serverNumber = data?.serverNumber ?? 0;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.battleId = r.readOptionalString();
-        this.mapName = r.readOptionalString();
-        this.mode = r.readInt32BE();
-        this.privateBattle = r.readUInt8() === 1;
-        this.probattle = r.readUInt8() === 1;
-        this.maxRank = r.readInt32BE();
-        this.minRank = r.readInt32BE();
-        this.serverNumber = r.readInt32BE();
-        this.nickname = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.battleId);
-        w.writeOptionalString(this.mapName);
-        w.writeInt32BE(this.mode);
-        w.writeUInt8(this.privateBattle ? 1 : 0);
-        w.writeUInt8(this.probattle ? 1 : 0);
-        w.writeInt32BE(this.maxRank);
-        w.writeInt32BE(this.minRank);
-        w.writeInt32BE(this.serverNumber);
-        w.writeOptionalString(this.nickname);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, NotifyFriendOfBattlePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, NotifyFriendOfBattlePacket.schema); }
     static getId(): number {
         return -1895446889;
     }
@@ -498,6 +417,9 @@ export class RequestLobbyPacket extends BasePacket implements LobbyTypes.IReques
 }
 
 export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetBattleInviteSound {
+    static readonly schema: PacketSchema = [
+        { name: "soundIdLow", type: "resource" },
+    ];
     soundIdLow: number;
 
     constructor(soundIdLow: number) {
@@ -505,16 +427,9 @@ export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetB
         this.soundIdLow = soundIdLow;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.soundIdLow = reader.readResource();
-    }
+    read(buffer: Buffer): void { readSchema(this, SetBattleInviteSound.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeResource(this.soundIdLow);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, SetBattleInviteSound.schema); }
     static getId(): number {
         return 834877801;
     }

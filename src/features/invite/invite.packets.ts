@@ -1,10 +1,14 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as InviteTypes from "./invite.types";
 
 export class InviteCode extends BasePacket implements InviteTypes.IInviteCode {
+    static readonly schema: PacketSchema = [
+        { name: "inviteCode", type: "string" },
+    ];
     inviteCode: string | null;
 
     constructor(inviteCode: string | null = null) {
@@ -12,16 +16,9 @@ export class InviteCode extends BasePacket implements InviteTypes.IInviteCode {
         this.inviteCode = inviteCode;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.inviteCode = reader.readOptionalString();
-    }
+    read(buffer: Buffer): void { readSchema(this, InviteCode.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.inviteCode);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, InviteCode.schema); }
 
     static getId(): number {
         return 509394385;
@@ -41,6 +38,9 @@ export class InviteCodeInvalid extends BasePacket implements IEmpty {
 }
 
 export class InviteCodeLogin extends BasePacket implements InviteTypes.IInviteCodeLogin {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+    ];
     nickname: string | null = null;
 
     constructor(nickname?: string | null) {
@@ -50,16 +50,9 @@ export class InviteCodeLogin extends BasePacket implements InviteTypes.IInviteCo
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.nickname = reader.readOptionalString();
-    }
+    read(buffer: Buffer): void { readSchema(this, InviteCodeLogin.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.nickname);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, InviteCodeLogin.schema); }
 
     static getId(): number {
         return 714838911;

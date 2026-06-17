@@ -1,10 +1,14 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as SystemTypes from "./system.types";
 
 export class SystemMessage extends BasePacket implements SystemTypes.ISystemMessage {
+    static readonly schema: PacketSchema = [
+        { name: "text", type: "string" },
+    ];
     text: string | null = null;
 
     constructor(text?: string | null) {
@@ -14,16 +18,9 @@ export class SystemMessage extends BasePacket implements SystemTypes.ISystemMess
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.text = reader.readOptionalString();
-    }
+    read(buffer: Buffer): void { readSchema(this, SystemMessage.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.text);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, SystemMessage.schema); }
     static getId(): number {
         return -600078553;
     }
@@ -82,6 +79,9 @@ export class CaptchaLocation extends BasePacket implements SystemTypes.ICaptchaL
 }
 
 export class InviteEnabled extends BasePacket implements SystemTypes.IInviteEnabled {
+    static readonly schema: PacketSchema = [
+        { name: "requireInviteCode", type: "bool" },
+    ];
     requireInviteCode: boolean = false;
 
     constructor(requireInviteCode?: boolean) {
@@ -91,22 +91,19 @@ export class InviteEnabled extends BasePacket implements SystemTypes.IInviteEnab
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.requireInviteCode = reader.readUInt8() === 1;
-    }
+    read(buffer: Buffer): void { readSchema(this, InviteEnabled.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.requireInviteCode ? 1 : 0);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, InviteEnabled.schema); }
     static getId(): number {
         return 444933603;
     }
 }
 
 export class ConfirmLayoutChange extends BasePacket implements SystemTypes.IConfirmLayoutChange {
+    static readonly schema: PacketSchema = [
+        { name: "fromLayout", type: "i32" },
+        { name: "toLayout", type: "i32" },
+    ];
     fromLayout: number = 0;
     toLayout: number = 0;
 
@@ -116,24 +113,18 @@ export class ConfirmLayoutChange extends BasePacket implements SystemTypes.IConf
         if (to !== undefined) this.toLayout = to;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.fromLayout = reader.readInt32BE();
-        this.toLayout = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, ConfirmLayoutChange.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.fromLayout);
-        writer.writeInt32BE(this.toLayout);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, ConfirmLayoutChange.schema); }
     static getId(): number {
         return -593368100;
     }
 }
 
 export class SetLayout extends BasePacket implements SystemTypes.ISetLayout {
+    static readonly schema: PacketSchema = [
+        { name: "layoutId", type: "i32" },
+    ];
     layoutId: number;
 
     constructor(layoutId: number) {
@@ -141,16 +132,9 @@ export class SetLayout extends BasePacket implements SystemTypes.ISetLayout {
         this.layoutId = layoutId;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.layoutId = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, SetLayout.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.layoutId);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, SetLayout.schema); }
     static getId(): number {
         return 1118835050;
     }

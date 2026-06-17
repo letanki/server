@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -242,6 +243,13 @@ export class FriendRequestSent extends BasePacket implements IFriendRequestSent 
     }
 }
 export class FriendsList extends BasePacket implements IFriendsList {
+    static readonly schema: PacketSchema = [
+        { name: "acceptedFriends", type: "optStringArray" },
+        { name: "newAcceptedFriends", type: "optStringArray" },
+        { name: "incomingRequests", type: "optStringArray" },
+        { name: "newIncomingRequests", type: "optStringArray" },
+        { name: "outgoingRequests", type: "optStringArray" },
+    ];
     acceptedFriends: string[] = [];
     newAcceptedFriends: string[] = [];
     incomingRequests: string[] = [];
@@ -253,23 +261,8 @@ export class FriendsList extends BasePacket implements IFriendsList {
             Object.assign(this, data);
         }
     }
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.acceptedFriends = r.readStringArray();
-        this.newAcceptedFriends = r.readStringArray();
-        this.incomingRequests = r.readStringArray();
-        this.newIncomingRequests = r.readStringArray();
-        this.outgoingRequests = r.readStringArray();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalStringArray(this.acceptedFriends);
-        w.writeOptionalStringArray(this.newAcceptedFriends);
-        w.writeOptionalStringArray(this.incomingRequests);
-        w.writeOptionalStringArray(this.newIncomingRequests);
-        w.writeOptionalStringArray(this.outgoingRequests);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, FriendsList.schema, buffer); }
+    write(): Buffer { return writeSchema(this, FriendsList.schema); }
     static getId() {
         return 1422563374;
     }

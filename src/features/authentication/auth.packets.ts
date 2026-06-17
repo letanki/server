@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -22,44 +23,32 @@ export class Language extends BasePacket implements AuthTypes.ILanguage {
 }
 
 export class CreateAccount extends BasePacket implements AuthTypes.ICreateAccount {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "password", type: "string" },
+        { name: "rememberMe", type: "bool" },
+    ];
     nickname: string | null = null;
     password: string | null = null;
     rememberMe: boolean = false;
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.nickname = r.readOptionalString();
-        this.password = r.readOptionalString();
-        this.rememberMe = r.readUInt8() === 1;
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.nickname);
-        w.writeOptionalString(this.password);
-        w.writeUInt8(this.rememberMe ? 1 : 0);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, CreateAccount.schema, buffer); }
+    write(): Buffer { return writeSchema(this, CreateAccount.schema); }
     static getId() {
         return 427083290;
     }
 }
 
 export class Login extends BasePacket implements AuthTypes.ILogin {
+    static readonly schema: PacketSchema = [
+        { name: "username", type: "string" },
+        { name: "password", type: "string" },
+        { name: "rememberMe", type: "bool" },
+    ];
     username: string | null = null;
     password: string | null = null;
     rememberMe: boolean = false;
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.username = r.readOptionalString();
-        this.password = r.readOptionalString();
-        this.rememberMe = r.readUInt8() === 1;
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeOptionalString(this.username);
-        w.writeOptionalString(this.password);
-        w.writeUInt8(this.rememberMe ? 1 : 0);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, Login.schema, buffer); }
+    write(): Buffer { return writeSchema(this, Login.schema); }
     static getId() {
         return -739684591;
     }
@@ -209,6 +198,10 @@ export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
 }
 
 export class CaptchaVerify extends BasePacket implements AuthTypes.ICaptchaVerify {
+    static readonly schema: PacketSchema = [
+        { name: "view", type: "i32" },
+        { name: "solution", type: "string" },
+    ];
     view: number;
     solution: string | null;
     constructor(view: number = 0, solution: string | null) {
@@ -216,17 +209,8 @@ export class CaptchaVerify extends BasePacket implements AuthTypes.ICaptchaVerif
         this.view = view;
         this.solution = solution;
     }
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.view = r.readInt32BE();
-        this.solution = r.readOptionalString();
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeInt32BE(this.view);
-        w.writeOptionalString(this.solution);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, CaptchaVerify.schema, buffer); }
+    write(): Buffer { return writeSchema(this, CaptchaVerify.schema); }
     static getId() {
         return 1271163230;
     }
@@ -367,6 +351,12 @@ export class HideLoginForm extends BasePacket implements IEmpty {
 }
 
 export class Punishment extends BasePacket implements AuthTypes.IPunishment {
+    static readonly schema: PacketSchema = [
+        { name: "reason", type: "string" },
+        { name: "minutes", type: "i32" },
+        { name: "hours", type: "i32" },
+        { name: "days", type: "i32" },
+    ];
     reason: string | null = null;
     days: number = 0;
     hours: number = 0;
@@ -380,28 +370,21 @@ export class Punishment extends BasePacket implements AuthTypes.IPunishment {
         if (minutes !== undefined) this.minutes = minutes;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.reason = reader.readOptionalString();
-        this.minutes = reader.readInt32BE();
-        this.hours = reader.readInt32BE();
-        this.days = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, Punishment.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeOptionalString(this.reason);
-        writer.writeInt32BE(this.minutes);
-        writer.writeInt32BE(this.hours);
-        writer.writeInt32BE(this.days);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, Punishment.schema); }
     static getId(): number {
         return 1200280053;
     }
 }
 
 export class Registration extends BasePacket implements AuthTypes.IRegistration {
+    static readonly schema: PacketSchema = [
+        { name: "bgResource", type: "resource" },
+        { name: "enableRequiredEmail", type: "bool" },
+        { name: "maxPasswordLength", type: "i32" },
+        { name: "minPasswordLength", type: "i32" },
+    ];
     bgResource: number;
     enableRequiredEmail: boolean;
     maxPasswordLength: number;
@@ -415,22 +398,9 @@ export class Registration extends BasePacket implements AuthTypes.IRegistration 
         this.minPasswordLength = minPasswordLength;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.bgResource = reader.readResource();
-        this.enableRequiredEmail = reader.readUInt8() === 1;
-        this.maxPasswordLength = reader.readInt32BE();
-        this.minPasswordLength = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, Registration.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeResource(this.bgResource);
-        writer.writeUInt8(this.enableRequiredEmail ? 1 : 0);
-        writer.writeInt32BE(this.maxPasswordLength);
-        writer.writeInt32BE(this.minPasswordLength);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, Registration.schema); }
     static getId(): number {
         return -1277343167;
     }

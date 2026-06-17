@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -15,6 +16,9 @@ export class RequestNextTipPacket extends BasePacket implements IEmpty {
 }
 
 export class SetLoadingScreenImagePacket extends BasePacket implements LoaderTypes.ISetLoadingScreenImage {
+    static readonly schema: PacketSchema = [
+        { name: "resourceImageIdLow", type: "resource" },
+    ];
     resourceImageIdLow: number = 0;
 
     constructor(resourceImageIdLow?: number) {
@@ -24,22 +28,18 @@ export class SetLoadingScreenImagePacket extends BasePacket implements LoaderTyp
         }
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.resourceImageIdLow = reader.readResource();
-    }
+    read(buffer: Buffer): void { readSchema(this, SetLoadingScreenImagePacket.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeResource(this.resourceImageIdLow);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, SetLoadingScreenImagePacket.schema); }
     static getId(): number {
         return 2094741924;
     }
 }
 
 export class ResourceCallback extends BasePacket implements LoaderTypes.IResourceCallback {
+    static readonly schema: PacketSchema = [
+        { name: "callbackId", type: "i32" },
+    ];
     callbackId: number;
 
     constructor(callbackId: number = 0) {
@@ -47,16 +47,9 @@ export class ResourceCallback extends BasePacket implements LoaderTypes.IResourc
         this.callbackId = callbackId;
     }
 
-    read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.callbackId = reader.readInt32BE();
-    }
+    read(buffer: Buffer): void { readSchema(this, ResourceCallback.schema, buffer); }
 
-    write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.callbackId);
-        return writer.getBuffer();
-    }
+    write(): Buffer { return writeSchema(this, ResourceCallback.schema); }
     static getId(): number {
         return -82304134;
     }
