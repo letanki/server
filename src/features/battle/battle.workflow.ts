@@ -462,6 +462,11 @@ export class BattleWorkflow {
             const usersBlue = onlineUsersBlue.map(this.mapUserToBattleUser);
             const usersRed = onlineUsersRed.map(this.mapUserToBattleUser);
             client.sendPacket(new BattlePackets.InitBattleUsersTeamPacket(battle.scoreBlue, battle.scoreRed, usersBlue, usersRed));
+
+            // Team battles populate the client's statistics model from this packet (DM uses
+            // InitBattleUsersDM); without it score updates crash with TypeError #1009.
+            const statsUsers = [...onlineUsersBlue, ...onlineUsersRed].map((u: UserDocument) => ({ deaths: 0, kills: 0, score: 0, nickname: u.username }));
+            client.sendPacket(new BattlePackets.InitBattleStatisticsTeamPacket(statsUsers));
         } else {
             client.sendPacket(new BattlePackets.InitBattleDMPacket());
             const onlineUsers = battle.users.filter((u: UserDocument) => server.findClientByUsername(u.username));
