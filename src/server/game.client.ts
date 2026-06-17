@@ -1,3 +1,4 @@
+import { unknownPacketRecorder } from "@/core/diagnostics/unknown-packet.recorder";
 import { Protection } from "@/core/security/security.packets";
 import { SecurityService } from "@/core/security/security.service";
 import { Battle } from "@/features/battle/battle.model";
@@ -163,6 +164,8 @@ export class GameClient {
           client: this.getRemoteAddress(),
           packetHex: decryptedPacket.toString("hex"),
         });
+        // Persist unknown packets so they can be reverse-engineered / implemented later.
+        unknownPacketRecorder.record(packetId, decryptedPacket, this.getRemoteAddress());
         continue;
       }
 
