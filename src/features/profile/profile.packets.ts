@@ -141,7 +141,7 @@ export class AchievementTips extends BasePacket implements ProfileTypes.IAchieve
         return writer.getBuffer();
     }
     static getId(): number {
-        return 602656160;
+        return -1481254568;
     }
 }
 
