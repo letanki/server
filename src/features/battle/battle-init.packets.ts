@@ -163,28 +163,6 @@ export class InitBattleUsersTeamPacket extends BasePacket implements BattleTypes
     static getId(): number { return -1233891872; }
 }
 
-// Team-battle statistics init. In DM the stats model is populated from InitBattleUsersDM
-// (putInitParams); in team battles the client populates it from THIS packet instead, so
-// without it score updates (UpdateBattleUser*) crash with TypeError #1009.
-export class InitBattleStatisticsTeamPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "users", type: "list", of: [
-            { name: "deaths", type: "i16" },
-            { name: "kills", type: "i16" },
-            { name: "score", type: "i32" },
-            { name: "nickname", type: "string" },
-        ] },
-    ];
-    users: { deaths: number; kills: number; score: number; nickname: string | null }[];
-    constructor(users: { deaths: number; kills: number; score: number; nickname: string | null }[] = []) {
-        super();
-        this.users = users;
-    }
-    read(buffer: Buffer): void { readSchema(this, InitBattleStatisticsTeamPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, InitBattleStatisticsTeamPacket.schema); }
-    static getId(): number { return 1061006142; }
-}
-
 export class InitCtfFlagsPacket extends BasePacket implements BattleTypes.IInitCtfFlags {
     static readonly schema: PacketSchema = [
         { name: "flagBasePositionBlue", type: "vector3" },

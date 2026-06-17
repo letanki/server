@@ -209,18 +209,6 @@ test("InitDomPointsPacket round-trips with point list (optVector3 + stringArray)
     assert.equal(decoded.bigLetters, 100);
 });
 
-test("InitBattleStatisticsTeamPacket round-trips (team stats user list)", () => {
-    const original = new BattlePackets.InitBattleStatisticsTeamPacket([
-        { deaths: 1, kills: 2, score: 100, nickname: "Blue1" },
-        { deaths: 0, kills: 5, score: 250, nickname: "Red1" },
-    ]);
-    const decoded = new BattlePackets.InitBattleStatisticsTeamPacket();
-    decoded.read(original.write());
-    assert.equal(decoded.users.length, 2);
-    assert.deepEqual(decoded.users[0], { deaths: 1, kills: 2, score: 100, nickname: "Blue1" });
-    assert.equal(decoded.users[1].nickname, "Red1");
-});
-
 test("Captcha round-trips with bytes image (length-prefixed buffer)", () => {
     const image = Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x10]);
     const original = new AuthPackets.Captcha(7, image);
