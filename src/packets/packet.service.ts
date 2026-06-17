@@ -1,6 +1,6 @@
 import { IPacket } from "@/packets/packet.interfaces";
 import logger from "@/utils/logger";
-import fs from "fs";
+import { loadModulesFromDir } from "@/utils/module-loader";
 import path from "path";
 
 export class PacketService {
@@ -11,40 +11,28 @@ export class PacketService {
   }
 
   private loadPacketsFromDir(dir: string): void {
-    if (!fs.existsSync(dir)) return;
+    const modules = loadModulesFromDir(
+      dir,
+      (file) => (file.endsWith(".ts") || file.endsWith(".js")) && !file.includes("BasePacket")
+    );
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        this.loadPacketsFromDir(fullPath);
-        continue;
-      }
-
-      const file = entry.name;
-      if (!(file.endsWith(".ts") || file.endsWith(".js")) || file.includes("BasePacket")) {
-        continue;
-      }
-
-      try {
-        const module = require(fullPath);
-        for (const key in module) {
-          const PacketClass = module[key];
-          if (PacketClass && typeof PacketClass.getId === 'function' && PacketClass.prototype?.hasOwnProperty('read')) {
-            try {
-              const packetId = PacketClass.getId();
-              if (this.packets.has(packetId)) {
-                logger.warn(`Packet ID ${packetId} from ${file} is already registered. Overwriting.`);
-              }
-              this.packets.set(packetId, PacketClass);
-            } catch (e) {
-
+    for (const { file, module } of modules) {
+      for (const key in module) {
+        const PacketClass = module[key];
+        if (PacketClass && typeof PacketClass.getId === "function" && PacketClass.prototype?.hasOwnProperty("read")) {
+          try {
+            const packetId = PacketClass.getId();
+            const existing = this.packets.get(packetId);
+            // Re-exports (barrel files) surface the same class twice; only warn on a
+            // genuine conflict (a different class claiming an already-used id).
+            if (existing && existing !== PacketClass) {
+              logger.warn(`Packet ID ${packetId} from ${file} conflicts with an already-registered class. Overwriting.`);
             }
+            this.packets.set(packetId, PacketClass);
+          } catch (e) {
+            // getId() throws on the abstract BasePacket; ignore non-packet exports.
           }
         }
-      } catch (error: any) {
-        logger.error(`Falha ao carregar o pacote de ${file}`, { error: error.message });
       }
     }
   }

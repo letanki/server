@@ -1,6 +1,6 @@
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
-import fs from "fs";
+import { loadModulesFromDir } from "@/utils/module-loader";
 import path from "path";
 
 export class PacketHandlerService {
@@ -17,32 +17,14 @@ export class PacketHandlerService {
     }
 
     private loadHandlersFromDir(dir: string): void {
-        logger.debug(`Scanning directory for handlers: ${dir}`);
-        if (!fs.existsSync(dir)) {
-            logger.warn(`Directory not found, skipping: ${dir}`);
-            return;
-        }
+        const modules = loadModulesFromDir(dir, (file) => {
+            const lower = file.toLowerCase();
+            return lower.endsWith("handlers.ts") || lower.endsWith("handler.ts");
+        });
 
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-        for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                this.loadHandlersFromDir(fullPath);
-                continue;
-            }
-
-            const file = entry.name;
-            const lowerCaseFile = file.toLowerCase();
-            if (!(lowerCaseFile.endsWith("handlers.ts") || lowerCaseFile.endsWith("handler.ts"))) {
-                continue;
-            }
-
-            logger.debug(`Found potential handler file: ${file}`);
+        for (const { file, module } of modules) {
             try {
-                const module = require(fullPath);
-                const classesToRegister = [];
-
+                const classesToRegister: any[] = [];
                 if (module.default) {
                     classesToRegister.push(module.default);
                 }
@@ -61,11 +43,7 @@ export class PacketHandlerService {
                     }
                 }
             } catch (error: any) {
-                logger.error(`Failed to load handlers from ${file}`, {
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    fullError: error
-                });
+                logger.error(`Failed to register handlers from ${file}`, { errorMessage: error.message, errorStack: error.stack });
             }
         }
     }
