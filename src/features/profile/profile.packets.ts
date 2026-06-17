@@ -71,13 +71,13 @@ export class RankNotifierData extends BasePacket implements ProfileTypes.IRankNo
 
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
-        this.rank = reader.readInt32BE();
+        this.rank = reader.readUInt8();
         this.nickname = reader.readOptionalString() ?? "";
     }
 
     write(): Buffer {
         const writer = new BufferWriter();
-        writer.writeInt32BE(this.rank);
+        writer.writeUInt8(this.rank);
         writer.writeOptionalString(this.nickname);
         return writer.getBuffer();
     }
