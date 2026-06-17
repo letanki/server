@@ -507,12 +507,14 @@ export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetB
 
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
-        this.soundIdLow = reader.readInt32BE();
+        reader.readInt32BE(); // soundResourceId.high (always 0)
+        this.soundIdLow = reader.readInt32BE(); // soundResourceId.low
     }
 
     write(): Buffer {
         const writer = new BufferWriter();
-        writer.writeInt32BE(this.soundIdLow);
+        writer.writeInt32BE(0); // soundResourceId.high
+        writer.writeInt32BE(this.soundIdLow); // soundResourceId.low
         return writer.getBuffer();
     }
     static getId(): number {
