@@ -112,7 +112,7 @@ export class ChatProperties extends BasePacket implements ChatTypes.IChatPropert
         this.chatModeratorLevel = r.readInt32BE();
         this.linksWhiteList = r.readStringArray();
         this.minChar = r.readInt32BE();
-        this.minWord = r.readInt32BE();
+        this.minWord = r.readInt16BE();
         this.selfName = r.readOptionalString() ?? "";
         this.showLinks = r.readUInt8() === 1;
         this.typingSpeedAntifloodEnabled = r.readUInt8() === 1;
@@ -126,7 +126,7 @@ export class ChatProperties extends BasePacket implements ChatTypes.IChatPropert
         w.writeInt32BE(this.chatModeratorLevel);
         w.writeOptionalStringArray(this.linksWhiteList);
         w.writeInt32BE(this.minChar);
-        w.writeInt32BE(this.minWord);
+        w.writeInt16BE(this.minWord);
         w.writeOptionalString(this.selfName);
         w.writeUInt8(this.showLinks ? 1 : 0);
         w.writeUInt8(this.typingSpeedAntifloodEnabled ? 1 : 0);

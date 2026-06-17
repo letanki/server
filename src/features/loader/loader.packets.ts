@@ -75,13 +75,16 @@ export class LoadDependencies extends BasePacket implements LoaderTypes.ILoadDep
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
         const jsonString = reader.readOptionalString();
-        this.dependencies = jsonString ? JSON.parse(jsonString) : { resources: [] };
+        // The client parses this JSON with `JSON.parse(str) as Array`, so it must be
+        // a bare array of resource descriptors, not wrapped in an object.
+        const parsed = jsonString ? JSON.parse(jsonString) : [];
+        this.dependencies = { resources: Array.isArray(parsed) ? parsed : parsed.resources ?? [] };
         this.callbackId = reader.readInt32BE();
     }
 
     write(): Buffer {
         const writer = new BufferWriter();
-        const jsonString = JSON.stringify(this.dependencies);
+        const jsonString = JSON.stringify(this.dependencies.resources);
         writer.writeOptionalString(jsonString);
         writer.writeInt32BE(this.callbackId);
         return writer.getBuffer();

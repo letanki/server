@@ -417,7 +417,8 @@ export class Registration extends BasePacket implements AuthTypes.IRegistration 
 
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
-        this.bgResource = reader.readInt32BE();
+        reader.readInt32BE(); // backgroundResourceId.high (always 0 for UI resources)
+        this.bgResource = reader.readInt32BE(); // backgroundResourceId.low
         this.enableRequiredEmail = reader.readUInt8() === 1;
         this.maxPasswordLength = reader.readInt32BE();
         this.minPasswordLength = reader.readInt32BE();
@@ -425,7 +426,8 @@ export class Registration extends BasePacket implements AuthTypes.IRegistration 
 
     write(): Buffer {
         const writer = new BufferWriter();
-        writer.writeInt32BE(this.bgResource);
+        writer.writeInt32BE(0); // backgroundResourceId.high
+        writer.writeInt32BE(this.bgResource); // backgroundResourceId.low
         writer.writeUInt8(this.enableRequiredEmail ? 1 : 0);
         writer.writeInt32BE(this.maxPasswordLength);
         writer.writeInt32BE(this.minPasswordLength);
