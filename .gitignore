@@ -154,3 +154,5 @@ scripts/visualizador.html
 scripts/alpha.jpg
 scripts/image.jpg
 src/types/*
+src/types/resourceTypes.ts
+src/types/mapDependencies.ts
