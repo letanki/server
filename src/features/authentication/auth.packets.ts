@@ -171,7 +171,13 @@ export class RequestCaptcha extends BasePacket implements AuthTypes.IRequestCapt
     }
 }
 
+const CAPTCHA_FIELDS: PacketSchema = [
+    { name: "view", type: "i32" },
+    { name: "image", type: "bytes" },
+];
+
 export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
+    static readonly schema = CAPTCHA_FIELDS;
     view: number;
     image: Buffer;
     constructor(view: number = 0, image: Buffer = Buffer.alloc(0)) {
@@ -179,19 +185,8 @@ export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
         this.view = view;
         this.image = image;
     }
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.view = r.readInt32BE();
-        const len = r.readInt32BE();
-        this.image = r.readBytes(len);
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeInt32BE(this.view);
-        w.writeInt32BE(this.image.length);
-        w.writeBuffer(this.image);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, Captcha.schema, buffer); }
+    write(): Buffer { return writeSchema(this, Captcha.schema); }
     static getId() {
         return -1670408519;
     }
@@ -234,6 +229,7 @@ export class CaptchaIsValid extends BasePacket implements AuthTypes.ICaptchaView
 }
 
 export class CaptchaIsInvalid extends BasePacket implements AuthTypes.ICaptcha {
+    static readonly schema = CAPTCHA_FIELDS;
     view: number = 0;
     image: Buffer = Buffer.alloc(0);
     constructor(view?: number, image?: Buffer) {
@@ -241,19 +237,8 @@ export class CaptchaIsInvalid extends BasePacket implements AuthTypes.ICaptcha {
         if (view !== undefined) this.view = view;
         if (image) this.image = image;
     }
-    read(buffer: Buffer) {
-        const r = new BufferReader(buffer);
-        this.view = r.readInt32BE();
-        const len = r.readInt32BE();
-        this.image = r.readBytes(len);
-    }
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeInt32BE(this.view);
-        w.writeInt32BE(this.image.length);
-        w.writeBuffer(this.image);
-        return w.getBuffer();
-    }
+    read(buffer: Buffer): void { readSchema(this, CaptchaIsInvalid.schema, buffer); }
+    write(): Buffer { return writeSchema(this, CaptchaIsInvalid.schema); }
     static getId() {
         return -373510957;
     }

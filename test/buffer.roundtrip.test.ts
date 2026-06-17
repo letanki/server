@@ -8,6 +8,7 @@ import * as ChatPackets from "@/features/chat/chat.packets";
 import * as ProfilePackets from "@/features/profile/profile.packets";
 import * as BattlePackets from "@/features/battle/battle.packets";
 import * as QuestsPackets from "@/features/quests/quests.packets";
+import * as AuthPackets from "@/features/authentication/auth.packets";
 import { PacketService } from "@/packets/packet.service";
 
 // These tests pin the exact wire format produced by BufferWriter / consumed by
@@ -206,6 +207,17 @@ test("InitDomPointsPacket round-trips with point list (optVector3 + stringArray)
     assert.deepEqual(decoded.points[0].tankIds, ["Danlino", "Dan"]);
     assert.equal(decoded.pointScoreIncreasingSound, 121);
     assert.equal(decoded.bigLetters, 100);
+});
+
+test("Captcha round-trips with bytes image (length-prefixed buffer)", () => {
+    const image = Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x10]);
+    const original = new AuthPackets.Captcha(7, image);
+    const decoded = new AuthPackets.Captcha();
+    decoded.read(original.write());
+    assert.equal(decoded.view, 7);
+    assert.equal(decoded.image.toString("hex"), image.toString("hex"));
+    // wire = int32 view + int32 length + raw bytes
+    assert.equal(original.write().toString("hex"), "0000000700000006deadbeef0010");
 });
 
 test("ShowQuestsWindow round-trips with nested list (quests -> prizes)", () => {

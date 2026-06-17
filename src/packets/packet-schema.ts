@@ -8,7 +8,8 @@ import { BufferWriter } from "@/utils/buffer/buffer.writer";
  *
  * `string` is the optional-string encoding used everywhere (1-byte null flag +
  * int32 length + utf8). `optStringArray` reads like a string array but writes
- * with the "optional" empty flag, matching the existing helpers.
+ * with the "optional" empty flag, matching the existing helpers. `bytes` is an
+ * int32 length followed by that many raw bytes (e.g. captcha images).
  *
  * Composite types:
  *  - `list`      — an int32 count followed by N items, each described by `of`.
@@ -28,7 +29,8 @@ export type PrimitiveType =
     | "optStringArray"
     | "i16Array"
     | "vector3"
-    | "vector3Array";
+    | "vector3Array"
+    | "bytes";
 
 export interface PrimitiveField {
     name: string;
@@ -58,6 +60,7 @@ const READERS: Record<PrimitiveType, (r: BufferReader) => unknown> = {
     i16Array: (r) => r.readInt16Array(),
     vector3: (r) => r.readOptionalVector3(),
     vector3Array: (r) => r.readVector3Array(),
+    bytes: (r) => r.readBytes(r.readInt32BE()),
 };
 
 const WRITERS: Record<PrimitiveType, (w: BufferWriter, value: any) => void> = {
@@ -74,6 +77,7 @@ const WRITERS: Record<PrimitiveType, (w: BufferWriter, value: any) => void> = {
     i16Array: (w, v) => w.writeInt16Array(v),
     vector3: (w, v) => w.writeOptionalVector3(v),
     vector3Array: (w, v) => w.writeVector3Array(v),
+    bytes: (w, v: Buffer) => { w.writeInt32BE(v.length); w.writeBuffer(v); },
 };
 
 function readInto(target: Record<string, any>, schema: PacketSchema, reader: BufferReader): void {
