@@ -155,11 +155,6 @@ export class GameClient {
     while (this.packetQueue.length > 0) {
       const { packetId, packetData } = this.packetQueue.shift()!;
 
-      logger.info(`Processing packet`, {
-        id: packetId,
-        client: this.getRemoteAddress(),
-      });
-
       const decryptedPacket = this.securityService.decrypt(packetData);
       const packetInstance = this.server.packetService.createPacket(packetId);
 
@@ -173,9 +168,13 @@ export class GameClient {
 
       try {
         packetInstance.read(decryptedPacket);
-        logger.info(`Packet processed: ${packetInstance.toString()}`, {
-          client: this.getRemoteAddress(),
-        });
+        // toString() serializes every field (JSON.stringify); only build it when
+        // debug logging is actually enabled to keep the hot read path cheap.
+        if (logger.isLevelEnabled("debug")) {
+          logger.debug(`Packet processed: ${packetInstance.toString()}`, {
+            client: this.getRemoteAddress(),
+          });
+        }
 
         const handler = this.server.packetHandlerService.getHandler(packetId);
 
@@ -225,14 +224,18 @@ export class GameClient {
       const finalBuffer = encrypt ? this.securityService.encrypt(rawBuffer) : rawBuffer;
       const packetBuffer = this.buildPacketBuffer(packetId, finalBuffer);
 
-      logger.debug(`Sending packet`, {
-        string: packet.toString(),
-        id: packetId,
-        size: packetBuffer.length,
-        encrypted: encrypt,
-        client: this.getRemoteAddress(),
-        userTarget: this.user?.username || "unknown",
-      });
+      // packet.toString() is expensive (serializes every field); guard it so it
+      // only runs when debug logging is enabled.
+      if (logger.isLevelEnabled("debug")) {
+        logger.debug(`Sending packet`, {
+          string: packet.toString(),
+          id: packetId,
+          size: packetBuffer.length,
+          encrypted: encrypt,
+          client: this.getRemoteAddress(),
+          userTarget: this.user?.username || "unknown",
+        });
+      }
       this.socket.write(packetBuffer);
     } catch (error) {
       logger.error(`Error sending packet to ${this.getRemoteAddress()}`, {
