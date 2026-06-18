@@ -165,20 +165,7 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
             direction: packet.direction,
         });
 
-        const raw = fullMovePacket.write();
-        const id = fullMovePacket.getId();
-        const allParticipants = battle.getAllParticipants();
-
-        for (const participant of allParticipants) {
-            if (participant.id === client.user.id) {
-                continue;
-            }
-
-            const otherClient = server.findClientByUsername(participant.username);
-            if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendRaw(raw, id);
-            }
-        }
+        battle.broadcastRaw(fullMovePacket.write(), fullMovePacket.getId(), client.user.id);
 
         await server.battleService.checkPlayerPosition(client);
     }
@@ -207,20 +194,7 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
             position: packet.position,
         });
 
-        const raw = movePacket.write();
-        const id = movePacket.getId();
-        const allParticipants = battle.getAllParticipants();
-
-        for (const participant of allParticipants) {
-            if (participant.id === client.user.id) {
-                continue;
-            }
-
-            const otherClient = server.findClientByUsername(participant.username);
-            if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendRaw(raw, id);
-            }
-        }
+        battle.broadcastRaw(movePacket.write(), movePacket.getId(), client.user.id);
 
         await server.battleService.checkPlayerPosition(client);
     }
@@ -394,20 +368,7 @@ export class RotateTurretCommandHandler implements IPacketHandler<BattlePackets.
             control: packet.control,
         });
 
-        const raw = turretRotationPacket.write();
-        const id = turretRotationPacket.getId();
-        const allParticipants = battle.getAllParticipants();
-
-        for (const participant of allParticipants) {
-            if (participant.id === client.user.id) {
-                continue;
-            }
-
-            const otherClient = server.findClientByUsername(participant.username);
-            if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendRaw(raw, id);
-            }
-        }
+        battle.broadcastRaw(turretRotationPacket.write(), turretRotationPacket.getId(), client.user.id);
     }
 }
 
@@ -641,15 +602,6 @@ export class MovementControlCommandHandler implements IPacketHandler<BattlePacke
         // Relay the input/control state to the other players so their physics simulation of
         // this tank starts/stops correctly (key-release included).
         const controlPacket = new BattlePackets.MovementControlPacket({ nickname: client.user.username, control: packet.control });
-        const raw = controlPacket.write();
-        const id = controlPacket.getId();
-
-        for (const participant of battle.getAllParticipants()) {
-            if (participant.id === client.user.id) continue;
-            const otherClient = server.findClientByUsername(participant.username);
-            if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendRaw(raw, id);
-            }
-        }
+        battle.broadcastRaw(controlPacket.write(), controlPacket.getId(), client.user.id);
     }
 }

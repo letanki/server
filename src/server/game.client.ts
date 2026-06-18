@@ -45,8 +45,22 @@ export class GameClient {
   public lastPingSentTimestamp: number = 0;
   public pingHistory: number[] = [];
   public lastViewedBattleId: string | null = null;
-  public currentBattle: Battle | null = null;
+  private _currentBattle: Battle | null = null;
   public isSpectator: boolean = false;
+
+  /**
+   * Setting currentBattle keeps the battle's `clients` set in sync, so hot broadcasts
+   * (movement/turret relay) can iterate live connections directly without per-packet lookups.
+   */
+  public get currentBattle(): Battle | null {
+    return this._currentBattle;
+  }
+  public set currentBattle(battle: Battle | null) {
+    if (this._currentBattle === battle) return;
+    this._currentBattle?.clients.delete(this);
+    this._currentBattle = battle;
+    battle?.clients.add(this);
+  }
 
   public isInFlowMode: boolean = false;
   public flowTarget: string | null = null;
@@ -57,7 +71,6 @@ export class GameClient {
   private timeCheckSentTimestamp: number = 0;
   private lastTimeCheckPing: number = 0;
   private timeCheckTimeout: NodeJS.Timeout | null = null;
-  private timeCheckerPingHistory: number[] = [];
 
   public battleState: "newcome" | "active" | "suicide" = "suicide";
   public pendingResourceAcks: Set<string> = new Set<string>();
@@ -219,6 +232,11 @@ export class GameClient {
       this.server.notifySubscribersOfStatusChange(this.user.username, false);
     }
 
+    // Drop this dead connection from its battle's broadcast set so relays don't write to a
+    // destroyed socket. handlePlayerDisconnection above already captured what it needs; the
+    // reconnect flow tracks state via disconnectedPlayers, not this field.
+    this.currentBattle = null;
+
     this.server.removeClient(this);
     this.socket.destroy();
   }
@@ -304,20 +322,13 @@ export class GameClient {
     const serverTime = Date.now() - this.timeCheckerStartTime;
     this.timeCheckSentTimestamp = Date.now();
 
-    let bestPing = this.lastTimeCheckPing;
-    if (this.timeCheckerPingHistory.length > 0) {
-      bestPing = Math.min(...this.timeCheckerPingHistory);
-    }
-
-    this.sendPacket(new TimeCheckerPacket(serverTime, bestPing));
+    // Report the most recent round-trip directly — no smoothing/min-of-history — so the
+    // displayed ping reflects the real current latency, including event-loop backlog.
+    this.sendPacket(new TimeCheckerPacket(serverTime, this.lastTimeCheckPing));
   }
 
   public handleTimeCheckerResponse(clientTime: number, serverTime: number): void {
     this.lastTimeCheckPing = Date.now() - this.timeCheckSentTimestamp;
-    this.timeCheckerPingHistory.push(this.lastTimeCheckPing);
-    if (this.timeCheckerPingHistory.length > 2) {
-      this.timeCheckerPingHistory.shift();
-    }
 
     if (this.initialClientTime === 0) {
       this.initialClientTime = clientTime;
@@ -333,6 +344,6 @@ export class GameClient {
       }
     }
 
-    this.timeCheckTimeout = setTimeout(() => this.sendTimeCheckerPacket(), 2000);
+    this.timeCheckTimeout = setTimeout(() => this.sendTimeCheckerPacket(), 1000);
   }
 }

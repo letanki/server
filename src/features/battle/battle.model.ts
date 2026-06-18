@@ -1,4 +1,5 @@
 import { IDependency } from "@/features/loader/loader.types";
+import type { GameClient } from "@/server/game.client";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ResourceId } from "@/types/resourceTypes";
@@ -96,6 +97,14 @@ export class Battle {
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
     public domPoints: IDomPointState[] = [];
 
+    /**
+     * Live connections currently in this battle, maintained by GameClient's currentBattle setter
+     * (and pruned on disconnect). Lets hot broadcasts iterate sockets directly instead of doing
+     * getAllParticipants() (array alloc) + findClientByUsername() (toLowerCase alloc + Map.get)
+     * per recipient — at 200Hz movement spam those allocations saturate the event loop.
+     */
+    public readonly clients = new Set<GameClient>();
+
     constructor(settings: IBattleCreationSettings) {
         this.battleId = crypto.randomBytes(8).toString("hex");
         this.settings = settings;
@@ -110,5 +119,18 @@ export class Battle {
 
     public getAllParticipants(): UserDocument[] {
         return [...this.users, ...this.usersBlue, ...this.usersRed, ...this.spectators];
+    }
+
+    /**
+     * Broadcasts an already-serialized packet body to every live connection in this battle.
+     * Each recipient re-encrypts the shared `raw` for its own cipher stream. No per-recipient
+     * lookups or allocations — this is the hot path for movement/turret relay.
+     */
+    public broadcastRaw(raw: Buffer, packetId: number, exceptUserId?: string): void {
+        for (const client of this.clients) {
+            if (client.isDestroyed) continue;
+            if (exceptUserId && client.user?.id === exceptUserId) continue;
+            client.sendRaw(raw, packetId);
+        }
     }
 }
