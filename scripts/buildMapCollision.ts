@@ -25,6 +25,7 @@ const ROOT = path.join(__dirname, "..");
 const MAPS_DIR = path.join(ROOT, "resources", "map");
 const HULL_DIR = path.join(ROOT, "resources", "hull");
 const OUT_MAP = path.join(ROOT, "src", "types", "mapCollision.ts");
+const OUT_COLLISION_DIR = path.join(ROOT, "src", "types", "collision"); // one JSON per map (loaded lazily)
 const OUT_HULL = path.join(ROOT, "src", "types", "hullCollision.ts");
 
 function round(n: number): number { return Math.round(n * 10) / 10; }
@@ -113,22 +114,56 @@ function rotatedAabb(cx: number, cy: number, hw: number, hl: number, rot: number
     return { minX: round(minX), maxX: round(maxX), minY: round(minY), maxY: round(maxY) };
 }
 
-function buildMap(xml: string): Box[] {
+type V3 = { x: number; y: number; z: number };
+// Rotate a local vertex by the map's Euler angles (ZYX order) — exactly the matrix the client builds
+// for collision geometry (decompiled). Lets us place TILTED planes/triangles (ramps) correctly.
+function rotateEuler(rx: number, ry: number, rz: number, v: V3): V3 {
+    const c1 = Math.cos(rx), s1 = Math.sin(rx), c2 = Math.cos(ry), s2 = Math.sin(ry), c3 = Math.cos(rz), s3 = Math.sin(rz);
+    const m00 = c3 * c2, m01 = c3 * s2 * s1 - s3 * c1, m02 = c3 * s2 * c1 + s3 * s1;
+    const m10 = s3 * c2, m11 = s3 * s2 * s1 + c3 * c1, m12 = s3 * s2 * c1 - c3 * s1;
+    const m20 = -s2, m21 = c2 * s1, m22 = c2 * c1;
+    return {
+        x: m00 * v.x + m01 * v.y + m02 * v.z,
+        y: m10 * v.x + m11 * v.y + m12 * v.z,
+        z: m20 * v.x + m21 * v.y + m22 * v.z,
+    };
+}
+function world(rot: V3, pos: V3, v: V3): V3 { const r = rotateEuler(rot.x, rot.y, rot.z, v); return { x: r.x + pos.x, y: r.y + pos.y, z: r.z + pos.z }; }
+const FLAT = 0.01; // |rx|,|ry| below this = horizontal plane (keep as a cheap AABB slab)
+
+interface Tri { ax: number; ay: number; az: number; bx: number; by: number; bz: number; cx: number; cy: number; cz: number; }
+
+function buildMap(xml: string): { boxes: Box[]; triangles: Tri[]; obstacles: Box[] } {
     const boxes: Box[] = [];
+    const triangles: Tri[] = [];
+    const obstacles: Box[] = []; // collision-box only (solid walls/structures) — for the "inside collision" check
     const start = xml.indexOf("<collision-geometry>");
     const end = xml.indexOf("</collision-geometry>");
-    if (start < 0 || end < 0) return boxes;
+    if (start < 0 || end < 0) return { boxes, triangles, obstacles };
     const sec = xml.slice(start, end);
 
-    // Planes: horizontal surfaces — top at z, thin slab below.
+    const pushTri = (a: V3, b: V3, c: V3) => triangles.push({
+        ax: round(a.x), ay: round(a.y), az: round(a.z), bx: round(b.x), by: round(b.y), bz: round(b.z), cx: round(c.x), cy: round(c.y), cz: round(c.z),
+    });
+
+    // Planes: horizontal ones are a thin AABB slab (cheap); tilted ones (ramps) become 2 real triangles.
     for (const m of sec.matchAll(/<collision-plane[\s\S]*?<\/collision-plane>/g)) {
         const b = m[0];
         const w = parseFloat((b.match(/<width>([0-9.]+)/) || [])[1] || "0");
         const l = parseFloat((b.match(/<length>([0-9.]+)/) || [])[1] || "0");
         const pos = vec(b, "position");
         const rot = vec(b, "rotation");
-        const aabb = rotatedAabb(pos.x, pos.y, w / 2, l / 2, rot.z);
-        boxes.push({ ...aabb, minZ: round(pos.z - PLANE_THICKNESS), maxZ: round(pos.z) });
+        if (Math.abs(rot.x) < FLAT && Math.abs(rot.y) < FLAT) {
+            const aabb = rotatedAabb(pos.x, pos.y, w / 2, l / 2, rot.z);
+            boxes.push({ ...aabb, minZ: round(pos.z - PLANE_THICKNESS), maxZ: round(pos.z) });
+        } else {
+            const hw = w / 2, hl = l / 2;
+            const c0 = world(rot, pos, { x: -hw, y: -hl, z: 0 });
+            const c1 = world(rot, pos, { x: hw, y: -hl, z: 0 });
+            const c2 = world(rot, pos, { x: hw, y: hl, z: 0 });
+            const c3 = world(rot, pos, { x: -hw, y: hl, z: 0 });
+            pushTri(c0, c1, c2); pushTri(c0, c2, c3);
+        }
     }
 
     // Boxes: 3D obstacles (walls, structures) — full z range, position is the centre.
@@ -138,23 +173,19 @@ function buildMap(xml: string): Box[] {
         const pos = vec(b, "position");
         const rot = vec(b, "rotation");
         const aabb = rotatedAabb(pos.x, pos.y, size.x / 2, size.y / 2, rot.z);
-        boxes.push({ ...aabb, minZ: round(pos.z - size.z / 2), maxZ: round(pos.z + size.z / 2) });
+        const box = { ...aabb, minZ: round(pos.z - size.z / 2), maxZ: round(pos.z + size.z / 2) };
+        boxes.push(box);
+        obstacles.push(box);
     }
 
-    // Triangles (slopes): approximate as a thin slab at the highest local vertex + position.z.
+    // Triangles (slopes): the real tilted surface (3 rotated + translated vertices).
     for (const m of sec.matchAll(/<collision-triangle[\s\S]*?<\/collision-triangle>/g)) {
         const b = m[0];
-        const v0 = vec(b, "v0"), v1 = vec(b, "v1"), v2 = vec(b, "v2"), pos = vec(b, "position");
-        const xs = [v0.x, v1.x, v2.x], ys = [v0.y, v1.y, v2.y];
-        const topZ = round(pos.z + Math.max(v0.z, v1.z, v2.z));
-        boxes.push({
-            minX: round(pos.x + Math.min(...xs)), maxX: round(pos.x + Math.max(...xs)),
-            minY: round(pos.y + Math.min(...ys)), maxY: round(pos.y + Math.max(...ys)),
-            minZ: round(topZ - PLANE_THICKNESS), maxZ: topZ,
-        });
+        const pos = vec(b, "position"), rot = vec(b, "rotation");
+        pushTri(world(rot, pos, vec(b, "v0")), world(rot, pos, vec(b, "v1")), world(rot, pos, vec(b, "v2")));
     }
 
-    return boxes;
+    return { boxes, triangles, obstacles };
 }
 
 function findMaps(dir: string, rel: string[] = []): { id: string; xml: string }[] {
@@ -173,22 +204,46 @@ function findMaps(dir: string, rel: string[] = []): { id: string; xml: string }[
 }
 
 // --- build ---
+// One JSON per map (the combined data is ~50MB — far too big to embed as a TS literal; ts-node OOMs
+// compiling it). The loader (mapCollision.ts) reads & caches each map's JSON on demand at runtime.
 const maps = findMaps(MAPS_DIR);
-let mapBody = "// Arquivo gerado automaticamente por scripts/buildMapCollision.ts. Não edite manualmente.\n\n";
-mapBody += "// 3D solid collision boxes per map (from <collision-geometry>). The flag drops onto the\n";
-mapBody += "// highest box top (maxZ) below the tank; pickup is blocked if a box lies between tank and flag.\n";
-mapBody += "export interface ICollisionBox { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number; }\n\n";
-mapBody += "export const mapCollision: { [mapResourceId: string]: ICollisionBox[] } = {\n";
+fs.rmSync(OUT_COLLISION_DIR, { recursive: true, force: true });
+fs.mkdirSync(OUT_COLLISION_DIR, { recursive: true });
+const idToFile = (id: string) => id.replace(/[^a-z0-9]+/gi, "_") + ".json";
 for (const m of maps) {
-    const boxes = buildMap(m.xml);
-    if (boxes.length) {
-        const rows = boxes.map((b) => `        { minX: ${b.minX}, maxX: ${b.maxX}, minY: ${b.minY}, maxY: ${b.maxY}, minZ: ${b.minZ}, maxZ: ${b.maxZ} },`).join("\n");
-        mapBody += `    "${m.id}": [\n${rows}\n    ],\n`;
-    }
-    console.log(`${m.id}: ${boxes.length} collision boxes`);
+    const { boxes, triangles, obstacles } = buildMap(m.xml);
+    if (!boxes.length && !triangles.length) continue;
+    fs.writeFileSync(path.join(OUT_COLLISION_DIR, idToFile(m.id)), JSON.stringify({ boxes, triangles, obstacles }));
+    console.log(`${m.id}: ${boxes.length} boxes, ${triangles.length} triangles, ${obstacles.length} obstacles`);
 }
-mapBody += "};\n";
-fs.writeFileSync(OUT_MAP, mapBody);
+
+const loader = `// Arquivo gerado automaticamente por scripts/buildMapCollision.ts. Não edite manualmente.
+import fs from "fs";
+import path from "path";
+
+export interface ICollisionBox { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number; }
+export interface ICollisionTri { ax: number; ay: number; az: number; bx: number; by: number; bz: number; cx: number; cy: number; cz: number; }
+export interface IMapCollision { boxes: ICollisionBox[]; triangles: ICollisionTri[]; obstacles: ICollisionBox[]; }
+
+// Per-map collision is stored as JSON (collision/<id>.json) and loaded + cached on first use, so only
+// the maps with active battles ever sit in memory (the full set is ~50MB).
+const EMPTY: IMapCollision = { boxes: [], triangles: [], obstacles: [] };
+const cache = new Map<string, IMapCollision>();
+const idToFile = (id: string) => id.replace(/[^a-z0-9]+/gi, "_") + ".json";
+
+export function getMapCollision(mapResourceId: string): IMapCollision {
+    let c = cache.get(mapResourceId);
+    if (c) return c;
+    try {
+        c = JSON.parse(fs.readFileSync(path.join(__dirname, "collision", idToFile(mapResourceId)), "utf8")) as IMapCollision;
+    } catch {
+        c = EMPTY; // no collision data for this map (or not built yet)
+    }
+    cache.set(mapResourceId, c);
+    return c;
+}
+`;
+fs.writeFileSync(OUT_MAP, loader);
 
 let hullBody = "// Arquivo gerado automaticamente por scripts/buildMapCollision.ts. Não edite manualmente.\n\n";
 hullBody += "// halfX/halfY = collision half-extents along the hull model's X (width) / Y (length) axes;\n";

@@ -7,7 +7,7 @@ import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { hullCollision } from "@/types/hullCollision";
-import { mapCollision } from "@/types/mapCollision";
+import { getMapCollision, ICollisionTri } from "@/types/mapCollision";
 import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
@@ -228,13 +228,13 @@ export class BattleService {
      *  flag rests on and the floor under the tank — only touched at the endpoints — don't count;
      *  only a box the line passes THROUGH blocks. Single rule for every kind of collision. */
     private _blockedBetween(mapResourceId: string, tankPos: IVector3, flagPos: IVector3): boolean {
-        const boxes = mapCollision[mapResourceId];
-        if (!boxes) return false;
+        const { boxes, triangles } = getMapCollision(mapResourceId);
+        if (!boxes.length && !triangles.length) return false;
         const dx = flagPos.x - tankPos.x, dy = flagPos.y - tankPos.y, dz = flagPos.z - tankPos.z;
         const len = Math.hypot(dx, dy, dz);
         const e = len > 0 ? Math.min(0.45, OCCLUSION_TRIM / len) : 0; // trim fraction off each end
-        const o = [tankPos.x + dx * e, tankPos.y + dy * e, tankPos.z + dz * e];
-        const dir = [dx * (1 - 2 * e), dy * (1 - 2 * e), dz * (1 - 2 * e)];
+        const o: [number, number, number] = [tankPos.x + dx * e, tankPos.y + dy * e, tankPos.z + dz * e];
+        const dir: [number, number, number] = [dx * (1 - 2 * e), dy * (1 - 2 * e), dz * (1 - 2 * e)];
         for (const b of boxes) {
             const lo = [b.minX, b.minY, b.minZ], hi = [b.maxX, b.maxY, b.maxZ];
             let tmin = 0, tmax = 1, hit = true;
@@ -250,7 +250,53 @@ export class BattleService {
             }
             if (hit) return true;
         }
+        // Tilted surfaces (ramps) — segment vs triangle (Möller–Trumbore).
+        for (const t of triangles) if (this._segHitsTri(o, dir, t)) return true;
         return false;
+    }
+
+    /** Segment origin+dir (t in [0,1]) vs a 3D triangle. Möller–Trumbore. */
+    private _segHitsTri(o: [number, number, number], dir: [number, number, number], t: ICollisionTri): boolean {
+        const e1 = [t.bx - t.ax, t.by - t.ay, t.bz - t.az];
+        const e2 = [t.cx - t.ax, t.cy - t.ay, t.cz - t.az];
+        const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
+        const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+        if (Math.abs(det) < 1e-9) return false;
+        const inv = 1 / det;
+        const tv = [o[0] - t.ax, o[1] - t.ay, o[2] - t.az];
+        const u = (tv[0] * p[0] + tv[1] * p[1] + tv[2] * p[2]) * inv;
+        if (u < 0 || u > 1) return false;
+        const q = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
+        const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) * inv;
+        if (v < 0 || u + v > 1) return false;
+        const tt = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv;
+        return tt >= 0 && tt <= 1;
+    }
+
+    /** z of the tilted triangle surface at (x,y) if (x,y) is within its XY projection, else null. */
+    private _triZAt(t: ICollisionTri, x: number, y: number): number | null {
+        const d = (t.by - t.cy) * (t.ax - t.cx) + (t.cx - t.bx) * (t.ay - t.cy);
+        if (Math.abs(d) < 1e-9) return null;
+        const a = ((t.by - t.cy) * (x - t.cx) + (t.cx - t.bx) * (y - t.cy)) / d;
+        const b = ((t.cy - t.ay) * (x - t.cx) + (t.ax - t.cx) * (y - t.cy)) / d;
+        const c = 1 - a - b;
+        const eps = -0.001;
+        if (a < eps || b < eps || c < eps) return null;
+        return a * t.az + b * t.bz + c * t.cz;
+    }
+
+    /** The solid obstacle (wall/structure) the point is inside, or null. Used for the anti-clip log
+     *  (a tank should never be inside a wall). Obstacles are shrunk slightly so merely resting against
+     *  one doesn't count. */
+    private _obstacleAt(mapResourceId: string, pos: IVector3): string | null {
+        const { obstacles } = getMapCollision(mapResourceId);
+        const M = 30; // shrink margin
+        for (const b of obstacles) {
+            if (pos.x > b.minX + M && pos.x < b.maxX - M && pos.y > b.minY + M && pos.y < b.maxY - M && pos.z > b.minZ + M && pos.z < b.maxZ - M) {
+                return `[${b.minX},${b.minY},${b.minZ}]..[${b.maxX},${b.maxY},${b.maxZ}]`;
+            }
+        }
+        return null;
     }
 
     /** Tank close enough to pick up / interact with a flag: the flag falls inside the tank's REAL
@@ -280,6 +326,15 @@ export class BattleService {
     public async checkPlayerPosition(client: GameClient): Promise<void> {
         const { user, currentBattle, battlePosition } = client;
         if (!user || !currentBattle || !battlePosition) return;
+
+        // Anti-clip: a tank inside a solid wall/structure shouldn't happen — log on enter/leave (debug
+        // + a hook for wall-hack / building-clip detection). Logged on state change to avoid spam.
+        const obstacle = this._obstacleAt(currentBattle.mapResourceId, battlePosition);
+        if (obstacle !== client.insideObstacle) {
+            if (obstacle) logger.warn(`[collision] ${user.username} is INSIDE collision ${obstacle} at (${battlePosition.x | 0},${battlePosition.y | 0},${battlePosition.z | 0})`);
+            else logger.info(`[collision] ${user.username} left collision at (${battlePosition.x | 0},${battlePosition.y | 0},${battlePosition.z | 0})`);
+            client.insideObstacle = obstacle;
+        }
 
         if (currentBattle.settings.battleMode === BattleMode.CTF) {
             if (client.battleState !== "active") return;
@@ -647,13 +702,17 @@ export class BattleService {
     /** Highest floor surface z at (x,y) that is at/below `fromZ` (the ground under the tank), or
      *  null if there's no floor there — i.e. over the void. Used to drop flags onto the ground. */
     private raycastGroundZ(mapResourceId: string, x: number, y: number, fromZ: number): number | null {
-        const boxes = mapCollision[mapResourceId];
-        if (!boxes) return null;
+        const { boxes, triangles } = getMapCollision(mapResourceId);
         let best: number | null = null;
         const ceiling = fromZ + 1; // tiny slack: the tank rests ~89 above its floor, so the top <= fromZ
         for (const b of boxes) {
             if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || b.maxZ > ceiling) continue;
             if (best === null || b.maxZ > best) best = b.maxZ;
+        }
+        // Tilted surfaces (ramps): interpolate the real z on the triangle at (x,y).
+        for (const t of triangles) {
+            const z = this._triZAt(t, x, y);
+            if (z !== null && z <= ceiling && (best === null || z > best)) best = z;
         }
         return best;
     }

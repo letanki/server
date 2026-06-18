@@ -82,6 +82,8 @@ export class GameClient {
   public battleIncarnation: number = 1;
   public battlePosition: IVector3 | null = null;
   public battleOrientation: IVector3 | null = null;
+  // Last solid obstacle the tank was inside (anti-clip log state), or null when in the clear.
+  public insideObstacle: string | null = null;
   public turretAngle: number = 0;
   public turretControl: number = 0;
   // Monotonic spec sequence sent in TankSpecificationPacket so the client applies the latest
