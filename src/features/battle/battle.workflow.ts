@@ -497,11 +497,10 @@ export class BattleWorkflow {
                 logger.info(`All established players loaded resources for ${user.username}. Spawning tank.`);
             }
             const joiningUserTankJson = this.getTankModelDataJson(client, battle);
-            const joiningUserTankPacket = new BattlePackets.TankModelDataPacket(joiningUserTankJson);
-            const allCurrentPlayersInBattle = server.getClients().filter((c) => c.currentBattle?.battleId === battle.battleId);
-            for (const playerClient of allCurrentPlayersInBattle) {
-                playerClient.sendPacket(joiningUserTankPacket);
-            }
+            // Broadcast only to established clients: a client still loading hasn't registered this
+            // player in its stats model yet, and InitTank does statsModel.get(tankId).nickname →
+            // #1009 on null. Such clients pick this tank up in their own entry snapshot instead.
+            battle.broadcast(new BattlePackets.TankModelDataPacket(joiningUserTankJson));
         };
 
         const spawnTimeout = setTimeout(() => triggerSpawn(true), 10000);

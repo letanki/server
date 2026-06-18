@@ -34,16 +34,9 @@ export class BattleService {
     }
 
     private broadcastToBattle(battle: Battle, packet: IPacket): void {
-        // Serialize the packet body once; sendRaw re-encrypts per connection.
-        const raw = packet.write();
-        const id = packet.getId();
-        const allParticipants = battle.getAllParticipants();
-        allParticipants.forEach((participant) => {
-            const pClient = this.server.findClientByUsername(participant.username);
-            if (pClient && pClient.currentBattle?.battleId === battle.battleId) {
-                pClient.sendRaw(raw, id);
-            }
-        });
+        // Serialize once and skip clients still loading (they'd deref null on a packet that
+        // references a player/tank they haven't registered yet — #1009).
+        battle.broadcast(packet);
     }
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
@@ -301,7 +294,6 @@ export class BattleService {
 
     public announceTankRemoval(user: UserDocument, battle: Battle, lastPosition: IVector3 | null): void {
         this.dropFlag(user, battle, lastPosition);
-        const remainingParticipants = battle.getAllParticipants().filter((p) => p.id !== user.id);
 
         // Notify remaining players that this user left the battle (shown in the stats list),
         // then remove their tank object. Team modes (TDM/CTF/CP) use a different "left"
@@ -311,12 +303,10 @@ export class BattleService {
             : new UserDisconnectedDmPacket(user.username);
         const removeTankPacket = new RemoveTankPacket(user.username);
 
-        remainingParticipants.forEach((participant) => {
-            const client = this.server.findClientByUsername(participant.username);
-            if (!client) return;
-            client.sendPacket(disconnectPacket);
-            client.sendPacket(removeTankPacket);
-        });
+        // Established clients only: a still-loading client never received this tank, and its
+        // entry snapshot already excludes the departed player.
+        battle.broadcast(disconnectPacket, user.id);
+        battle.broadcast(removeTankPacket, user.id);
     }
 
     public async finalizeBattleExit(user: UserDocument, battle: Battle, friendsToNotify?: string[], isSpectator: boolean = false): Promise<void> {

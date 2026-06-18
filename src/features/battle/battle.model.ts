@@ -1,4 +1,5 @@
 import { IDependency } from "@/features/loader/loader.types";
+import type { IPacket } from "@/packets/packet.interfaces";
 import type { GameClient } from "@/server/game.client";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
@@ -126,9 +127,25 @@ export class Battle {
      * Each recipient re-encrypts the shared `raw` for its own cipher stream. No per-recipient
      * lookups or allocations — this is the hot path for movement/turret relay.
      */
+    /**
+     * Serializes a packet once and broadcasts it to every established connection in the battle.
+     * Same audience rules as broadcastRaw (skips destroyed sockets and clients still joining) —
+     * use this for any per-player gameplay packet (spawn, activate, tank model, flags, removal).
+     * A still-loading client must not receive these: it hasn't registered the referenced player
+     * yet, so the client derefs null (#1009). It gets the consistent state in its entry snapshot.
+     */
+    public broadcast(packet: IPacket, exceptUserId?: string): void {
+        this.broadcastRaw(packet.write(), packet.getId(), exceptUserId);
+    }
+
     public broadcastRaw(raw: Buffer, packetId: number, exceptUserId?: string): void {
         for (const client of this.clients) {
             if (client.isDestroyed) continue;
+            // Clients still loading the battle haven't received every tank object yet. A live
+            // movement delta for a tank they don't know about makes their client deref null
+            // (#1009). They get the full snapshot during their entry handshake, so just skip
+            // them until they're established.
+            if (client.isJoiningBattle) continue;
             if (exceptUserId && client.user?.id === exceptUserId) continue;
             client.sendRaw(raw, packetId);
         }

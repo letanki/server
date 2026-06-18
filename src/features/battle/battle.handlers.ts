@@ -5,6 +5,7 @@ import { AddUserToBattleDmPacket, NotifyFriendOfBattlePacket, ReservePlayerSlotD
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
+import { IPacket } from "@/packets/packet.interfaces";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { UserDocument } from "@/shared/models/user.model";
 import { ItemUtils } from "@/utils/item.utils";
@@ -213,15 +214,7 @@ export class ReadyToActivateHandler implements IPacketHandler<BattlePackets.Read
         client.battleState = "active";
 
         const battle = client.currentBattle;
-        const activationPacket = new BattlePackets.ActivateTankPacket(client.user.username);
-
-        const allPlayers = battle.getAllParticipants();
-        for (const player of allPlayers) {
-            const playerClient = server.findClientByUsername(player.username);
-            if (playerClient && playerClient.currentBattle?.battleId === battle.battleId) {
-                playerClient.sendPacket(activationPacket);
-            }
-        }
+        battle.broadcast(new BattlePackets.ActivateTankPacket(client.user.username));
     }
 }
 
@@ -239,14 +232,8 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             const battle = client.currentBattle;
             const user = client.user;
 
-            const broadcastToBattle = (packetToBroadcast: any) => {
-                const allParticipants = battle.getAllParticipants();
-                allParticipants.forEach((participant: UserDocument) => {
-                    const participantClient = server.findClientByUsername(participant.username);
-                    if (participantClient && participantClient.currentBattle?.battleId === battle.battleId) {
-                        participantClient.sendPacket(packetToBroadcast);
-                    }
-                });
+            const broadcastToBattle = (packetToBroadcast: IPacket) => {
+                battle.broadcast(packetToBroadcast);
             };
 
             if (client.pendingEquipmentRespawn) {
@@ -317,14 +304,7 @@ export class ReadyToSpawnHandler implements IPacketHandler<BattlePackets.ReadyTo
 
         const specs = ItemUtils.getTankSpecifications(client.user);
         const specPacket = new BattlePackets.TankSpecificationPacket({ ...specs, nickname: client.user.username, isPro: false });
-
-        const allParticipants = battle.getAllParticipants();
-        for (const participant of allParticipants) {
-            const participantClient = server.findClientByUsername(participant.username);
-            if (participantClient && participantClient.currentBattle?.battleId === battle.battleId) {
-                participantClient.sendPacket(specPacket);
-            }
-        }
+        battle.broadcast(specPacket);
 
         let teamType: "DM" | "BLUE" | "RED" = "DM";
         if (battle.isTeamMode()) {
