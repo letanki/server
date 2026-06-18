@@ -6,6 +6,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
+import { hullCollision } from "@/types/hullCollision";
 import { mapCollision } from "@/types/mapCollision";
 import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
@@ -15,6 +16,22 @@ import { Battle, BattleMode } from "./battle.model";
 import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
+// Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
+// models — mammoth's box is bigger than wasp's) oriented by the tank, plus an occlusion check so a
+// flag can't be grabbed through a wall or from another pavement.
+const FLAG_PICKUP_MARGIN = 100; // slack beyond the hull edge — flag has its own footprint
+// Vertical reach, asymmetric: the flag can be well BELOW the tank (you ramp/jump over it and still
+// touch it), only a little ABOVE. Cross-level grabs are stopped by occlusion, not by a tight bound.
+const FLAG_PICKUP_DOWN = 300;
+const FLAG_PICKUP_UP = 160;
+// When checking if collision is BETWEEN tank and flag, trim this much off each end of the line so
+// the surface the flag rests on (and the floor under the tank) — touched only at the endpoints —
+// don't count as "in between". Only collision genuinely between the two blocks the pickup.
+const OCCLUSION_TRIM = 40;
+// Tweak if testing shows the box is rotated 90° (depends on the tank yaw convention vs the model's
+// forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
+const HULL_YAW_OFFSET = 0;
+const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
 const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
 const KILL_XP = 10; // rank experience per kill (tune later)
 
@@ -206,6 +223,60 @@ export class BattleService {
         this._resetFlagState(battle, capturedFlagTeam);
     }
 
+    /** Is there ANY collision (floor, wall, structure, anything solid) genuinely BETWEEN the tank
+     *  and the flag? The straight line is trimmed at both ends (OCCLUSION_TRIM) so the surface the
+     *  flag rests on and the floor under the tank — only touched at the endpoints — don't count;
+     *  only a box the line passes THROUGH blocks. Single rule for every kind of collision. */
+    private _blockedBetween(mapResourceId: string, tankPos: IVector3, flagPos: IVector3): boolean {
+        const boxes = mapCollision[mapResourceId];
+        if (!boxes) return false;
+        const dx = flagPos.x - tankPos.x, dy = flagPos.y - tankPos.y, dz = flagPos.z - tankPos.z;
+        const len = Math.hypot(dx, dy, dz);
+        const e = len > 0 ? Math.min(0.45, OCCLUSION_TRIM / len) : 0; // trim fraction off each end
+        const o = [tankPos.x + dx * e, tankPos.y + dy * e, tankPos.z + dz * e];
+        const dir = [dx * (1 - 2 * e), dy * (1 - 2 * e), dz * (1 - 2 * e)];
+        for (const b of boxes) {
+            const lo = [b.minX, b.minY, b.minZ], hi = [b.maxX, b.maxY, b.maxZ];
+            let tmin = 0, tmax = 1, hit = true;
+            for (let a = 0; a < 3; a++) {
+                if (Math.abs(dir[a]) < 1e-6) {
+                    if (o[a] < lo[a] || o[a] > hi[a]) { hit = false; break; }
+                } else {
+                    let t1 = (lo[a] - o[a]) / dir[a], t2 = (hi[a] - o[a]) / dir[a];
+                    if (t1 > t2) [t1, t2] = [t2, t1];
+                    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+                    if (tmin > tmax) { hit = false; break; }
+                }
+            }
+            if (hit) return true;
+        }
+        return false;
+    }
+
+    /** Tank close enough to pick up / interact with a flag: the flag falls inside the tank's REAL
+     *  hull collision box (per-hull, oriented by the tank yaw) plus a small margin, at roughly the
+     *  same height, AND nothing solid is between the tank and the flag. Hull box from the .3ds
+     *  models; collision from the map's <collision-geometry>. */
+    private _nearFlag(client: GameClient, flagPos: IVector3): boolean {
+        const tankPos = client.battlePosition;
+        if (!tankPos || !client.currentBattle) return false;
+        const dx = flagPos.x - tankPos.x;
+        const dy = flagPos.y - tankPos.y;
+
+        // Rotate the flag offset into the hull's local frame (yaw around z) and test the oriented box.
+        const yaw = (client.battleOrientation?.z ?? 0) + HULL_YAW_OFFSET;
+        const cos = Math.cos(yaw), sin = Math.sin(yaw);
+        const localX = dx * cos + dy * sin;   // along hull width  (model X)
+        const localY = -dx * sin + dy * cos;  // along hull length (model Y)
+        const hull = hullCollision[client.user?.equippedHull ?? ""] ?? HULL_FALLBACK;
+        if (Math.abs(localX) >= hull.halfX + FLAG_PICKUP_MARGIN) return false;
+        if (Math.abs(localY) >= hull.halfY + FLAG_PICKUP_MARGIN) return false;
+        const dz = tankPos.z - flagPos.z; // >0 = flag below the tank
+        if (dz > FLAG_PICKUP_DOWN || dz < -FLAG_PICKUP_UP) return false;
+
+        return !this._blockedBetween(client.currentBattle.mapResourceId, tankPos, flagPos);
+    }
+
     public async checkPlayerPosition(client: GameClient): Promise<void> {
         const { user, currentBattle, battlePosition } = client;
         if (!user || !currentBattle || !battlePosition) return;
@@ -213,66 +284,32 @@ export class BattleService {
         if (currentBattle.settings.battleMode === BattleMode.CTF) {
             if (client.battleState !== "active") return;
 
-            const PICKUP_RADIUS_SQ = 500 * 500;
             const isOnRedTeam = currentBattle.usersRed.some((u) => u.id === user.id);
             const isOnBlueTeam = currentBattle.usersBlue.some((u) => u.id === user.id);
 
             if (isOnRedTeam) {
-                if (currentBattle.flagPositionRed && currentBattle.flagBasePositionRed && currentBattle.flagPositionRed.x !== currentBattle.flagBasePositionRed.x) {
-                    const dx = battlePosition.x - currentBattle.flagPositionRed.x;
-                    const dy = battlePosition.y - currentBattle.flagPositionRed.y;
-                    const dz = battlePosition.z - currentBattle.flagPositionRed.z;
-                    if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                        this.returnFlagToBase(currentBattle, "RED", user);
-                    }
+                // Stepping on your own dropped flag returns it; reaching your base with the enemy flag scores.
+                if (currentBattle.flagPositionRed && currentBattle.flagBasePositionRed && currentBattle.flagPositionRed.x !== currentBattle.flagBasePositionRed.x && this._nearFlag(client, currentBattle.flagPositionRed)) {
+                    this.returnFlagToBase(currentBattle, "RED", user);
                 }
-                if (currentBattle.flagCarrierBlue?.id === user.id && currentBattle.flagBasePositionRed) {
-                    const dx = battlePosition.x - currentBattle.flagBasePositionRed.x;
-                    const dy = battlePosition.y - currentBattle.flagBasePositionRed.y;
-                    const dz = battlePosition.z - currentBattle.flagBasePositionRed.z;
-                    if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                        this.captureFlag(user, currentBattle, "BLUE");
-                    }
+                if (currentBattle.flagCarrierBlue?.id === user.id && currentBattle.flagBasePositionRed && this._nearFlag(client, currentBattle.flagBasePositionRed)) {
+                    this.captureFlag(user, currentBattle, "BLUE");
                 }
             } else if (isOnBlueTeam) {
-                if (currentBattle.flagPositionBlue && currentBattle.flagBasePositionBlue && currentBattle.flagPositionBlue.x !== currentBattle.flagBasePositionBlue.x) {
-                    const dx = battlePosition.x - currentBattle.flagPositionBlue.x;
-                    const dy = battlePosition.y - currentBattle.flagPositionBlue.y;
-                    const dz = battlePosition.z - currentBattle.flagPositionBlue.z;
-                    if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                        this.returnFlagToBase(currentBattle, "BLUE", user);
-                    }
+                if (currentBattle.flagPositionBlue && currentBattle.flagBasePositionBlue && currentBattle.flagPositionBlue.x !== currentBattle.flagBasePositionBlue.x && this._nearFlag(client, currentBattle.flagPositionBlue)) {
+                    this.returnFlagToBase(currentBattle, "BLUE", user);
                 }
-                if (currentBattle.flagCarrierRed?.id === user.id && currentBattle.flagBasePositionBlue) {
-                    const dx = battlePosition.x - currentBattle.flagBasePositionBlue.x;
-                    const dy = battlePosition.y - currentBattle.flagBasePositionBlue.y;
-                    const dz = battlePosition.z - currentBattle.flagBasePositionBlue.z;
-                    if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                        this.captureFlag(user, currentBattle, "RED");
-                    }
+                if (currentBattle.flagCarrierRed?.id === user.id && currentBattle.flagBasePositionBlue && this._nearFlag(client, currentBattle.flagBasePositionBlue)) {
+                    this.captureFlag(user, currentBattle, "RED");
                 }
             }
 
-            if (currentBattle.flagPositionRed) {
-                const dx = battlePosition.x - currentBattle.flagPositionRed.x;
-                const dy = battlePosition.y - currentBattle.flagPositionRed.y;
-                const dz = battlePosition.z - currentBattle.flagPositionRed.z;
-                if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                    try {
-                        this.takeFlag(user, currentBattle, "RED");
-                    } catch (e: any) { }
-                }
+            // Touching the enemy flag picks it up.
+            if (currentBattle.flagPositionRed && this._nearFlag(client, currentBattle.flagPositionRed)) {
+                try { this.takeFlag(user, currentBattle, "RED"); } catch (e: any) { }
             }
-
-            if (currentBattle.flagPositionBlue) {
-                const dx = battlePosition.x - currentBattle.flagPositionBlue.x;
-                const dy = battlePosition.y - currentBattle.flagPositionBlue.y;
-                const dz = battlePosition.z - currentBattle.flagPositionBlue.z;
-                if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS_SQ) {
-                    try {
-                        this.takeFlag(user, currentBattle, "BLUE");
-                    } catch (e: any) { }
-                }
+            if (currentBattle.flagPositionBlue && this._nearFlag(client, currentBattle.flagPositionBlue)) {
+                try { this.takeFlag(user, currentBattle, "BLUE"); } catch (e: any) { }
             }
         }
 
@@ -613,10 +650,10 @@ export class BattleService {
         const boxes = mapCollision[mapResourceId];
         if (!boxes) return null;
         let best: number | null = null;
-        const ceiling = fromZ + 1; // tiny slack: the tank rests ~89 above its floor, so topZ <= fromZ
+        const ceiling = fromZ + 1; // tiny slack: the tank rests ~89 above its floor, so the top <= fromZ
         for (const b of boxes) {
-            if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || b.topZ > ceiling) continue;
-            if (best === null || b.topZ > best) best = b.topZ;
+            if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || b.maxZ > ceiling) continue;
+            if (best === null || b.maxZ > best) best = b.maxZ;
         }
         return best;
     }
