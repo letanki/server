@@ -11,9 +11,13 @@ import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
+// A tank's reported z is its pivot (~89 above the ground it stands on). A dropped flag sits on the
+// FLOOR, so subtract this — using the tank's z keeps it on the ground on slopes/hills too (the z
+// tracks the terrain), unlike a fixed z=0 which only works on flat maps.
+const FLAG_GROUND_OFFSET = 89;
 const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
 const KILL_XP = 10; // rank experience per kill (tune later)
 
@@ -102,11 +106,17 @@ export class BattleService {
         // Kill notice (victim, killer, respawn delay) — drives the death on every client.
         this.broadcastToBattle(battle, new KillPacket(victim.username, killer.username, KILL_RESPAWN_MS));
 
+        // If the victim was carrying a flag (CTF), it drops where they died (dropFlag lowers it to
+        // the ground at that spot).
+        if (victimClient.battlePosition) {
+            this.dropFlag(victim, battle, victimClient.battlePosition);
+        }
+
         // Scoreboard: victim +1 death, killer +1 kill and score.
         victimClient.deaths++;
-        this.broadcastToBattle(battle, new UpdateBattleUserDMPacket({ deaths: victimClient.deaths, kills: victimClient.kills, score: victimClient.battleScore, nickname: victim.username }));
+        this._broadcastUserStat(battle, victimClient, victim);
 
-        // No self/team-kill credit (relevant once team mode lands).
+        // No self/team-kill credit.
         if (killer.id !== victim.id) {
             killerClient.kills++;
             killerClient.battleScore += KILL_SCORE;
@@ -114,9 +124,25 @@ export class BattleService {
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
         }
-        this.broadcastToBattle(battle, new UpdateBattleUserDMPacket({ deaths: killerClient.deaths, kills: killerClient.kills, score: killerClient.battleScore, nickname: killer.username }));
+        this._broadcastUserStat(battle, killerClient, killer);
 
         logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
+    }
+
+    private _teamOf(battle: Battle, user: UserDocument): number {
+        if (battle.usersRed.some((u) => u.id === user.id)) return 0;
+        if (battle.usersBlue.some((u) => u.id === user.id)) return 1;
+        return 2;
+    }
+
+    /** Broadcasts a player's kills/deaths/score using the DM or team scoreboard packet for the mode. */
+    private _broadcastUserStat(battle: Battle, client: GameClient, user: UserDocument): void {
+        const data = { deaths: client.deaths, kills: client.kills, score: client.battleScore, nickname: user.username };
+        if (battle.isTeamMode()) {
+            this.broadcastToBattle(battle, new UpdateBattleUserTeamPacket({ ...data, team: this._teamOf(battle, user) }));
+        } else {
+            this.broadcastToBattle(battle, new UpdateBattleUserDMPacket(data));
+        }
     }
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
@@ -589,6 +615,9 @@ export class BattleService {
             logger.warn(`Attempted to drop flag for ${user.username} but no drop position was provided.`);
             return;
         }
+        // Lower the flag from the tank pivot to the ground at this spot (new object — don't mutate
+        // the caller's battlePosition).
+        dropPosition = { x: dropPosition.x, y: dropPosition.y, z: dropPosition.z - FLAG_GROUND_OFFSET };
 
         let droppedTeamId: number | null = null;
         let teamName: string | null = null;
