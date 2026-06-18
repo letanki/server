@@ -412,6 +412,9 @@ export class BattleService {
             client.battleState = "suicide";
             client.battleIncarnation++;
 
+            // Falling into the void destroys the tank — counts as a death on the scoreboard.
+            this.registerSuicideDeath(currentBattle, client);
+
             const destroyPacket = new DestroyTankPacket(user.username, 3000);
 
             const allParticipants = currentBattle.getAllParticipants();
