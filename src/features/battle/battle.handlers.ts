@@ -251,11 +251,6 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             client.battleState = "newcome";
             // A fresh life starts with no supply effects (they don't survive death/respawn).
             client.activeEffects = [];
-            // Mines placed in the previous life are removed when the owner respawns.
-            if (client.placedMineThisLife) {
-                client.placedMineThisLife = false;
-                broadcastToBattle(new BattlePackets.RemoveMinesPacket(user.username));
-            }
             client.currentHealth = ItemUtils.getHullArmor(user);
 
             const clientHealth = 10000;
@@ -607,7 +602,7 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (!supply) return;
 
         // Implemented one at a time.
-        if (supplyId !== "n2o" && supplyId !== "mine") {
+        if (supplyId !== "n2o") {
             logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
             return;
         }
@@ -635,36 +630,17 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
             }, durationMs);
         };
 
-        if (supplyId === "n2o") {
-            // Nitro: cooldown (effectTime+restSec)*1000 = 75000, effect 60000. The boost is real
-            // only because the server resends TankSpecificationPacket with a higher speed.
-            const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
-            const durationMs = supply.itemEffectTime * 1000;
-            const baseSpecs = ItemUtils.getTankSpecifications(user);
-            const sendSpec = (specs: typeof baseSpecs) => battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
+        // Nitro: cooldown (effectTime+restSec)*1000 = 75000, effect 60000. The boost is real
+        // only because the server resends TankSpecificationPacket with a higher speed.
+        const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+        const durationMs = supply.itemEffectTime * 1000;
+        const baseSpecs = ItemUtils.getTankSpecifications(user);
+        const sendSpec = (specs: typeof baseSpecs) => battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
 
-            // Boosted spec FIRST (speed x1.3: 12.0->15.6, acceleration +0.5: 11.33->11.83), then the
-            // activation confirm, then the effect. Revert the base spec when it ends.
-            sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
-            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
-            startEffect(durationMs, () => sendSpec(baseSpecs));
-        } else if (supplyId === "mine") {
-            // Mine: from the log, cooldown 60000 and a 30000ms effect. The mine object is placed at
-            // the tank's EXACT current position (already at ground level — no drop needed) and armed
-            // ~1s later. Detonation/damage will come with the damage system.
-            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, 60000, 1));
-            startEffect(30000);
-
-            const pos = client.battlePosition;
-            if (pos) {
-                const mineId = String(++battle.mineCounter);
-                client.placedMineThisLife = true;
-                battle.broadcast(new BattlePackets.PutMinePacket(mineId, pos, user.username));
-                setTimeout(() => {
-                    if (client.isDestroyed || client.currentBattle !== battle) return;
-                    battle.broadcast(new BattlePackets.ActivateMinePacket(mineId));
-                }, 1000);
-            }
-        }
+        // Boosted spec FIRST (speed x1.3: 12.0->15.6, acceleration +0.5: 11.33->11.83), then the
+        // activation confirm, then the effect. Revert the base spec when it ends.
+        sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
+        client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
+        startEffect(durationMs, () => sendSpec(baseSpecs));
     }
 }

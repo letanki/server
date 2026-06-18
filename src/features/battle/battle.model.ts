@@ -97,8 +97,6 @@ export class Battle {
     public flagLastDroppedByRed: { userId: string; timestamp: number } | null = null;
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
     public domPoints: IDomPointState[] = [];
-    // Per-battle incrementing id for placed mines (sent as a string in PutMine/ActivateMine).
-    public mineCounter: number = 0;
 
     /**
      * Live connections currently in this battle, maintained by GameClient's currentBattle setter

@@ -137,8 +137,6 @@ teste.js
 teste.json
 rename_files.ps1
 resources/Prelauncher-2.swf
-src/types/resourceTypes.ts
-src/types/mapDependencies.ts
 scripts/convertResourcePath.ts
 scripts/garagedown.ts
 scripts/packet-tester.ts
@@ -153,8 +151,7 @@ scripts/sfx_transformed.json
 scripts/visualizador.html
 scripts/alpha.jpg
 scripts/image.jpg
-src/types/*
-src/types/resourceTypes.ts
-src/types/mapDependencies.ts
+# Generated at build time (npm run build:resources) — never commit.
+src/types/
 client-decompiled
 *.ndjson
