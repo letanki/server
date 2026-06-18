@@ -6,6 +6,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
+import { mapCollision } from "@/types/mapCollision";
 import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
@@ -14,10 +15,6 @@ import { Battle, BattleMode } from "./battle.model";
 import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
-// A tank's reported z is its pivot (~89 above the ground it stands on). A dropped flag sits on the
-// FLOOR, so subtract this — using the tank's z keeps it on the ground on slopes/hills too (the z
-// tracks the terrain), unlike a fixed z=0 which only works on flat maps.
-const FLAG_GROUND_OFFSET = 89;
 const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
 const KILL_XP = 10; // rank experience per kill (tune later)
 
@@ -610,46 +607,58 @@ export class BattleService {
         this.broadcastToBattle(battle, takeFlagPacket);
     }
 
+    /** Highest floor surface z at (x,y) that is at/below `fromZ` (the ground under the tank), or
+     *  null if there's no floor there — i.e. over the void. Used to drop flags onto the ground. */
+    private raycastGroundZ(mapResourceId: string, x: number, y: number, fromZ: number): number | null {
+        const boxes = mapCollision[mapResourceId];
+        if (!boxes) return null;
+        let best: number | null = null;
+        const ceiling = fromZ + 1; // tiny slack: the tank rests ~89 above its floor, so topZ <= fromZ
+        for (const b of boxes) {
+            if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || b.topZ > ceiling) continue;
+            if (best === null || b.topZ > best) best = b.topZ;
+        }
+        return best;
+    }
+
     public dropFlag(user: UserDocument, battle: Battle, dropPosition: IVector3 | null): void {
         if (!dropPosition) {
             logger.warn(`Attempted to drop flag for ${user.username} but no drop position was provided.`);
             return;
         }
-        // Lower the flag from the tank pivot to the ground at this spot (new object — don't mutate
-        // the caller's battlePosition).
-        dropPosition = { x: dropPosition.x, y: dropPosition.y, z: dropPosition.z - FLAG_GROUND_OFFSET };
 
-        let droppedTeamId: number | null = null;
-        let teamName: string | null = null;
+        // Which flag (if any) is this user carrying?
+        const teamName: "RED" | "BLUE" | null = battle.flagCarrierRed?.id === user.id ? "RED" : battle.flagCarrierBlue?.id === user.id ? "BLUE" : null;
+        if (!teamName) return;
 
-        if (battle.flagCarrierRed?.id === user.id) {
+        // Raycast straight down to the floor under the tank (handles ramps/jumps — the flag lands on
+        // the ground below, not in the air). No floor = over the void → the flag returns to base.
+        const groundZ = this.raycastGroundZ(battle.mapResourceId, dropPosition.x, dropPosition.y, dropPosition.z);
+        if (groundZ === null) {
+            logger.info(`${user.username} dropped the ${teamName} flag over the void; returning it to base.`);
+            if (teamName === "RED") battle.flagCarrierRed = null;
+            else battle.flagCarrierBlue = null;
+            this.returnFlagToBase(battle, teamName);
+            return;
+        }
+
+        const groundPos: IVector3 = { x: dropPosition.x, y: dropPosition.y, z: groundZ };
+        const droppedTeamId = teamName === "RED" ? 0 : 1;
+        if (teamName === "RED") {
             battle.flagCarrierRed = null;
-            battle.flagPositionRed = dropPosition;
+            battle.flagPositionRed = groundPos;
             battle.flagLastDroppedByRed = { userId: user.id, timestamp: Date.now() };
-            droppedTeamId = 0;
-            teamName = "RED";
-        } else if (battle.flagCarrierBlue?.id === user.id) {
+        } else {
             battle.flagCarrierBlue = null;
-            battle.flagPositionBlue = dropPosition;
+            battle.flagPositionBlue = groundPos;
             battle.flagLastDroppedByBlue = { userId: user.id, timestamp: Date.now() };
-            droppedTeamId = 1;
-            teamName = "BLUE";
         }
 
-        if (droppedTeamId !== null) {
-            logger.info(`User ${user.username} dropped the ${teamName} flag in battle ${battle.battleId} at ${JSON.stringify(dropPosition)}`);
-            const dropFlagPacket = new DropFlagPacket(dropPosition, droppedTeamId);
-            this.broadcastToBattle(battle, dropFlagPacket);
+        logger.info(`User ${user.username} dropped the ${teamName} flag in battle ${battle.battleId} at ${JSON.stringify(groundPos)}`);
+        this.broadcastToBattle(battle, new DropFlagPacket(groundPos, droppedTeamId));
 
-            const flagTeamTyped = teamName as "RED" | "BLUE";
-            this._clearFlagReturnTimer(battle, flagTeamTyped);
-            const timerProp = flagTeamTyped === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
-
-            battle[timerProp] = setTimeout(() => {
-                this.returnFlagToBase(battle, flagTeamTyped);
-            }, 30000);
-
-            logger.info(`Started 30s auto-return timer for ${teamName} flag in battle ${battle.battleId}`);
-        }
+        this._clearFlagReturnTimer(battle, teamName);
+        const timerProp = teamName === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
+        battle[timerProp] = setTimeout(() => this.returnFlagToBase(battle, teamName), 30000);
     }
 }
