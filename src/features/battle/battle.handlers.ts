@@ -11,7 +11,7 @@ import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { UserDocument } from "@/shared/models/user.model";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
-import { BattleMode } from "./battle.model";
+import { Battle, BattleMode } from "./battle.model";
 import * as BattlePackets from "./battle.packets";
 import { BattleWorkflow } from "./battle.workflow";
 
@@ -251,9 +251,10 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             client.battleState = "newcome";
             // A fresh life starts with no supply effects (they don't survive death/respawn).
             client.activeEffects = [];
-            client.currentHealth = ItemUtils.getHullArmor(user);
 
+            // Health is tracked on the client's normalized 0-10000 scale (full on (re)spawn).
             const clientHealth = 10000;
+            client.currentHealth = clientHealth;
 
             client.sendPacket(new BattlePackets.SetHealthPacket({ nickname: user.username, health: clientHealth }));
 

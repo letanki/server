@@ -1,5 +1,6 @@
 import * as LobbyPackets from "@/features/lobby/lobby.packets";
 import { LobbyService } from "@/features/lobby/lobby.service";
+import * as ProfilePackets from "@/features/profile/profile.packets";
 import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -7,9 +8,14 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
+import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+
+const KILL_RESPAWN_MS = 3000;
+const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
+const KILL_XP = 10; // rank experience per kill (tune later)
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -37,6 +43,55 @@ export class BattleService {
         // Serialize once and skip clients still loading (they'd deref null on a packet that
         // references a player/tank they haven't registered yet — #1009).
         battle.broadcast(packet);
+    }
+
+    /**
+     * Applies `realDamage` (garage HP units) from a weapon hit to a target. Health is tracked on
+     * the client's normalized 0-10000 scale, so we convert by RULE OF 3 against the target's hull
+     * HP: normalizedDamage = realDamage * 10000 / hullHP. Broadcasts SetHealth + the damage number,
+     * and runs the kill flow when health drops to 0. Shared by all weapons (railgun, thunder, ...).
+     */
+    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
+        const targetUser = targetClient.user;
+        if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
+
+        const hullHP = ItemUtils.getHullArmor(targetUser);
+        targetClient.currentHealth -= (realDamage * 10000) / hullHP;
+
+        this.broadcastToBattle(battle, new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }));
+        this.broadcastToBattle(battle, new DamageIndicatorPacket(targetUser.username, Math.round(realDamage), 2));
+        logger.info(`${shooterClient.user?.username} hit ${targetUser.username}: ${Math.round(realDamage)} dmg (hull ${hullHP}hp) -> ${Math.round(targetClient.currentHealth)}/10000`);
+
+        if (targetClient.currentHealth <= 0) {
+            await this._handleKill(battle, shooterClient, targetClient);
+        }
+    }
+
+    private async _handleKill(battle: Battle, killerClient: GameClient, victimClient: GameClient): Promise<void> {
+        const killer = killerClient.user;
+        const victim = victimClient.user;
+        if (!killer || !victim) return;
+
+        victimClient.battleState = "suicide";
+
+        // Kill notice (victim, killer, respawn delay) — drives the death on every client.
+        this.broadcastToBattle(battle, new KillPacket(victim.username, killer.username, KILL_RESPAWN_MS));
+
+        // Scoreboard: victim +1 death, killer +1 kill and score.
+        victimClient.deaths++;
+        this.broadcastToBattle(battle, new UpdateBattleUserDMPacket({ deaths: victimClient.deaths, kills: victimClient.kills, score: victimClient.battleScore, nickname: victim.username }));
+
+        // No self/team-kill credit (relevant once team mode lands).
+        if (killer.id !== victim.id) {
+            killerClient.kills++;
+            killerClient.battleScore += KILL_SCORE;
+            killer.experience += KILL_XP;
+            await killer.save();
+            killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
+        }
+        this.broadcastToBattle(battle, new UpdateBattleUserDMPacket({ deaths: killerClient.deaths, kills: killerClient.kills, score: killerClient.battleScore, nickname: killer.username }));
+
+        logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
     }
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {

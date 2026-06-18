@@ -78,6 +78,35 @@ export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.
     static getId(): number { return -173682854; }
 }
 
+// S->C (broadcast): floating damage number on a tank. count is always 1 here; type 2 = normal hit.
+export class DamageIndicatorPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "count", type: "i32" },
+        { name: "damage", type: "f32" },
+        { name: "damageType", type: "i32" },
+        { name: "target", type: "string" },
+    ];
+    count: number; damage: number; damageType: number; target: string | null;
+    constructor(target: string | null = null, damage: number = 0, damageType: number = 2) { super(); this.count = 1; this.damage = damage; this.damageType = damageType; this.target = target; }
+    read(buffer: Buffer): void { readSchema(this, DamageIndicatorPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, DamageIndicatorPacket.schema); }
+    static getId(): number { return -1165230470; }
+}
+
+// S->C (broadcast): a tank was killed — victim, killer, and respawn delay (ms).
+export class KillPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "victim", type: "string" },
+        { name: "killer", type: "string" },
+        { name: "respawnDelayMs", type: "i32" },
+    ];
+    victim: string | null; killer: string | null; respawnDelayMs: number;
+    constructor(victim: string | null = null, killer: string | null = null, respawnDelayMs: number = 3000) { super(); this.victim = victim; this.killer = killer; this.respawnDelayMs = respawnDelayMs; }
+    read(buffer: Buffer): void { readSchema(this, KillPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, KillPacket.schema); }
+    static getId(): number { return -42520728; }
+}
+
 export class DestroyTankPacket extends BasePacket implements BattleTypes.IDestroyTankPacket {
     static readonly schema: PacketSchema = [
         { name: "nickname", type: "string" },

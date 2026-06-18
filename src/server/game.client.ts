@@ -60,8 +60,11 @@ export class GameClient {
     this._currentBattle?.clients.delete(this);
     this._currentBattle = battle;
     battle?.clients.add(this);
-    // Effects don't carry across battles.
+    // Effects and scoreboard don't carry across battles.
     this.activeEffects = [];
+    this.kills = 0;
+    this.deaths = 0;
+    this.battleScore = 0;
   }
 
   public isInFlowMode: boolean = false;
@@ -87,6 +90,12 @@ export class GameClient {
   // Supply effects currently active on this tank, replayed to players who join mid-effect via
   // InitEffects (itemIndex = supply slotId, durationTime = original effect ms).
   public activeEffects: { itemIndex: number; durationTime: number; endAt: number }[] = [];
+  // Combat/scoring state. Health is the client's normalized 0-10000 scale (10000 = full); it goes
+  // negative on a killing blow (overkill). kills/deaths/battleScore are the in-battle scoreboard.
+  public kills: number = 0;
+  public deaths: number = 0;
+  public battleScore: number = 0;
+  public railgunChargeStart: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
