@@ -27,11 +27,14 @@ export class BattleService {
     }
 
     private broadcastToBattle(battle: Battle, packet: IPacket): void {
+        // Serialize the packet body once; sendRaw re-encrypts per connection.
+        const raw = packet.write();
+        const id = packet.getId();
         const allParticipants = battle.getAllParticipants();
         allParticipants.forEach((participant) => {
             const pClient = this.server.findClientByUsername(participant.username);
             if (pClient && pClient.currentBattle?.battleId === battle.battleId) {
-                pClient.sendPacket(packet);
+                pClient.sendRaw(raw, id);
             }
         });
     }

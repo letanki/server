@@ -47,6 +47,7 @@ export class LobbyWorkflow {
 
     public static async postAuthenticationFlow(client: GameClient, server: GameServer): Promise<boolean> {
         const user = client.user!;
+        server.indexAuthenticatedClient(client);
 
         if (user.isPunished && user.punishmentExpiresAt && user.punishmentExpiresAt > new Date()) {
             const now = new Date();

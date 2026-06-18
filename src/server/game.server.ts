@@ -159,6 +159,11 @@ export class GameServer {
     this.clientManager.removeClient(client);
   }
 
+  /** Index an authenticated client for O(1) username lookups. Call after client.user is set. */
+  public indexAuthenticatedClient(client: GameClient): void {
+    this.clientManager.indexUsername(client);
+  }
+
   private handleConnection(socket: net.Socket): void {
     if (this.clientManager.getClientCount() >= this.maxClients) {
       logger.warn(`Connection rejected: server at max capacity`, {

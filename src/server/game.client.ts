@@ -247,6 +247,21 @@ export class GameClient {
     }
   }
 
+  /**
+   * Sends a packet whose body was already serialized once (via packet.write()).
+   * Used for broadcasts: the raw body is built a single time and only the
+   * per-connection encryption/framing is redone here. `encrypt` copies its input,
+   * so the same `rawBuffer` can be safely reused across many clients.
+   */
+  public sendRaw(rawBuffer: Buffer, packetId: number): void {
+    try {
+      const finalBuffer = this.securityService.encrypt(rawBuffer);
+      this.socket.write(this.buildPacketBuffer(packetId, finalBuffer));
+    } catch (error) {
+      logger.error(`Error sending raw packet to ${this.getRemoteAddress()}`, { error });
+    }
+  }
+
   private buildPacketBuffer(packetId: number, data: Buffer): Buffer {
     const packetSize = data.length + GameClient.HEADER_SIZE;
     const packetBuffer = Buffer.alloc(packetSize);

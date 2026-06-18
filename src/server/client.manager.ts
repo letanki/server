@@ -4,6 +4,8 @@ import { GameClient } from "./game.client";
 
 export class ClientManager {
   private clients: GameClient[] = [];
+  // O(1) lookup by (lowercased) username, populated once a client authenticates.
+  private byUsername = new Map<string, GameClient>();
 
   public addClient(client: GameClient): void {
     this.clients.push(client);
@@ -11,6 +13,19 @@ export class ClientManager {
 
   public removeClient(client: GameClient): void {
     this.clients = this.clients.filter((c) => c !== client);
+    const username = client.user?.username.toLowerCase();
+    // Only drop the index entry if it still points to this client (guards against a
+    // reconnect having replaced it).
+    if (username && this.byUsername.get(username) === client) {
+      this.byUsername.delete(username);
+    }
+  }
+
+  /** Registers an authenticated client in the username index (call after client.user is set). */
+  public indexUsername(client: GameClient): void {
+    if (client.user) {
+      this.byUsername.set(client.user.username.toLowerCase(), client);
+    }
   }
 
   public getClients(): GameClient[] {
@@ -26,8 +41,7 @@ export class ClientManager {
   }
 
   public findClientByUsername(username: string): GameClient | undefined {
-    const lowerCaseUsername = username.toLowerCase();
-    return this.clients.find((c) => c.user?.username.toLowerCase() === lowerCaseUsername);
+    return this.byUsername.get(username.toLowerCase());
   }
 
   public sendToLobbyChatListeners(packet: IPacket): void {

@@ -165,6 +165,8 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
             direction: packet.direction,
         });
 
+        const raw = fullMovePacket.write();
+        const id = fullMovePacket.getId();
         const allParticipants = battle.getAllParticipants();
 
         for (const participant of allParticipants) {
@@ -174,7 +176,7 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
 
             const otherClient = server.findClientByUsername(participant.username);
             if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendPacket(fullMovePacket);
+                otherClient.sendRaw(raw, id);
             }
         }
 
@@ -205,6 +207,8 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
             position: packet.position,
         });
 
+        const raw = movePacket.write();
+        const id = movePacket.getId();
         const allParticipants = battle.getAllParticipants();
 
         for (const participant of allParticipants) {
@@ -214,7 +218,7 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
 
             const otherClient = server.findClientByUsername(participant.username);
             if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendPacket(movePacket);
+                otherClient.sendRaw(raw, id);
             }
         }
 
@@ -390,6 +394,8 @@ export class RotateTurretCommandHandler implements IPacketHandler<BattlePackets.
             control: packet.control,
         });
 
+        const raw = turretRotationPacket.write();
+        const id = turretRotationPacket.getId();
         const allParticipants = battle.getAllParticipants();
 
         for (const participant of allParticipants) {
@@ -399,7 +405,7 @@ export class RotateTurretCommandHandler implements IPacketHandler<BattlePackets.
 
             const otherClient = server.findClientByUsername(participant.username);
             if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
-                otherClient.sendPacket(turretRotationPacket);
+                otherClient.sendRaw(raw, id);
             }
         }
     }
