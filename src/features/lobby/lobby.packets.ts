@@ -3,6 +3,7 @@ import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
 import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { ResourceManager } from "@/utils/resource.manager";
 import * as LobbyTypes from "./lobby.types";
 
 export class BattleInfo extends BasePacket implements LobbyTypes.IBattleInfo {
@@ -433,4 +434,32 @@ export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetB
     static getId(): number {
         return 834877801;
     }
+}
+// S->C: initializes the clan module in the lobby (this is what makes the CLAN button appear). It
+// carries the static clan-system config (7 nested Alternativa sub-models). We ASSEMBLE it field by
+// field; the layout matches the official capture (2026-06-18_07-43). The only fields with a
+// confident meaning are the clan creation cost and the trailing RESOURCE (the rankings podium image
+// — 2/silver 1/gold 3/bronze); the rest are module flags and the (empty) clan state. The podium
+// resource is OUR own ("clan/podium"), resolved at runtime — not the official's id.
+// NOTE: the per-user clan tag is a SEPARATE packet (ClanNotifierData, id -117055417).
+export class InitUserClanModelsPacket extends BasePacket {
+    static readonly CREATION_COST = 500000; // crystals to create a clan (0x7A120)
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer {
+        return new BufferWriter()
+            .writeInt8(1).writeInt8(1).writeInt8(1) // module-enabled flags
+            .writeInt32BE(0)
+            .writeInt8(1).writeInt8(1)
+            .writeInt32BE(InitUserClanModelsPacket.CREATION_COST)
+            .writeInt32BE(0)
+            .writeInt8(1)
+            .writeInt8(8)
+            // empty clan state (sub-model vectors / counters — all zero in the base config)
+            .writeInt32BE(0).writeInt32BE(0).writeInt32BE(0)
+            .writeInt32BE(0).writeInt32BE(0).writeInt32BE(0)
+            .writeInt8(0)
+            .writeResource(ResourceManager.getIdlowById("clan/podium")) // rankings podium image
+            .getBuffer();
+    }
+    static getId(): number { return -1338449818; }
 }

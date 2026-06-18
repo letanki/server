@@ -387,6 +387,11 @@ export class AuthWorkflow {
             "sounds/battle/tank_explosion",
         ];
 
+        // Clan rankings podium image, referenced by the post-login InitUserClanModelsPacket. Register
+        // it pre-login so the client knows it before that packet (else the packet parse throws
+        // "Resource not found" and the clan module/button is skipped).
+        resourceIds.push("clan/podium");
+
         const dependencies = {
             resources: ResourceManager.getBulkResources(resourceIds),
         };

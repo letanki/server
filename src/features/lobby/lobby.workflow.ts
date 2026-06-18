@@ -62,6 +62,10 @@ export class LobbyWorkflow {
         }
 
         client.sendPacket(new HideLoginForm());
+        // Clan module must be initialized BEFORE the lobby panel (LobbyData / official "InitPanel",
+        // id 907073245) is built, or the panel renders without the clan button — the official sends
+        // it as the first post-login init. Send it ahead of sendPlayerVitals (which sends LobbyData).
+        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket());
         this.sendPlayerVitals(user, client, server);
         this.sendInitialSettings(client, server);
         this.sendAchievementTips(user, client);
