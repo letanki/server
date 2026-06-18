@@ -143,6 +143,13 @@ export class BattleService {
         logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
     }
 
+    /** A death with no killer (self-destruct, void): +1 death on the scoreboard, no kill credit. */
+    public registerSuicideDeath(battle: Battle, client: GameClient): void {
+        if (!client.user) return;
+        client.deaths++;
+        this._broadcastUserStat(battle, client, client.user);
+    }
+
     private _teamOf(battle: Battle, user: UserDocument): number {
         if (battle.usersRed.some((u) => u.id === user.id)) return 0;
         if (battle.usersBlue.some((u) => u.id === user.id)) return 1;

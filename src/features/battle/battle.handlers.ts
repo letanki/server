@@ -471,6 +471,9 @@ export class SuicidePacketHandler implements IPacketHandler<BattlePackets.Suicid
             logger.info(`Tank for ${user.username} was destroyed by self-destruct.`);
             client.selfDestructIncarnation = null;
 
+            // Self-destruct counts as a death on the scoreboard (no killer).
+            server.battleService.registerSuicideDeath(currentBattle, client);
+
             server.battleService.dropFlag(user, currentBattle, client.battlePosition);
 
             const destroyPacket = new BattlePackets.DestroyTankPacket(user.username, 3000);
