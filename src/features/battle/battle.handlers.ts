@@ -563,3 +563,64 @@ export class DropFlagRequestHandler implements IPacketHandler<BattlePackets.Drop
         }
     }
 }
+
+export class SendBattleInviteHandler implements IPacketHandler<BattlePackets.SendBattleInvitePacket> {
+    public readonly packetId = BattlePackets.SendBattleInvitePacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.SendBattleInvitePacket): Promise<void> {
+        const inviter = client.user;
+        if (!inviter || !packet.targetNickname || !packet.battleId) return;
+
+        const targetClient = server.findClientByUsername(packet.targetNickname);
+        const battle = server.lobbyService.getBattleById(packet.battleId);
+        if (!targetClient || !battle) {
+            logger.warn(`Battle invite from ${inviter.username} to ${packet.targetNickname} could not be delivered (target offline or battle gone).`);
+            return;
+        }
+
+        targetClient.sendPacket(new BattlePackets.ShowBattleInvitePacket({
+            inviterNickname: inviter.username,
+            flag1: battle.settings.privateBattle,
+            flag2: battle.settings.proBattle,
+            battleId: battle.battleId,
+            battleName: battle.settings.name,
+            battleMode: battle.settings.battleMode,
+            flag3: battle.settings.parkourMode,
+            flag4: false,
+        }));
+        logger.info(`${inviter.username} invited ${packet.targetNickname} to battle ${packet.battleId}`);
+    }
+}
+
+export class DeclineBattleInviteHandler implements IPacketHandler<BattlePackets.DeclineBattleInvitePacket> {
+    public readonly packetId = BattlePackets.DeclineBattleInvitePacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.DeclineBattleInvitePacket): Promise<void> {
+        if (!client.user || !packet.inviterNickname) return;
+        const inviterClient = server.findClientByUsername(packet.inviterNickname);
+        if (inviterClient) {
+            inviterClient.sendPacket(new BattlePackets.BattleInviteDeclinedPacket(client.user.username));
+        }
+    }
+}
+
+export class AcceptBattleInviteHandler implements IPacketHandler<BattlePackets.AcceptBattleInvitePacket> {
+    public readonly packetId = BattlePackets.AcceptBattleInvitePacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.AcceptBattleInvitePacket): Promise<void> {
+        if (!client.user || !packet.inviterNickname) return;
+        const inviterClient = server.findClientByUsername(packet.inviterNickname);
+        if (inviterClient) {
+            inviterClient.sendPacket(new BattlePackets.BattleInviteAcceptedPacket(client.user.username));
+        }
+    }
+}
+
+export class RequestBattleEntranceHandler implements IPacketHandler<BattlePackets.RequestBattleEntrancePacket> {
+    public readonly packetId = BattlePackets.RequestBattleEntrancePacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.RequestBattleEntrancePacket): Promise<void> {
+        // Ack the entrance request so the client proceeds to open the battle (RequestBattleByLink).
+        client.sendPacket(new BattlePackets.BattleEntranceAckPacket(packet.battleId));
+    }
+}

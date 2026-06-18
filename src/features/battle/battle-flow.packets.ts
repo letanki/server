@@ -185,6 +185,96 @@ export class UserDisconnectedDmPacket extends BasePacket implements BattleTypes.
     static getId(): number { return -1689876764; }
 }
 
+// ===== Battle invite system =====
+
+// C->S: a player invites another to their battle.
+export class SendBattleInvitePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "targetNickname", type: "string" },
+        { name: "battleId", type: "string" },
+    ];
+    targetNickname: string | null = null;
+    battleId: string | null = null;
+    read(buffer: Buffer): void { readSchema(this, SendBattleInvitePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, SendBattleInvitePacket.schema); }
+    static getId(): number { return -864265623; }
+}
+
+// S->C: the invite popup shown to the invited player.
+export class ShowBattleInvitePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "inviterNickname", type: "string" },
+        { name: "flag1", type: "bool" },
+        { name: "flag2", type: "bool" },
+        { name: "battleId", type: "string" },
+        { name: "battleName", type: "string" },
+        { name: "battleMode", type: "i32" },
+        { name: "flag3", type: "bool" },
+        { name: "flag4", type: "bool" },
+    ];
+    inviterNickname: string | null = null;
+    flag1 = false; flag2 = false;
+    battleId: string | null = null;
+    battleName: string | null = null;
+    battleMode = 0;
+    flag3 = false; flag4 = false;
+    constructor(data?: Partial<ShowBattleInvitePacket>) { super(); if (data) Object.assign(this, data); }
+    read(buffer: Buffer): void { readSchema(this, ShowBattleInvitePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ShowBattleInvitePacket.schema); }
+    static getId(): number { return 810713262; }
+}
+
+// C->S: invited player declines.
+export class DeclineBattleInvitePacket extends BasePacket {
+    inviterNickname: string | null = null;
+    read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
+    static getId(): number { return 1152865919; }
+}
+
+// S->C: tells the inviter their invite was declined (by `targetNickname`).
+export class BattleInviteDeclinedPacket extends BasePacket {
+    targetNickname: string | null;
+    constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
+    read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
+    static getId(): number { return 1015650019; }
+}
+
+// C->S: invited player accepts.
+export class AcceptBattleInvitePacket extends BasePacket {
+    inviterNickname: string | null = null;
+    read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
+    static getId(): number { return 814687528; }
+}
+
+// S->C: tells the inviter their invite was accepted (by `targetNickname`).
+export class BattleInviteAcceptedPacket extends BasePacket {
+    targetNickname: string | null;
+    constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
+    read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
+    static getId(): number { return -1851236532; }
+}
+
+// C->S: invited player asks to enter the battle (handshake before RequestBattleByLink).
+export class RequestBattleEntrancePacket extends BasePacket {
+    battleId: string | null = null;
+    read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
+    static getId(): number { return -983139626; }
+}
+
+// S->C: acks the entrance request so the client proceeds to open the battle.
+export class BattleEntranceAckPacket extends BasePacket {
+    battleId: string | null;
+    constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
+    read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
+    static getId(): number { return 1152930968; }
+}
+
 // Team-battle variant of the "user left battle" notification (removes the player from
 // the existing players' team statistics list / shows "X left"). DM uses -1689876764.
 export class UserDisconnectTeamPacket extends BasePacket {
