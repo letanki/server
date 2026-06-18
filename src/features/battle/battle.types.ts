@@ -202,7 +202,7 @@ export interface ISpawnData { nickname: string | null; team: number; position: I
 export interface ISpawn extends IPacket, ISpawnData { }
 export interface ISuicidePacket extends IEmpty { }
 export interface ITankModelData extends IPacket { jsonData: string | null; }
-export interface ITankSpecificationData { nickname: string | null; speed: number; maxTurnSpeed: number; turretTurnSpeed: number; acceleration: number; isPro: boolean; }
+export interface ITankSpecificationData { nickname: string | null; speed: number; maxTurnSpeed: number; turretTurnSpeed: number; acceleration: number; sequence: number; }
 export interface ITankSpecification extends IPacket, ITankSpecificationData { }
 export interface ITimeChecker extends IPacket { value1: number; value2: number; }
 export interface ITimeCheckerResponse extends IPacket { clientTime: number; serverTime: number; }

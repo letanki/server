@@ -260,10 +260,12 @@ export class TankModelDataPacket extends BasePacket implements BattleTypes.ITank
 }
 
 export class TankSpecificationPacket extends BasePacket implements BattleTypes.ITankSpecification {
-    nickname: string | null = null; speed: number = 0; maxTurnSpeed: number = 0; turretTurnSpeed: number = 0; acceleration: number = 0; isPro: boolean = false;
+    // The trailing int16 is a per-tank spec SEQUENCE (1, 2, 3...), not isPro: the client applies
+    // specs in order so a later (e.g. nitro-boosted) spec supersedes the spawn one.
+    nickname: string | null = null; speed: number = 0; maxTurnSpeed: number = 0; turretTurnSpeed: number = 0; acceleration: number = 0; sequence: number = 0;
     constructor(data?: BattleTypes.ITankSpecificationData) { super(); if (data) Object.assign(this, data); }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.speed = r.readFloatBE(); this.maxTurnSpeed = r.readFloatBE(); this.turretTurnSpeed = r.readFloatBE(); this.acceleration = r.readFloatBE(); this.isPro = r.readInt16BE() === 1; }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeFloatBE(this.speed); w.writeFloatBE(this.maxTurnSpeed); w.writeFloatBE(this.turretTurnSpeed); w.writeFloatBE(this.acceleration); w.writeInt16BE(this.isPro ? 1 : 0); return w.getBuffer(); }
+    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.speed = r.readFloatBE(); this.maxTurnSpeed = r.readFloatBE(); this.turretTurnSpeed = r.readFloatBE(); this.acceleration = r.readFloatBE(); this.sequence = r.readInt16BE(); }
+    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeFloatBE(this.speed); w.writeFloatBE(this.maxTurnSpeed); w.writeFloatBE(this.turretTurnSpeed); w.writeFloatBE(this.acceleration); w.writeInt16BE(this.sequence); return w.getBuffer(); }
     static getId(): number { return -1672577397; }
 }
 

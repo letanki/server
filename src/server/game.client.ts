@@ -79,6 +79,11 @@ export class GameClient {
   public battleOrientation: IVector3 | null = null;
   public turretAngle: number = 0;
   public turretControl: number = 0;
+  // Monotonic spec sequence sent in TankSpecificationPacket so the client applies the latest
+  // (e.g. a nitro-boosted spec supersedes the spawn one). nitroEndsAt marks the current nitro
+  // expiry so a stale revert timer doesn't undo a newer activation.
+  public specSequence: number = 0;
+  public nitroEndsAt: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;

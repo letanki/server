@@ -3,7 +3,7 @@ import logger from "@/utils/logger";
 import { itemBlueprints } from "./garage.data";
 
 export class GarageService {
-    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<void> {
+    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | void> {
         const { baseId, modification: clientRefMod } = this._parseItemId(fullItemId);
         const itemBlueprint = this._findItemBlueprint(baseId);
 
@@ -54,6 +54,35 @@ export class GarageService {
                 user.crystals -= effectivePrice;
                 user.paints.push(baseId);
                 break;
+            }
+            case "inventory": {
+                if (quantity < 1) throw new Error("Quantidade inválida.");
+                if (user.rank < itemBlueprint.rank) throw new Error("Rank insuficiente para comprar este item.");
+
+                const unitPrice = itemBlueprint.price;
+                // The client may send either the unit price or the line total; accept both.
+                if (expectedPrice !== unitPrice && expectedPrice !== unitPrice * quantity) {
+                    throw new Error("O preço do item não confere. Tente novamente.");
+                }
+
+                const totalCost = unitPrice * quantity;
+                if (user.crystals < totalCost) throw new Error("Cristais insuficientes.");
+                user.crystals -= totalCost;
+
+                if (itemBlueprint.instantScore) {
+                    // Consumed instantly: grant experience instead of stacking, and report the new
+                    // total so the handler can refresh the client's score with UpdateScore.
+                    user.experience += itemBlueprint.instantScore * quantity;
+                    await user.save();
+                    logger.info(`User ${user.username} bought ${quantity}x ${baseId} (+${itemBlueprint.instantScore * quantity} XP).`);
+                    return { newExperience: user.experience };
+                }
+
+                const currentCount = user.supplies.get(baseId) ?? 0;
+                user.supplies.set(baseId, currentCount + quantity);
+                await user.save();
+                logger.info(`User ${user.username} bought ${quantity}x supply ${baseId} (now ${currentCount + quantity}).`);
+                return;
             }
             default:
                 throw new Error("Tipo de item desconhecido ou não comprável.");
@@ -153,6 +182,41 @@ export class GarageService {
             }
         });
 
+        const userSupplies: Map<string, number> | undefined = userInventory.supplies;
+        const formatSupply = (supply: any, count?: number) => ({
+            id: supply.id,
+            name: supply.name,
+            description: supply.description,
+            isInventory: true,
+            index: supply.index,
+            next_price: supply.price,
+            next_rank: supply.rank,
+            type: supply.type,
+            baseItemId: supply.idlow,
+            previewResourceId: supply.idlow,
+            rank: supply.rank,
+            category: "inventory",
+            properts: [],
+            discount: { percent: 0, timeLeftInSeconds: -1751196680, timeToStartInSeconds: -1751196680 },
+            grouped: false,
+            isForRent: false,
+            price: supply.price,
+            remainingTimeInSec: -1,
+            ...(count !== undefined ? { count } : {}),
+        });
+
+        (itemBlueprints as any).supplies.forEach((supply: any) => {
+            const count = supply.instantScore ? 0 : userSupplies?.get(supply.id) ?? 0;
+            // Same rule as weapons/paints: owned (count > 0) → depot with a `count`; otherwise it
+            // sits in the market with no count. "1000_scores" is consumed instantly so it never
+            // stacks and always stays in the market.
+            if (count > 0) {
+                garageItems.push(formatSupply(supply, count));
+            } else {
+                shopItems.push(formatSupply(supply));
+            }
+        });
+
         garageItems.sort((a, b) => a.index - b.index);
         shopItems.sort((a, b) => a.index - b.index || a.modificationID - b.modificationID);
 
@@ -178,6 +242,9 @@ export class GarageService {
 
         const paint = itemBlueprints.paints.find((i) => i.id === baseId);
         if (paint) return paint;
+
+        const supply = (itemBlueprints as any).supplies.find((i: any) => i.id === baseId);
+        if (supply) return { ...supply, category: "inventory" };
 
         return undefined;
     }

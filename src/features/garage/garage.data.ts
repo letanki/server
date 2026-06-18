@@ -1,4 +1,18 @@
+import { IDependency } from "@/features/loader/loader.types";
 import { ResourceManager } from "@/utils/resource.manager";
+
+// Resource descriptors for the supply preview icons (idlow 1143-1148). These aren't built from
+// our local .resource folder — the client fetches them from the CDN by id+version, so we just
+// declare the dependency. Values captured from the official early resource load; the client can
+// load these any time before the garage data is shown.
+export const supplyResourceDependencies: IDependency[] = [
+    { idhigh: "0", idlow: 1143, versionhigh: "409", versionlow: 2710316842, lazy: false, type: 10, alpha: true },
+    { idhigh: "0", idlow: 1144, versionhigh: "409", versionlow: 2710316869, lazy: false, type: 10, alpha: true },
+    { idhigh: "0", idlow: 1145, versionhigh: "409", versionlow: 2710316897, lazy: false, type: 10, alpha: true },
+    { idhigh: "0", idlow: 1146, versionhigh: "411", versionlow: 2939456574, lazy: false, type: 10, alpha: true },
+    { idhigh: "0", idlow: 1147, versionhigh: "409", versionlow: 2710316951, lazy: false, type: 10, alpha: true },
+    { idhigh: "0", idlow: 1148, versionhigh: "409", versionlow: 2710316978, lazy: false, type: 10, alpha: true },
+];
 
 export const itemBlueprints = {
     turrets: [
@@ -1672,5 +1686,17 @@ export const itemBlueprints = {
             remainingTimeInSec: -1,
             coloring: () => ResourceManager.getIdlowById("paint/orange/texture"),
         },
+    ],
+    // Supplies (consumables). category "inventory", type 4. previewResourceId/baseItemId are the
+    // client's built-in inventory icon ids (small fixed numbers), not CDN resource idLows. The 5
+    // consumables are owned in quantity (shown in the depot with a `count`); "1000_scores" is
+    // consumed instantly on purchase and grants experience (rank points) instead of stacking.
+    supplies: [
+        { id: "health", name: "Kit de Reparação", description: "Restaura gradualmente a «saúde» do tanque até a cura completa.", index: 7600, type: 4, rank: 3, price: 150, idlow: 1145 },
+        { id: "armor", name: "Blindagem Dupla", description: "Dobra a resistência do tanque por um curto período.", index: 7650, type: 4, rank: 4, price: 50, idlow: 1143 },
+        { id: "double_damage", name: "Destruição Dupla", description: "Dobra o dano causado pelo tanque por um curto período.", index: 7700, type: 4, rank: 4, price: 50, idlow: 1144 },
+        { id: "n2o", name: "Aumento de Velocidade", description: "Aumenta a velocidade e a aceleração do tanque por um curto período.", index: 7750, type: 4, rank: 4, price: 50, idlow: 1147 },
+        { id: "mine", name: "Mina", description: "Coloca uma mina invisível que explode quando um inimigo se aproxima.", index: 7800, type: 4, rank: 5, price: 50, idlow: 1146 },
+        { id: "1000_scores", name: "1000 experiência", description: "Concede 1000 pontos de experiência. É usado automaticamente logo após a compra.", index: 7550, type: 4, rank: 11, price: 2000, idlow: 1148, instantScore: 1000 },
     ],
 };

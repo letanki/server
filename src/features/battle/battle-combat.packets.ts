@@ -12,6 +12,46 @@ export class ActivateTankPacket extends BasePacket {
     static getId(): number { return 1868573511; }
 }
 
+// C->S: the player activated a supply (consumable). Body is just the supply id (e.g. "n2o").
+export class ActivateSupplyCommandPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "itemId", type: "string" }];
+    itemId: string | null = null;
+    read(buffer: Buffer): void { readSchema(this, ActivateSupplyCommandPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ActivateSupplyCommandPacket.schema); }
+    static getId(): number { return -2102525054; }
+}
+
+// S->C (to the activating client): confirms the activation so the client greys out the slot for
+// `cooldownMs` (effectTime + restSec) and decrements the count. `flag` is 1 in every observed case.
+export class ActivatedSupplyPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "itemId", type: "string" },
+        { name: "cooldownMs", type: "i32" },
+        { name: "flag", type: "i8" },
+    ];
+    itemId: string | null; cooldownMs: number; flag: number;
+    constructor(itemId: string | null = null, cooldownMs: number = 0, flag: number = 1) { super(); this.itemId = itemId; this.cooldownMs = cooldownMs; this.flag = flag; }
+    read(buffer: Buffer): void { readSchema(this, ActivatedSupplyPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ActivatedSupplyPacket.schema); }
+    static getId(): number { return 2032104949; }
+}
+
+// S->C (broadcast): a supply effect started on a tank, so every client renders it. `effectType`
+// is the supply slotId (armor=2, double_damage=3, n2o=4, mine=5), `durationMs` is effectTime*1000.
+export class EffectStartedPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "effectType", type: "i32" },
+        { name: "durationMs", type: "i32" },
+        { name: "unknown", type: "i16" },
+    ];
+    nickname: string | null; effectType: number; durationMs: number; unknown: number;
+    constructor(nickname: string | null = null, effectType: number = 0, durationMs: number = 0, unknown: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; this.durationMs = durationMs; this.unknown = unknown; }
+    read(buffer: Buffer): void { readSchema(this, EffectStartedPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, EffectStartedPacket.schema); }
+    static getId(): number { return -1639713644; }
+}
+
 export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.IConfirmDestruction {
     static readonly schema: PacketSchema = [
         { name: "nickname", type: "string" },

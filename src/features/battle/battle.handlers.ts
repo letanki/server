@@ -1,4 +1,5 @@
 import { battleDataObject } from "@/config/battle.data";
+import { suppliesData } from "@/config/supplies.data";
 import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { AddUserToBattleDmPacket, NotifyFriendOfBattlePacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
@@ -303,7 +304,7 @@ export class ReadyToSpawnHandler implements IPacketHandler<BattlePackets.ReadyTo
         const battle = client.currentBattle;
 
         const specs = ItemUtils.getTankSpecifications(client.user);
-        const specPacket = new BattlePackets.TankSpecificationPacket({ ...specs, nickname: client.user.username, isPro: false });
+        const specPacket = new BattlePackets.TankSpecificationPacket({ ...specs, nickname: client.user.username, sequence: ++client.specSequence });
         battle.broadcast(specPacket);
 
         let teamType: "DM" | "BLUE" | "RED" = "DM";
@@ -583,5 +584,61 @@ export class MovementControlCommandHandler implements IPacketHandler<BattlePacke
         // this tank starts/stops correctly (key-release included).
         const controlPacket = new BattlePackets.MovementControlPacket({ nickname: client.user.username, control: packet.control });
         battle.broadcastRaw(controlPacket.write(), controlPacket.getId(), client.user.id);
+    }
+}
+
+export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePackets.ActivateSupplyCommandPacket> {
+    public readonly packetId = BattlePackets.ActivateSupplyCommandPacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.ActivateSupplyCommandPacket): Promise<void> {
+        const user = client.user;
+        const battle = client.currentBattle;
+        if (!user || !battle || !packet.itemId || client.battleState !== "active") return;
+
+        const supplyId = packet.itemId;
+
+        // Supplies are being implemented one at a time. n2o (nitro) boosts movement, which is
+        // client-simulated FROM THE SERVER-SENT SPEC: the boost only happens if the server resends
+        // TankSpecificationPacket with a higher speed. armor/double_damage/mine/health come later.
+        if (supplyId !== "n2o") {
+            logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
+            return;
+        }
+
+        const supply = suppliesData.find((s) => s.id === supplyId);
+        if (!supply) return;
+
+        const count = user.supplies.get(supplyId) ?? 0;
+        if (count <= 0) return;
+
+        user.supplies.set(supplyId, count - 1);
+        await user.save();
+
+        const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+        const durationMs = supply.itemEffectTime * 1000;
+        const baseSpecs = ItemUtils.getTankSpecifications(user);
+
+        const sendSpec = (specs: typeof baseSpecs) => {
+            battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
+        };
+
+        // 1) Boosted spec FIRST — this is what actually makes the tank faster. From the log, nitro
+        //    multiplies speed by 1.3 (12.0 -> 15.6) and adds +0.5 to acceleration (11.33 -> 11.83);
+        //    turn speeds are unchanged. Broadcast so every client (including the activator, who
+        //    simulates his own movement) uses the new spec.
+        sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
+        // 2) Confirm to the activating client (button cooldown + count decrement).
+        client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
+        // 3) Broadcast the visual effect.
+        battle.broadcast(new BattlePackets.EffectStartedPacket(user.username, supply.slotId, durationMs, 0));
+
+        // Revert to the base spec when the effect ends, unless a newer nitro/respawn superseded it.
+        const endAt = Date.now() + durationMs;
+        client.nitroEndsAt = endAt;
+        setTimeout(() => {
+            if (client.isDestroyed || client.nitroEndsAt !== endAt) return;
+            if (client.currentBattle !== battle || client.battleState !== "active") return;
+            sendSpec(baseSpecs);
+        }, durationMs);
     }
 }

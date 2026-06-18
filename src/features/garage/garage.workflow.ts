@@ -9,7 +9,7 @@ import { GameServer } from "@/server/game.server";
 import { ResourceId } from "@/types/resourceTypes";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints } from "./garage.data";
+import { itemBlueprints, supplyResourceDependencies } from "./garage.data";
 import * as GaragePackets from "./garage.packets";
 
 export class GarageWorkflow {
@@ -38,7 +38,9 @@ export class GarageWorkflow {
         const uniqueResourceIds = [...new Set(resourceIds)];
 
         const dependencies = {
-            resources: ResourceManager.getBulkResources(uniqueResourceIds),
+            // Supply preview icons are CDN-only descriptors (no local files), so append them
+            // directly rather than resolving through ResourceManager.
+            resources: [...ResourceManager.getBulkResources(uniqueResourceIds), ...supplyResourceDependencies],
         };
         client.sendPacket(new LoadDependencies(dependencies, CALLBACK.GARAGE_DATA));
 
@@ -164,6 +166,7 @@ export class GarageWorkflow {
             ...Object.fromEntries(client.user.turrets),
             ...Object.fromEntries(client.user.hulls),
             paints: client.user.paints,
+            supplies: client.user.supplies,
         };
 
         const { garageItems, shopItems } = server.garageService.buildGarageData(userInventory);

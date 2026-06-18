@@ -1,5 +1,6 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
+import * as ProfilePackets from "@/features/profile/profile.packets";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
 import * as GaragePackets from "./garage.packets";
@@ -36,7 +37,12 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
         }
 
         try {
-            await server.garageService.purchaseItem(client.user, packet.itemId, packet.quantity, packet.price);
+            const result = await server.garageService.purchaseItem(client.user, packet.itemId, packet.quantity, packet.price);
+            // The "1000_scores" supply is consumed instantly and grants experience; refresh the
+            // client's score counter with the new total.
+            if (result && typeof result.newExperience === "number") {
+                client.sendPacket(new ProfilePackets.UpdateScorePacket(result.newExperience));
+            }
         } catch (error: any) {
             logger.warn(`Failed to purchase item ${packet.itemId} for user ${client.user.username}`, {
                 error: error.message,
