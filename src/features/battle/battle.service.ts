@@ -67,6 +67,31 @@ export class BattleService {
         }
     }
 
+    /**
+     * Area (splash) damage from an explosion at `center` (world position). Every active tank —
+     * INCLUDING the shooter (you can blow yourself up) — within `minRadius` takes damage: full up
+     * to `maxRadius`, then linearly down to `minPercent`% at `minRadius`, nothing beyond. World
+     * distance is scaled by SPLASH_WORLD_SCALE so a direct hit (~150u from center) stays inside
+     * maxRadius and the splash reaches ~nearby tanks — calibrate this if the radius feels off.
+     */
+    public async applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
+        const SPLASH_WORLD_SCALE = 10;
+        for (const targetClient of [...battle.clients]) {
+            if (targetClient.isDestroyed || targetClient.battleState !== "active" || !targetClient.battlePosition) continue;
+            const dx = targetClient.battlePosition.x - center.x;
+            const dy = targetClient.battlePosition.y - center.y;
+            const dz = targetClient.battlePosition.z - center.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) / SPLASH_WORLD_SCALE;
+
+            let factor: number;
+            if (distance <= maxRadius) factor = 1;
+            else if (distance <= minRadius) factor = 1 - (1 - minPercent / 100) * ((distance - maxRadius) / (minRadius - maxRadius));
+            else continue;
+
+            await this.applyDamage(battle, shooterClient, targetClient, baseDamage * factor);
+        }
+    }
+
     private async _handleKill(battle: Battle, killerClient: GameClient, victimClient: GameClient): Promise<void> {
         const killer = killerClient.user;
         const victim = victimClient.user;
