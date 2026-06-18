@@ -65,6 +65,8 @@ export class GameClient {
     this.kills = 0;
     this.deaths = 0;
     this.battleScore = 0;
+    // A pending self-destruct belongs to the incarnation that started it — leaving/joining cancels it.
+    this.selfDestructIncarnation = null;
   }
 
   public isInFlowMode: boolean = false;
@@ -80,6 +82,9 @@ export class GameClient {
   public battleState: "newcome" | "active" | "suicide" = "suicide";
   public pendingResourceAcks: Set<string> = new Set<string>();
   public battleIncarnation: number = 1;
+  // Incarnation that started a still-pending self-destruct countdown, or null. The tank stays fully
+  // active during the countdown; this only guards the delayed destruction (exclusive to that life).
+  public selfDestructIncarnation: number | null = null;
   public battlePosition: IVector3 | null = null;
   public battleOrientation: IVector3 | null = null;
   // Last solid obstacle the tank was inside (anti-clip log state), or null when in the clear.

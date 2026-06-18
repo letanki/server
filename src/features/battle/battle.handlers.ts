@@ -444,33 +444,36 @@ export class SuicidePacketHandler implements IPacketHandler<BattlePackets.Suicid
             return;
         }
 
-        if (client.battleState === "suicide") {
-            logger.warn(`User ${user.username} is already in the process of self-destructing.`);
-            return;
-        }
-
-        logger.info(`User ${user.username} initiated self-destruct sequence in battle ${currentBattle.battleId}.`);
+        // The tank must stay FULLY ACTIVE during the countdown — it can still shoot, take damage,
+        // pick up / capture the flag, and be killed. We do NOT change battleState here; only the
+        // delayed destruction below ends the life. We just remember which incarnation is counting
+        // down (so a second press is a no-op and the destruction is exclusive to this life).
+        if (client.battleState !== "active") return;
+        if (client.selfDestructIncarnation === client.battleIncarnation) return;
 
         const currentIncarnation = client.battleIncarnation;
-        client.battleState = "suicide";
+        client.selfDestructIncarnation = currentIncarnation;
+        logger.info(`User ${user.username} initiated self-destruct sequence in battle ${currentBattle.battleId}.`);
 
         setTimeout(() => {
-            if (client.battleIncarnation !== currentIncarnation) {
-                logger.info(`Self-destruct for ${user.username} aborted, tank was already destroyed.`);
-                return;
-            }
-
-            if (!client.currentBattle) {
-                logger.info(`Self-destruct for ${user.username} aborted, user left the battle.`);
+            // Exclusive to the incarnation that started it: abort if the tank already died/respawned,
+            // the player left/rejoined, or it's no longer active.
+            if (
+                client.selfDestructIncarnation !== currentIncarnation ||
+                client.battleIncarnation !== currentIncarnation ||
+                client.currentBattle !== currentBattle ||
+                client.battleState !== "active"
+            ) {
+                logger.info(`Self-destruct for ${user.username} aborted (died, left, or rejoined).`);
                 return;
             }
 
             logger.info(`Tank for ${user.username} was destroyed by self-destruct.`);
+            client.selfDestructIncarnation = null;
 
             server.battleService.dropFlag(user, currentBattle, client.battlePosition);
 
             const destroyPacket = new BattlePackets.DestroyTankPacket(user.username, 3000);
-
             const allParticipants = currentBattle.getAllParticipants();
             allParticipants.forEach((participant: UserDocument) => {
                 const participantClient = server.findClientByUsername(participant.username);
