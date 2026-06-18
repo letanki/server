@@ -26,7 +26,9 @@ export class LobbyService {
             proBattle: false,
             battleMode: BattleMode.DM,
             mapId: "map_sandbox",
-            maxPeopleCount: 8,
+            // The client's BattlefieldModel holds tanks in a fixed Vector(60); the 61st tank
+            // overflows it with RangeError #1125. Never let a battle exceed MAX_TANKS_PER_BATTLE.
+            maxPeopleCount: 60,
             minRank: 1,
             maxRank: 30,
             timeLimitInSec: 600,

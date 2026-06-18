@@ -537,7 +537,16 @@ export class BattleWorkflow {
                 { ChatModeratorLevel: user.chatModeratorLevel, deaths: 0, kills: 0, rank: user.rank, score: 0, nickname: user.username, team },
             ]);
         } else {
-            const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
+            // The client rebuilds its WHOLE score array from this list, mapping each entry through
+            // its local Dictionary; any entry it hasn't registered yet becomes a null hole → #1009
+            // on the next lookup (e.g. InitTank). So include ONLY users the receiver already knows:
+            // players that finished joining (!isJoiningBattle) plus the joiner being announced here.
+            // This also excludes disconnected ghosts (offline → no client) and players still mid-join
+            // (in battle.users but whose own UserConnect hasn't been sent yet — the 300-bot race).
+            const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter((p) => {
+                const c = server.findClientByUsername(p.username);
+                return c != null && (!c.isJoiningBattle || p.id === user.id);
+            });
             const usersInfoForPacket: IBattleUserInfo[] = allPlayersInBattleForConnectPacket.map((p) => ({
                 ChatModeratorLevel: p.chatModeratorLevel,
                 deaths: 0,

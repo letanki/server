@@ -17,6 +17,13 @@ interface IDisconnectedPlayerInfo {
 }
 
 export class BattleService {
+    /**
+     * Hard ceiling on active tanks per battle. The client's BattlefieldModel stores tanks in a
+     * fixed-length Vector(60); the 61st tank overflows it (RangeError #1125), corrupting the battle
+     * for everyone. We cap below any battle's configured maxPeopleCount so no config can exceed it.
+     */
+    public static readonly MAX_TANKS_PER_BATTLE = 60;
+
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
     private server: GameServer;
     private lobbyService: LobbyService;
@@ -400,7 +407,8 @@ export class BattleService {
         }
 
         const activePlayersCount = battle.users.length + battle.usersBlue.length + battle.usersRed.length;
-        if (activePlayersCount >= settings.maxPeopleCount) {
+        const capacity = Math.min(settings.maxPeopleCount, BattleService.MAX_TANKS_PER_BATTLE);
+        if (activePlayersCount >= capacity) {
             throw new Error("Esta batalha está cheia.");
         }
 
