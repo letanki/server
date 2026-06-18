@@ -251,6 +251,11 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             client.battleState = "newcome";
             // A fresh life starts with no supply effects (they don't survive death/respawn).
             client.activeEffects = [];
+            // Mines placed in the previous life are removed when the owner respawns.
+            if (client.placedMineThisLife) {
+                client.placedMineThisLife = false;
+                broadcastToBattle(new BattlePackets.RemoveMinesPacket(user.username));
+            }
             client.currentHealth = ItemUtils.getHullArmor(user);
 
             const clientHealth = 10000;
@@ -598,59 +603,68 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (!user || !battle || !packet.itemId || client.battleState !== "active") return;
 
         const supplyId = packet.itemId;
+        const supply = suppliesData.find((s) => s.id === supplyId);
+        if (!supply) return;
 
-        // Supplies are being implemented one at a time. n2o (nitro) boosts movement, which is
-        // client-simulated FROM THE SERVER-SENT SPEC: the boost only happens if the server resends
-        // TankSpecificationPacket with a higher speed. armor/double_damage/mine/health come later.
-        if (supplyId !== "n2o") {
+        // Implemented one at a time.
+        if (supplyId !== "n2o" && supplyId !== "mine") {
             logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
             return;
         }
 
-        const supply = suppliesData.find((s) => s.id === supplyId);
-        if (!supply) return;
-
         const count = user.supplies.get(supplyId) ?? 0;
         if (count <= 0) return;
-
         user.supplies.set(supplyId, count - 1);
         await user.save();
 
-        const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
-        const durationMs = supply.itemEffectTime * 1000;
-        const baseSpecs = ItemUtils.getTankSpecifications(user);
-
-        const sendSpec = (specs: typeof baseSpecs) => {
-            battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
+        // Broadcasts EffectStarted, tracks the effect for join-replay (InitEffects), and schedules
+        // EffectStopped at the end. `onEnd` runs at expiry (e.g. nitro reverts its spec there).
+        const startEffect = (durationMs: number, onEnd?: () => void) => {
+            const endAt = Date.now() + durationMs;
+            client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
+            client.activeEffects.push({ itemIndex: supply.slotId, durationTime: durationMs, endAt });
+            battle.broadcast(new BattlePackets.EffectStartedPacket(user.username, supply.slotId, durationMs, 0));
+            setTimeout(() => {
+                if (client.isDestroyed) return;
+                const cur = client.activeEffects.find((e) => e.itemIndex === supply.slotId);
+                if (cur && cur.endAt !== endAt) return; // superseded by a re-activation
+                client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
+                if (client.currentBattle !== battle || client.battleState !== "active") return;
+                battle.broadcast(new BattlePackets.EffectStoppedPacket(user.username, supply.slotId));
+                onEnd?.();
+            }, durationMs);
         };
 
-        // 1) Boosted spec FIRST — this is what actually makes the tank faster. From the log, nitro
-        //    multiplies speed by 1.3 (12.0 -> 15.6) and adds +0.5 to acceleration (11.33 -> 11.83);
-        //    turn speeds are unchanged. Broadcast so every client (including the activator, who
-        //    simulates his own movement) uses the new spec.
-        sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
-        // 2) Confirm to the activating client (button cooldown + count decrement).
-        client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
-        // 3) Broadcast the visual effect.
-        battle.broadcast(new BattlePackets.EffectStartedPacket(user.username, supply.slotId, durationMs, 0));
+        if (supplyId === "n2o") {
+            // Nitro: cooldown (effectTime+restSec)*1000 = 75000, effect 60000. The boost is real
+            // only because the server resends TankSpecificationPacket with a higher speed.
+            const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+            const durationMs = supply.itemEffectTime * 1000;
+            const baseSpecs = ItemUtils.getTankSpecifications(user);
+            const sendSpec = (specs: typeof baseSpecs) => battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
 
-        // Track the active effect so players who join mid-effect get it replayed via InitEffects.
-        const endAt = Date.now() + durationMs;
-        client.nitroEndsAt = endAt;
-        client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
-        client.activeEffects.push({ itemIndex: supply.slotId, durationTime: durationMs, endAt });
+            // Boosted spec FIRST (speed x1.3: 12.0->15.6, acceleration +0.5: 11.33->11.83), then the
+            // activation confirm, then the effect. Revert the base spec when it ends.
+            sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
+            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
+            startEffect(durationMs, () => sendSpec(baseSpecs));
+        } else if (supplyId === "mine") {
+            // Mine: from the log, cooldown 60000 and a 30000ms effect. The mine object is placed at
+            // the tank's EXACT current position (already at ground level — no drop needed) and armed
+            // ~1s later. Detonation/damage will come with the damage system.
+            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, 60000, 1));
+            startEffect(30000);
 
-        // When the effect ends: stop the visual (EffectStopped) then revert the spec — in that
-        // order, matching the official server. Skip if a newer nitro/respawn superseded it.
-        setTimeout(() => {
-            // A newer nitro replaced this one (or the client is gone) — leave it alone.
-            if (client.isDestroyed || client.nitroEndsAt !== endAt) return;
-            // Always drop the tracked effect so it isn't replayed to late joiners.
-            client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
-            // Only stop/revert on the battlefield if the tank is still alive in this battle.
-            if (client.currentBattle !== battle || client.battleState !== "active") return;
-            battle.broadcast(new BattlePackets.EffectStoppedPacket(user.username, supply.slotId));
-            sendSpec(baseSpecs);
-        }, durationMs);
+            const pos = client.battlePosition;
+            if (pos) {
+                const mineId = String(++battle.mineCounter);
+                client.placedMineThisLife = true;
+                battle.broadcast(new BattlePackets.PutMinePacket(mineId, pos, user.username));
+                setTimeout(() => {
+                    if (client.isDestroyed || client.currentBattle !== battle) return;
+                    battle.broadcast(new BattlePackets.ActivateMinePacket(mineId));
+                }, 1000);
+            }
+        }
     }
 }

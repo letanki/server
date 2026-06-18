@@ -52,6 +52,42 @@ export class EffectStartedPacket extends BasePacket {
     static getId(): number { return -1639713644; }
 }
 
+// S->C (broadcast): place a mine object in the world. Position is the owner's EXACT tank position
+// (verified vs log: mine z == grounded tank z, e.g. 89.2 — no ground-drop needed). mineId is a
+// per-battle incrementing counter (as a string).
+export class PutMinePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "mineId", type: "string" },
+        { name: "position", type: "vector3" },
+        { name: "owner", type: "string" },
+    ];
+    mineId: string | null; position: BattleTypes.IVector3 | null; owner: string | null;
+    constructor(mineId: string | null = null, position: BattleTypes.IVector3 | null = null, owner: string | null = null) { super(); this.mineId = mineId; this.position = position; this.owner = owner; }
+    read(buffer: Buffer): void { readSchema(this, PutMinePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, PutMinePacket.schema); }
+    static getId(): number { return 272183855; }
+}
+
+// S->C (broadcast): arm a previously-placed mine (sent ~1s after PutMine).
+export class ActivateMinePacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "mineId", type: "string" }];
+    mineId: string | null;
+    constructor(mineId: string | null = null) { super(); this.mineId = mineId; }
+    read(buffer: Buffer): void { readSchema(this, ActivateMinePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, ActivateMinePacket.schema); }
+    static getId(): number { return -624217047; }
+}
+
+// S->C (broadcast): remove ALL mines owned by the given nickname (e.g. on respawn/leave).
+export class RemoveMinesPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "owner", type: "string" }];
+    owner: string | null;
+    constructor(owner: string | null = null) { super(); this.owner = owner; }
+    read(buffer: Buffer): void { readSchema(this, RemoveMinesPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, RemoveMinesPacket.schema); }
+    static getId(): number { return -1200619383; }
+}
+
 // S->C (broadcast): a supply effect ended on a tank, so every client removes its visual. Sent at
 // the end of the effect duration, right before the spec is reverted (for movement effects).
 export class EffectStoppedPacket extends BasePacket {

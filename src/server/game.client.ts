@@ -82,13 +82,13 @@ export class GameClient {
   public turretAngle: number = 0;
   public turretControl: number = 0;
   // Monotonic spec sequence sent in TankSpecificationPacket so the client applies the latest
-  // (e.g. a nitro-boosted spec supersedes the spawn one). nitroEndsAt marks the current nitro
-  // expiry so a stale revert timer doesn't undo a newer activation.
+  // (e.g. a nitro-boosted spec supersedes the spawn one).
   public specSequence: number = 0;
-  public nitroEndsAt: number = 0;
   // Supply effects currently active on this tank, replayed to players who join mid-effect via
   // InitEffects (itemIndex = supply slotId, durationTime = original effect ms).
   public activeEffects: { itemIndex: number; durationTime: number; endAt: number }[] = [];
+  // True once this tank has placed a mine in its current life, so RemoveMines is broadcast on respawn.
+  public placedMineThisLife: boolean = false;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;

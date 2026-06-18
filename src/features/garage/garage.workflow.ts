@@ -9,7 +9,7 @@ import { GameServer } from "@/server/game.server";
 import { ResourceId } from "@/types/resourceTypes";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints, supplyResourceDependencies } from "./garage.data";
+import { itemBlueprints, supplyPreviewResources } from "./garage.data";
 import * as GaragePackets from "./garage.packets";
 
 export class GarageWorkflow {
@@ -35,12 +35,13 @@ export class GarageWorkflow {
             resourceIds.push(`paint/${paint.id}/preview` as ResourceId);
         });
 
+        // Supply preview icons (served from our own resource server, like every other resource).
+        Object.values(supplyPreviewResources).forEach((resourceId) => resourceIds.push(resourceId));
+
         const uniqueResourceIds = [...new Set(resourceIds)];
 
         const dependencies = {
-            // Supply preview icons are CDN-only descriptors (no local files), so append them
-            // directly rather than resolving through ResourceManager.
-            resources: [...ResourceManager.getBulkResources(uniqueResourceIds), ...supplyResourceDependencies],
+            resources: ResourceManager.getBulkResources(uniqueResourceIds),
         };
         client.sendPacket(new LoadDependencies(dependencies, CALLBACK.GARAGE_DATA));
 

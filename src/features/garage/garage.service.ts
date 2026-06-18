@@ -1,6 +1,7 @@
 import { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
-import { itemBlueprints } from "./garage.data";
+import { ResourceManager } from "@/utils/resource.manager";
+import { itemBlueprints, supplyPreviewResources } from "./garage.data";
 
 export class GarageService {
     public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | void> {
@@ -183,7 +184,9 @@ export class GarageService {
         });
 
         const userSupplies: Map<string, number> | undefined = userInventory.supplies;
-        const formatSupply = (supply: any, count?: number) => ({
+        const formatSupply = (supply: any, count?: number) => {
+            const previewIdLow = ResourceManager.getIdlowById(supplyPreviewResources[supply.id]);
+            return {
             id: supply.id,
             name: supply.name,
             description: supply.description,
@@ -192,8 +195,8 @@ export class GarageService {
             next_price: supply.price,
             next_rank: supply.rank,
             type: supply.type,
-            baseItemId: supply.idlow,
-            previewResourceId: supply.idlow,
+            baseItemId: previewIdLow,
+            previewResourceId: previewIdLow,
             rank: supply.rank,
             category: "inventory",
             properts: [],
@@ -203,7 +206,8 @@ export class GarageService {
             price: supply.price,
             remainingTimeInSec: -1,
             ...(count !== undefined ? { count } : {}),
-        });
+            };
+        };
 
         (itemBlueprints as any).supplies.forEach((supply: any) => {
             const count = supply.instantScore ? 0 : userSupplies?.get(supply.id) ?? 0;
