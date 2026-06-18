@@ -9,7 +9,7 @@ import { mapGeometries } from "@/types/mapGeometries";
 import { mapSpawns } from "@/types/mapSpawns";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket } from "./battle.packets";
+import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -293,19 +293,20 @@ export class BattleService {
         this.dropFlag(user, battle, lastPosition);
         const remainingParticipants = battle.getAllParticipants().filter((p) => p.id !== user.id);
 
+        // Notify remaining players that this user left the battle (shown in the stats list),
+        // then remove their tank object. Team modes (TDM/CTF/CP) use a different "left"
+        // packet id than DM. The official server sends the "left" notice before the removal.
+        const disconnectPacket: IPacket = battle.isTeamMode()
+            ? new UserDisconnectTeamPacket(user.username)
+            : new UserDisconnectedDmPacket(user.username);
         const removeTankPacket = new RemoveTankPacket(user.username);
+
         remainingParticipants.forEach((participant) => {
             const client = this.server.findClientByUsername(participant.username);
-            if (client) client.sendPacket(removeTankPacket);
+            if (!client) return;
+            client.sendPacket(disconnectPacket);
+            client.sendPacket(removeTankPacket);
         });
-
-        if (battle.settings.battleMode === BattleMode.DM) {
-            const disconnectPacket = new UserDisconnectedDmPacket(user.username);
-            remainingParticipants.forEach((participant) => {
-                const client = this.server.findClientByUsername(participant.username);
-                if (client) client.sendPacket(disconnectPacket);
-            });
-        }
     }
 
     public async finalizeBattleExit(user: UserDocument, battle: Battle, friendsToNotify?: string[], isSpectator: boolean = false): Promise<void> {

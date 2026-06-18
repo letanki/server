@@ -1,4 +1,5 @@
 import { getBonusData } from "@/config/bonus.data";
+import { IPacket } from "@/packets/packet.interfaces";
 import { CALLBACK } from "@/config/constants";
 import { mapThemeConfigs } from "@/config/map-themes.data";
 import { weaponPhysicsData } from "@/config/physics.data";
@@ -527,16 +528,26 @@ export class BattleWorkflow {
         const resourcesToLoad: ResourceId[] = [`turret/${turretId}/m${turretMod}/model` as ResourceId, `hull/${hullId}/m${hullMod}/model` as ResourceId, `paint/${paintId}/texture` as ResourceId];
         const depsPacket = new LoadDependencies({ resources: ResourceManager.getBulkResources(resourcesToLoad) }, callbackId);
 
-        const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
-        const usersInfoForPacket: IBattleUserInfo[] = allPlayersInBattleForConnectPacket.map((p) => ({
-            ChatModeratorLevel: p.chatModeratorLevel,
-            deaths: 0,
-            kills: 0,
-            rank: p.rank,
-            score: 0,
-            nickname: p.username,
-        }));
-        const userConnectPacket = new BattlePackets.UserConnectDMPacket(user.username, usersInfoForPacket);
+        let userConnectPacket: IPacket;
+        if (battle.isTeamMode()) {
+            // Team battles register the joiner in the existing players' team-stats model via
+            // the team variant (with a per-user team field); the DM variant crashes (#1009).
+            const team = battle.usersBlue.some((u) => u.id === user.id) ? 1 : 0;
+            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, [
+                { ChatModeratorLevel: user.chatModeratorLevel, deaths: 0, kills: 0, rank: user.rank, score: 0, nickname: user.username, team },
+            ]);
+        } else {
+            const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
+            const usersInfoForPacket: IBattleUserInfo[] = allPlayersInBattleForConnectPacket.map((p) => ({
+                ChatModeratorLevel: p.chatModeratorLevel,
+                deaths: 0,
+                kills: 0,
+                rank: p.rank,
+                score: 0,
+                nickname: p.username,
+            }));
+            userConnectPacket = new BattlePackets.UserConnectDMPacket(user.username, usersInfoForPacket);
+        }
 
         for (const existingClient of establishedClients) {
             existingClient.sendPacket(depsPacket);

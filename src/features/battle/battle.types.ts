@@ -213,6 +213,7 @@ export interface IUpdateBattleUserTeamData { deaths: number; kills: number; scor
 export interface IUpdateBattleUserTeam extends IPacket, IUpdateBattleUserTeamData { }
 export interface IUpdateSpectatorList extends IPacket { spectatorList: string | null; }
 export interface IBattleUserInfo { ChatModeratorLevel: ChatModeratorLevel; deaths: number; kills: number; rank: number; score: number; nickname: string | null; }
+export interface IBattleUserInfoTeam extends IBattleUserInfo { team: number; }
 export interface IUserConnectDM extends IPacket { nickname: string | null; usersInfo: IBattleUserInfo[]; }
 export interface IUserDisconnectedDm extends IPacket { nickname: string | null; }
 

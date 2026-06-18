@@ -154,10 +154,43 @@ export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUser
     static getId(): number { return 862913394; }
 }
 
+// Team-battle variant of UserConnectDM: registers a joining player (and the user list)
+// in the existing players' team statistics model. Identical to the DM packet plus a
+// per-user `team` field. Sending the DM variant in a team battle crashes with #1009.
+export class UserConnectTeamPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "usersInfo", type: "list", of: [
+            { name: "ChatModeratorLevel", type: "i32" },
+            { name: "deaths", type: "i16" },
+            { name: "kills", type: "i16" },
+            { name: "rank", type: "u8" },
+            { name: "score", type: "i32" },
+            { name: "nickname", type: "string" },
+            { name: "team", type: "i32" },
+        ] },
+    ];
+    nickname: string | null; usersInfo: BattleTypes.IBattleUserInfoTeam[];
+    constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfoTeam[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
+    read(buffer: Buffer): void { readSchema(this, UserConnectTeamPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UserConnectTeamPacket.schema); }
+    static getId(): number { return 2040021062; }
+}
+
 export class UserDisconnectedDmPacket extends BasePacket implements BattleTypes.IUserDisconnectedDm {
     nickname: string | null;
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
     static getId(): number { return -1689876764; }
+}
+
+// Team-battle variant of the "user left battle" notification (removes the player from
+// the existing players' team statistics list / shows "X left"). DM uses -1689876764.
+export class UserDisconnectTeamPacket extends BasePacket {
+    nickname: string | null;
+    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
+    read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
+    static getId(): number { return 1411656080; }
 }
