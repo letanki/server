@@ -289,16 +289,19 @@ export class LobbyWorkflow {
                 suspicionLevel: "NONE",
             };
 
+            // The battle LIST uses plain username strings (the battle DETAILS/ShowBattleInfo
+            // use objects). Sending objects here breaks the client's player count, friend
+            // matching, and add/remove-by-username on join/leave.
             if (battle.isTeamMode()) {
                 return {
                     ...basePayload,
-                    usersBlue: battle.usersBlue.map(mapUserToObject),
-                    usersRed: battle.usersRed.map(mapUserToObject),
+                    usersBlue: battle.usersBlue.map((u) => u.username),
+                    usersRed: battle.usersRed.map((u) => u.username),
                 };
             } else {
                 return {
                     ...basePayload,
-                    users: battle.users.map(mapUserToObject),
+                    users: battle.users.map((u) => u.username),
                 };
             }
         });
