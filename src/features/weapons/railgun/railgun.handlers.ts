@@ -1,19 +1,45 @@
+import { weaponPhysicsData } from "@/config/physics.data";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
+import { UserDocument } from "@/shared/models/user.model";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import * as RailgunPackets from "./railgun.packets";
 
-const RAILGUN_FULL_CHARGE_MS = 1000; // time to reach full charge
-const RAILGUN_MIN_FACTOR = 0.25; // a tap still does some damage
-const PIERCE_FALLOFF = 0.75; // each subsequent tank in the beam takes 25% less
+// Damage depends ONLY on where the beam hits the tank (no distance/charge): a dead-center hit does
+// DAMAGE_TO, the edge does DAMAGE_FROM. RAILGUN_TANK_RADIUS is the horizontal offset (from the
+// tank's central axis) at which damage reaches the minimum — tune to taste.
+const RAILGUN_TANK_RADIUS = 250;
+const RAILGUN_CHARGE_TOLERANCE_MS = 250; // network jitter allowance for the charge gate
+
+// Per-mod railgun config lives in physics.data (id `${turret}_m{0..3}`, e.g. `railgun_m2`;
+// note `railgun_xt_*` is a DIFFERENT special weapon): `chargingTimeMsec` is the fixed charge time
+// (anti fire-rate hack) and `weakeningCoeff` is the pierce retention (each next tank in the beam
+// keeps this fraction; m0=0.3536 .. m3=1.0 = no weakening).
+function getRailgunPhysics(user: UserDocument): { chargeMs: number; weakeningCoeff: number } {
+    const mod = user.turrets.get(user.equippedTurret) ?? 0;
+    const weapon = weaponPhysicsData.weapons.find((w) => w.id === `${user.equippedTurret}_m${mod}`);
+    const se = (weapon?.special_entity ?? {}) as { chargingTimeMsec?: number; weakeningCoeff?: number };
+    return { chargeMs: se.chargingTimeMsec ?? 1100, weakeningCoeff: se.weakeningCoeff ?? 1 };
+}
 
 export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.RailgunShotCommandPacket> {
     public readonly packetId = RailgunPackets.RailgunShotCommandPacket.getId();
     public async execute(client: GameClient, server: GameServer, packet: RailgunPackets.RailgunShotCommandPacket): Promise<void> {
         const { user, currentBattle } = client;
         if (!user || !currentBattle || client.battleState !== "active") {
+            return;
+        }
+
+        const { chargeMs, weakeningCoeff } = getRailgunPhysics(user);
+
+        // Anti fire-rate hack: the shot must come after the (per-mod) fixed charge time elapsed
+        // since the player started charging. A shot with no/too-little charge is dropped entirely.
+        const charged = client.railgunChargeStart ? Date.now() - client.railgunChargeStart : 0;
+        client.railgunChargeStart = 0;
+        if (charged < chargeMs - RAILGUN_CHARGE_TOLERANCE_MS) {
+            logger.warn(`Dropping railgun shot from ${user.username}: charged only ${charged}ms (min ${chargeMs - RAILGUN_CHARGE_TOLERANCE_MS}ms) — possible fire-rate hack.`);
             return;
         }
 
@@ -25,24 +51,27 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         });
         currentBattle.broadcastRaw(shotPacket.write(), shotPacket.getId(), user.id);
 
-        // Real damage from the shooter's turret (DAMAGE_TO, scaled by charge time). Varies with
-        // distance/hit spot in the real game; DAMAGE_TO is a solid hit.
+        // Damage range from the shooter's turret (DAMAGE_FROM..DAMAGE_TO).
         const turretMod = ItemUtils.getItemModification(user, "turret");
-        const dmgTo = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_TO") ?? ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
-        const chargeMs = client.railgunChargeStart ? Date.now() - client.railgunChargeStart : RAILGUN_FULL_CHARGE_MS;
-        client.railgunChargeStart = 0;
-        const factor = Math.min(1, Math.max(RAILGUN_MIN_FACTOR, chargeMs / RAILGUN_FULL_CHARGE_MS));
-        const baseDamage = dmgTo * factor;
+        const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
+        const dmgTo = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_TO") ?? dmgFrom;
 
-        logger.info(`User ${user.username} fired railgun (dmg ${Math.round(baseDamage)}, charge ${(factor * 100) | 0}%) at [${packet.targets.map((t) => t.nickname).join(", ")}]`);
+        logger.info(`User ${user.username} fired railgun (dmg ${dmgFrom}-${dmgTo}) at [${packet.targets.map((t) => t.nickname).join(", ")}]`);
 
-        // The beam pierces aligned tanks: each next one takes 25% less.
+        // The beam pierces aligned tanks: each next one keeps `weakeningCoeff` of the damage (per-mod).
         let pierceIndex = 0;
         for (const target of packet.targets) {
             const targetClient = server.findClientByUsername(target.nickname);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
-            const damage = baseDamage * Math.pow(PIERCE_FALLOFF, pierceIndex);
+
+            // Centrality: target.position is the local hit point; the closer the HORIZONTAL offset
+            // is to the tank's central axis, the more damage (DAMAGE_TO at center, DAMAGE_FROM at edge).
+            const hit = target.position;
+            const offset = hit ? Math.hypot(hit.x, hit.y) : RAILGUN_TANK_RADIUS;
+            const centrality = Math.max(0, Math.min(1, 1 - offset / RAILGUN_TANK_RADIUS));
+            const damage = (dmgFrom + (dmgTo - dmgFrom) * centrality) * Math.pow(weakeningCoeff, pierceIndex);
             pierceIndex++;
+
             await server.battleService.applyDamage(currentBattle, client, targetClient, damage);
         }
     }
@@ -55,10 +84,9 @@ export class StartChargingCommandHandler implements IPacketHandler<RailgunPacket
         if (!user || !currentBattle) {
             return;
         }
-        // Remember when the charge began (railgun damage scales with charge time).
+        // Mark the charge start (the shot's timing is validated against this) and relay the
+        // charging light to the other players. The charge is a fixed time; it doesn't affect damage.
         client.railgunChargeStart = Date.now();
-
-        // Relay the charging visual to the other players.
         const startChargingPacket = new RailgunPackets.StartChargingPacket({ nickname: user.username });
         currentBattle.broadcastRaw(startChargingPacket.write(), startChargingPacket.getId(), user.id);
     }

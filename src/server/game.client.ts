@@ -95,6 +95,7 @@ export class GameClient {
   public kills: number = 0;
   public deaths: number = 0;
   public battleScore: number = 0;
+  // When the railgun charge began (server-enforced fixed charge time = anti fire-rate hack).
   public railgunChargeStart: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
