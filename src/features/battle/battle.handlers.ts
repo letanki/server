@@ -294,6 +294,13 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
     }
 }
 
+// Client left the pause state — no server response is expected (verified against the reference
+// capture). No-op handler purely to stop it logging as an unknown packet.
+export class DisablePauseHandler implements IPacketHandler<BattlePackets.DisablePausePacket> {
+    public readonly packetId = BattlePackets.DisablePausePacket.getId();
+    public execute(): void { /* fire-and-forget */ }
+}
+
 export class ReadyToSpawnHandler implements IPacketHandler<BattlePackets.ReadyToSpawnPacket> {
     public readonly packetId = BattlePackets.ReadyToSpawnPacket.getId();
 

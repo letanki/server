@@ -243,6 +243,15 @@ export class ReadyToSpawnPacket extends BasePacket implements BattleTypes.IReady
     static getId(): number { return 268832557; }
 }
 
+// C->S: the client signals it left the "pause" state (resuming / spawning). Empty body, fire-and-
+// forget — the reference server sends no reply (verified against capture 2026-06-18_07-43). Handled
+// as a no-op just so it isn't logged as an unknown packet.
+export class DisablePausePacket extends BasePacket {
+    read(buffer: Buffer): void { }
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return 1156768699; }
+}
+
 export class RemoveTankPacket extends BasePacket implements BattleTypes.IRemoveTank {
     nickname: string | null;
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
