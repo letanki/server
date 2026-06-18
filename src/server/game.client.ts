@@ -30,6 +30,7 @@ export class GameClient {
   private state: ClientState;
   private securityService: SecurityService;
   private rawDataReceived: Buffer = Buffer.alloc(0);
+  private isClosing: boolean = false;
   public language: string | null = null;
   public captchaSolution: string | null = null;
   public recoveryCode: string | null = null;
@@ -98,6 +99,9 @@ export class GameClient {
   }
 
   private setupSocket(): void {
+    // Disable Nagle's algorithm: the game sends many small packets (movement, turret),
+    // and Nagle + delayed-ACK can add up to ~40ms of latency to those bursts.
+    this.socket.setNoDelay(true);
     this.socket.on("data", this.handleData.bind(this));
     this.socket.on("close", this.handleClose.bind(this));
     this.socket.on("error", (err) => {
@@ -198,6 +202,13 @@ export class GameClient {
   }
 
   private handleClose(): void {
+    // A reset/abrupt drop fires both 'error' and 'close' (and closeConnection() calls
+    // this manually before the 'close' event arrives). Without this guard the disconnect
+    // path runs twice and announceTankRemoval sends UserDisconnectedDm twice, crashing
+    // other clients (#1009) the second time the nickname is no longer in their table.
+    if (this.isClosing) return;
+    this.isClosing = true;
+
     logger.info(`Connection closed`, { client: this.getRemoteAddress() });
     this.stopTimeChecker();
 
