@@ -52,6 +52,20 @@ export class EffectStartedPacket extends BasePacket {
     static getId(): number { return -1639713644; }
 }
 
+// S->C (broadcast): a supply effect ended on a tank, so every client removes its visual. Sent at
+// the end of the effect duration, right before the spec is reverted (for movement effects).
+export class EffectStoppedPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "effectType", type: "i32" },
+    ];
+    nickname: string | null; effectType: number;
+    constructor(nickname: string | null = null, effectType: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; }
+    read(buffer: Buffer): void { readSchema(this, EffectStoppedPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, EffectStoppedPacket.schema); }
+    static getId(): number { return -1994318624; }
+}
+
 export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.IConfirmDestruction {
     static readonly schema: PacketSchema = [
         { name: "nickname", type: "string" },

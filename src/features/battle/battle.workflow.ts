@@ -609,8 +609,19 @@ export class BattleWorkflow {
             }
         }
 
-        const effectsData = { effects: [] };
-        client.sendPacket(new BattlePackets.BattleUserEffectsPacket(JSON.stringify(effectsData)));
+        // Replay supply effects active on other tanks so this joiner applies them (e.g. nitro:
+        // the InitTank carries the BASE maxSpeed, and the client derives the boost from the effect
+        // — without this the joiner simulates the tank too slow and it visibly teleports).
+        const now = Date.now();
+        const effects: { userID: string; itemIndex: number; durationTime: number; activeAfterDeath: boolean; effectLevel: number }[] = [];
+        for (const other of battle.clients) {
+            if (other === client || other.isJoiningBattle || !other.user) continue;
+            for (const e of other.activeEffects) {
+                if (e.endAt <= now) continue;
+                effects.push({ userID: other.user.username, itemIndex: e.itemIndex, durationTime: e.durationTime, activeAfterDeath: false, effectLevel: 0 });
+            }
+        }
+        client.sendPacket(new BattlePackets.BattleUserEffectsPacket(JSON.stringify({ effects })));
         const bonusMarkerResource = ResourceManager.getIdlowById("effects/bonus/drop_location_marker");
         const bonusRegionsPacket = new BattlePackets.BonusRegionsPacket({
             bonusRegionResources: [

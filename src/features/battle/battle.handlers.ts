@@ -249,6 +249,8 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             }
 
             client.battleState = "newcome";
+            // A fresh life starts with no supply effects (they don't survive death/respawn).
+            client.activeEffects = [];
             client.currentHealth = ItemUtils.getHullArmor(user);
 
             const clientHealth = 10000;
@@ -632,12 +634,22 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         // 3) Broadcast the visual effect.
         battle.broadcast(new BattlePackets.EffectStartedPacket(user.username, supply.slotId, durationMs, 0));
 
-        // Revert to the base spec when the effect ends, unless a newer nitro/respawn superseded it.
+        // Track the active effect so players who join mid-effect get it replayed via InitEffects.
         const endAt = Date.now() + durationMs;
         client.nitroEndsAt = endAt;
+        client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
+        client.activeEffects.push({ itemIndex: supply.slotId, durationTime: durationMs, endAt });
+
+        // When the effect ends: stop the visual (EffectStopped) then revert the spec — in that
+        // order, matching the official server. Skip if a newer nitro/respawn superseded it.
         setTimeout(() => {
+            // A newer nitro replaced this one (or the client is gone) — leave it alone.
             if (client.isDestroyed || client.nitroEndsAt !== endAt) return;
+            // Always drop the tracked effect so it isn't replayed to late joiners.
+            client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
+            // Only stop/revert on the battlefield if the tank is still alive in this battle.
             if (client.currentBattle !== battle || client.battleState !== "active") return;
+            battle.broadcast(new BattlePackets.EffectStoppedPacket(user.username, supply.slotId));
             sendSpec(baseSpecs);
         }, durationMs);
     }

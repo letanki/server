@@ -60,6 +60,8 @@ export class GameClient {
     this._currentBattle?.clients.delete(this);
     this._currentBattle = battle;
     battle?.clients.add(this);
+    // Effects don't carry across battles.
+    this.activeEffects = [];
   }
 
   public isInFlowMode: boolean = false;
@@ -84,6 +86,9 @@ export class GameClient {
   // expiry so a stale revert timer doesn't undo a newer activation.
   public specSequence: number = 0;
   public nitroEndsAt: number = 0;
+  // Supply effects currently active on this tank, replayed to players who join mid-effect via
+  // InitEffects (itemIndex = supply slotId, durationTime = original effect ms).
+  public activeEffects: { itemIndex: number; durationTime: number; endAt: number }[] = [];
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
