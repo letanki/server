@@ -630,3 +630,26 @@ export class RequestBattleEntranceHandler implements IPacketHandler<BattlePacket
         client.sendPacket(new BattlePackets.BattleEntranceAckPacket(packet.battleId));
     }
 }
+
+export class MovementControlCommandHandler implements IPacketHandler<BattlePackets.MovementControlCommandPacket> {
+    public readonly packetId = BattlePackets.MovementControlCommandPacket.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.MovementControlCommandPacket): Promise<void> {
+        if (!client.user || !client.currentBattle) return;
+        const battle = client.currentBattle;
+
+        // Relay the input/control state to the other players so their physics simulation of
+        // this tank starts/stops correctly (key-release included).
+        const controlPacket = new BattlePackets.MovementControlPacket({ nickname: client.user.username, control: packet.control });
+        const raw = controlPacket.write();
+        const id = controlPacket.getId();
+
+        for (const participant of battle.getAllParticipants()) {
+            if (participant.id === client.user.id) continue;
+            const otherClient = server.findClientByUsername(participant.username);
+            if (otherClient && otherClient.currentBattle?.battleId === battle.battleId) {
+                otherClient.sendRaw(raw, id);
+            }
+        }
+    }
+}

@@ -102,6 +102,34 @@ export class MovePacket extends BasePacket implements BattleTypes.IMovePacket {
     static getId(): number { return -64696933; }
 }
 
+// C->S: the tank's input/control state (pressed-keys bitmask). Other clients simulate the
+// tank's physics from this; without relaying it (especially the key-release), remote tanks
+// keep moving/spinning. `control` is the bitmask; the other two are client timing fields.
+export class MovementControlCommandPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "throttleTime", type: "i32" },
+        { name: "turnControl", type: "i16" },
+        { name: "control", type: "i8" },
+    ];
+    throttleTime = 0; turnControl = 0; control = 0;
+    read(buffer: Buffer): void { readSchema(this, MovementControlCommandPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, MovementControlCommandPacket.schema); }
+    static getId(): number { return -1749108178; }
+}
+
+// S->C: relays a tank's control state to the other players in the battle.
+export class MovementControlPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "control", type: "i8" },
+    ];
+    nickname: string | null = null; control = 0;
+    constructor(data?: Partial<MovementControlPacket>) { super(); if (data) Object.assign(this, data); }
+    read(buffer: Buffer): void { readSchema(this, MovementControlPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, MovementControlPacket.schema); }
+    static getId(): number { return -301298508; }
+}
+
 export class PrepareToSpawnPacket extends BasePacket implements BattleTypes.IPrepareToSpawn {
     static readonly schema: PacketSchema = [
         { name: "position", type: "vector3" },
