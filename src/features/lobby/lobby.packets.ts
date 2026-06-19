@@ -558,3 +558,27 @@ export class RemoveBattleFromListPacket extends BasePacket {
     write(): Buffer { return writeSchema(this, RemoveBattleFromListPacket.schema); }
     static getId(): number { return -1848001147; }
 }
+
+// S->C (lobby battle-preview watchers): the running match round finished — resets the preview timer.
+export class RoundFinishPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
+    battleId: string | null;
+    constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
+    read(buffer: Buffer): void { readSchema(this, RoundFinishPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, RoundFinishPacket.schema); }
+    static getId(): number { return 1534651002; }
+}
+
+// S->C (lobby battle-preview watchers): a team's score changed in the running battle. team 0=red,1=blue.
+export class UpdateTeamScorePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "team", type: "i32" },
+        { name: "score", type: "i32" },
+    ];
+    battleId: string | null; team: number; score: number;
+    constructor(battleId: string | null = null, team: number = 0, score: number = 0) { super(); this.battleId = battleId; this.team = team; this.score = score; }
+    read(buffer: Buffer): void { readSchema(this, UpdateTeamScorePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdateTeamScorePacket.schema); }
+    static getId(): number { return 1428217189; }
+}
