@@ -75,6 +75,7 @@ export class BattleService {
     public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
+        if (battle.roundFinishTimer) return; // no damage/kills during the round-finish freeze
 
         const hullHP = ItemUtils.getHullArmor(targetUser);
         targetClient.currentHealth -= (realDamage * 10000) / hullHP;
@@ -370,6 +371,10 @@ export class BattleService {
             else logger.info(`[collision] ${user.username} left collision at (${battlePosition.x | 0},${battlePosition.y | 0},${battlePosition.z | 0})`);
             client.insideObstacle = obstacle;
         }
+
+        // During the round-finish freeze nobody may pick up the flag or trigger kill/void zones — the
+        // carrier's flag just fell right under them and would otherwise be re-grabbed instantly.
+        if (currentBattle.roundFinishTimer) return;
 
         if (currentBattle.settings.battleMode === BattleMode.CTF) {
             if (client.battleState !== "active") return;
