@@ -1,6 +1,5 @@
 import * as LobbyPackets from "@/features/lobby/lobby.packets";
 import { LobbyService } from "@/features/lobby/lobby.service";
-import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -8,16 +7,16 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { CollisionService } from "./collision.service";
 import { SpawnService } from "./spawn.service";
-import { BattleEvents, BattleEventMap } from "./battle-events";
+import { BattleEvents } from "./battle-events";
 import { CombatService } from "./combat.service";
 import { CtfService } from "./ctf.service";
+import { RoundService } from "./round.service";
 import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { DestroyTankPacket, EffectStoppedPacket, FinishBattlePacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
-const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -38,14 +37,14 @@ export class BattleService {
     private readonly combat = new CombatService(this.events);
     private readonly ctf = new CtfService(this.events, this.collision);
     private readonly spawn: SpawnService;
+    private readonly round: RoundService;
     private server: GameServer;
     private lobbyService: LobbyService;
 
     constructor(server: GameServer, lobbyService: LobbyService) {
         this.server = server;
         this.spawn = new SpawnService(server);
-        this.events.on("kill", (p) => this._onKill(p));
-        this.events.on("flagCaptured", (p) => this._onFlagCaptured(p));
+        this.round = new RoundService(server, this.events, this.ctf, this.spawn);
         this.lobbyService = lobbyService;
     }
 
@@ -76,47 +75,9 @@ export class BattleService {
         return this.combat.applySplashDamage(battle, shooterClient, center, baseDamage, maxRadius, minRadius, minPercent);
     }
 
-    /** Reactions to a kill, wired off the bus (kept on BattleService for now; moves to CTF/round
-     *  services later). Behaviour-identical to the old inline tail of _handleKill. */
-    private _onKill({ battle, killerClient, victimClient }: BattleEventMap["kill"]): void {
-        const killer = killerClient.user;
-        const victim = victimClient.user;
-        if (!killer || !victim) return;
-
-        // (CTF flag drop on death is handled by CtfService's own `kill` listener.)
-
-        // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
-        if (killer.id !== victim.id) {
-            this._sendToWatchers(battle, new LobbyPackets.UpdateUserScorePacket(battle.battleId, killer.username, killerClient.battleScore));
-        }
-
-        // Kill-based score limit (DM = individual kills; team non-CTF = team's total kills).
-        const limit = battle.settings.scoreLimit;
-        if (killer.id !== victim.id && battle.settings.battleMode !== BattleMode.CTF) {
-            const team = battle.teamOf(killer);
-            const teamKills = battle.isTeamMode()
-                ? [...battle.clients].filter((c) => c.user && battle.teamOf(c.user) === team).reduce((sum, c) => sum + c.kills, 0)
-                : killerClient.kills;
-            if (battle.isTeamMode()) {
-                this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, team, teamKills));
-            }
-            if (limit > 0 && teamKills >= limit) this.finishRound(battle);
-        }
-    }
-
     /** A death with no killer (self-destruct, void). Delegates to CombatService. */
     public registerSuicideDeath(battle: Battle, client: GameClient): void {
         this.combat.registerSuicideDeath(battle, client);
-    }
-
-    /** Reactions to a flag capture, wired off the bus. Behaviour-identical to the old captureFlag tail. */
-    private _onFlagCaptured({ battle, capturingTeamId, newScore }: BattleEventMap["flagCaptured"]): void {
-        // Lobby preview watchers see the team score rise.
-        this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, capturingTeamId, newScore));
-        // Score limit reached -> end the round.
-        if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
-            this.finishRound(battle);
-        }
     }
 
     public async checkPlayerPosition(client: GameClient): Promise<void> {
@@ -365,7 +326,7 @@ export class BattleService {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 1 && !battle.roundStarted) {
             battle.roundStarted = true;
             battle.roundStartTime = Date.now();
-            this._startRoundTimer(battle);
+            this.round.startRoundTimer(battle);
             logger.info(`Round started for battle ${battle.battleId}.`);
         }
 
@@ -416,108 +377,6 @@ export class BattleService {
         }
 
         logger.info(`User ${user.username} removed from battle ${battle.battleId}`);
-    }
-
-    /** Lobby clients currently watching this battle's preview (battle-details panel). */
-    private _battleWatchers(battle: Battle): GameClient[] {
-        return this.server.getClients().filter((c) => (c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId);
-    }
-    private _sendToWatchers(battle: Battle, packet: IPacket): void {
-        for (const w of this._battleWatchers(battle)) w.sendPacket(packet);
-    }
-
-    private _startRoundTimer(battle: Battle): void {
-        if (battle.roundTimer) clearTimeout(battle.roundTimer);
-        const limit = battle.settings.timeLimitInSec;
-        this.broadcastToBattle(battle, new SetRoundTimePacket(limit));
-        if (limit > 0) {
-            battle.roundTimer = setTimeout(() => this.finishRound(battle), limit * 1000);
-        }
-    }
-
-    /** End the round (time or score limit): broadcast final standings, then restart after the pause. */
-    public finishRound(battle: Battle): void {
-        if (battle.roundFinishTimer) return; // already finishing
-        if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
-
-        const nicknames = [...battle.clients].filter((c) => c.user && !c.isSpectator).map((c) => c.user!.username);
-        this.broadcastToBattle(battle, new FinishBattlePacket(nicknames, ROUND_FINISH_PAUSE_MS / 1000));
-        // Lobby preview watchers: the running timer they see should reset.
-        this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket(battle.battleId));
-
-        // Carried flags fall (CTF).
-        if (battle.settings.battleMode === BattleMode.CTF) {
-            for (const carrier of [battle.flagCarrierRed, battle.flagCarrierBlue]) {
-                if (carrier) this.dropFlag(carrier, battle, this.server.findClientByUsername(carrier.username)?.battlePosition ?? null);
-            }
-        }
-        // Active supply effects clear on every tank.
-        for (const c of battle.clients) {
-            if (!c.user) continue;
-            for (const e of c.activeEffects) this.broadcastToBattle(battle, new EffectStoppedPacket(c.user.username, e.itemIndex));
-            c.activeEffects = [];
-        }
-
-        logger.info(`Round finished in battle ${battle.battleId}.`);
-
-        battle.roundFinishTimer = setTimeout(() => this.restartRound(battle), ROUND_FINISH_PAUSE_MS);
-    }
-
-    /** Restart a finished round: swap sides (team modes), reset scores/flags, respawn everyone, restart timer. */
-    public restartRound(battle: Battle): void {
-        battle.roundFinishTimer = null;
-        if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) return; // emptied during the pause
-
-        // Switch sides (team modes): swap the rosters, then re-send them so the client reassigns each
-        // player's team in the scoreboard (RestartRoundTeamPacket = field0 red, field1 blue).
-        if (battle.isTeamMode()) {
-            const red = battle.usersRed;
-            battle.usersRed = battle.usersBlue;
-            battle.usersBlue = red;
-        }
-
-        battle.scoreRed = 0;
-        battle.scoreBlue = 0;
-        const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
-        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
-
-        if (battle.settings.battleMode === BattleMode.CTF) {
-            this.ctf.returnFlagToBase(battle, "RED");
-            this.ctf.returnFlagToBase(battle, "BLUE");
-            this.broadcastToBattle(battle, new SetCtfScorePacket(0, 0));
-            this.broadcastToBattle(battle, new SetCtfScorePacket(1, 0));
-        }
-
-        // Rebuild the scoreboard rosters with reset stats + the new team assignment.
-        if (battle.isTeamMode()) {
-            this.broadcastToBattle(battle, new RestartRoundTeamPacket(battle.usersRed.map((u) => u.username), battle.usersBlue.map((u) => u.username)));
-            // Update the battle-list per-team counts: each player moved to the other team's slot.
-            for (let team = 0; team < 2; team++) {
-                for (const u of (team === 0 ? battle.usersRed : battle.usersBlue)) {
-                    this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket(battle.battleId, u.username));
-                    this.server.broadcastToBattleList(new LobbyPackets.OnReserveSlotTeamPacket(battle.battleId, u.username, team));
-                }
-            }
-        } else {
-            this.broadcastToBattle(battle, new RestartRoundDmPacket(battle.users.map((u) => u.username)));
-        }
-
-        for (const c of active) {
-            this.prepareRespawn(c); // -> client replies ReadyToPlace -> normal spawn finishes the placement
-        }
-
-        battle.roundStartTime = Date.now();
-        this._startRoundTimer(battle);
-
-        // Refresh the lobby preview for watchers: hide + re-show the battle details. The per-event
-        // packets don't refresh the preview panel itself, so the reset timer, reset score and the new
-        // team rosters only show up after re-sending BattleDetails (computed from the fresh state).
-        for (const w of this._battleWatchers(battle)) {
-            w.sendPacket(new LobbyPackets.HideBattleInfoPacket(battle.battleId));
-            void LobbyWorkflow.sendBattleDetails(w, this.server, battle);
-        }
-
-        logger.info(`Round restarted in battle ${battle.battleId}.`);
     }
 
     /** Delegates to SpawnService — kept on BattleService so existing callers (the spawn handler and
