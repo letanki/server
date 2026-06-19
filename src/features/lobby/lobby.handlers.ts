@@ -17,6 +17,9 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
         try {
             const battle = server.lobbyService.createBattle(packet, client.user);
 
+            // Expire the battle if nobody ever joins it (cancelled on the first join).
+            server.battleService.scheduleEmptyRemoval(battle);
+
             client.lastViewedBattleId = battle.battleId;
 
             const battleModeStr = BattleMode[packet.battleMode];

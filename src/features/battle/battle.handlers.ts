@@ -2,7 +2,7 @@ import { battleDataObject } from "@/config/battle.data";
 import { suppliesData } from "@/config/supplies.data";
 import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
-import { AddUserToBattleDmPacket, NotifyFriendOfBattlePacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
+import { AddUserToBattleDmPacket, AddUserTeamPacket, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -56,23 +56,18 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
 
             await BattleWorkflow.enterBattle(client, server, battle);
 
+            const battleDetailWatchers = server.getClients().filter((c) => (c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId);
+
             if (battle.settings.battleMode === BattleMode.DM) {
-                const reserveSlotPacket = new ReservePlayerSlotDmPacket(battle.battleId, client.user.username);
-                server.broadcastToBattleList(reserveSlotPacket);
-
-                const addUserPacket = new AddUserToBattleDmPacket({
-                    battleId: battle.battleId,
-                    nickname: client.user.username,
-                    kills: 0,
-                    score: 0,
-                    suspicious: false,
-                });
-
-                const battleDetailWatchers = server.getClients().filter((c) => (c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId);
-
-                for (const watcher of battleDetailWatchers) {
-                    watcher.sendPacket(addUserPacket);
-                }
+                server.broadcastToBattleList(new ReservePlayerSlotDmPacket(battle.battleId, client.user.username));
+                const addUserPacket = new AddUserToBattleDmPacket({ battleId: battle.battleId, nickname: client.user.username, kills: 0, score: 0, suspicious: false });
+                for (const watcher of battleDetailWatchers) watcher.sendPacket(addUserPacket);
+            } else {
+                // Team modes (CTF/TDM/DOM): the lobby roster uses the team variants + the player's team.
+                const team = battle.usersRed.some((u) => u.id === client.user!.id) ? 0 : 1;
+                server.broadcastToBattleList(new OnReserveSlotTeamPacket(battle.battleId, client.user.username, team));
+                const addUserPacket = new AddUserTeamPacket({ battleId: battle.battleId, nickname: client.user.username, kills: 0, score: 0, suspicious: false, team });
+                for (const watcher of battleDetailWatchers) watcher.sendPacket(addUserPacket);
             }
 
             const joiningUser = client.user;

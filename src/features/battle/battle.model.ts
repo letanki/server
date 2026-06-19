@@ -97,6 +97,10 @@ export class Battle {
     public flagLastDroppedByRed: { userId: string; timestamp: number } | null = null;
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
     public domPoints: IDomPointState[] = [];
+    // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
+    // auto-removed. emptyRemovalTimer counts down once a player-created battle becomes empty.
+    public isSystem: boolean = false;
+    public emptyRemovalTimer: NodeJS.Timeout | null = null;
 
     /**
      * Live connections currently in this battle, maintained by GameClient's currentBattle setter

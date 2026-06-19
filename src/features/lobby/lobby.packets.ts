@@ -463,3 +463,98 @@ export class InitUserClanModelsPacket extends BasePacket {
     }
     static getId(): number { return -1338449818; }
 }
+
+// --- Team-mode battle-lobby roster (mirror the DM packets, with a `team` field; 0=red, 1=blue). ---
+
+// S->C (battle list): a player reserved a team slot in a battle.
+export class OnReserveSlotTeamPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+        { name: "team", type: "i32" },
+    ];
+    battleId: string | null; nickname: string | null; team: number;
+    constructor(battleId: string | null = null, nickname: string | null = null, team: number = 0) {
+        super(); this.battleId = battleId; this.nickname = nickname; this.team = team;
+    }
+    read(buffer: Buffer): void { readSchema(this, OnReserveSlotTeamPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, OnReserveSlotTeamPacket.schema); }
+    static getId(): number { return -169305322; }
+}
+
+// S->C (battle list): a player released their team slot.
+export class OnReleaseSlotTeamPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+    ];
+    battleId: string | null; nickname: string | null;
+    constructor(battleId: string | null = null, nickname: string | null = null) {
+        super(); this.battleId = battleId; this.nickname = nickname;
+    }
+    read(buffer: Buffer): void { readSchema(this, OnReleaseSlotTeamPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, OnReleaseSlotTeamPacket.schema); }
+    static getId(): number { return 1447204641; }
+}
+
+// S->C (battle-details watchers): add a user to a team battle's roster.
+export class AddUserTeamPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "kills", type: "i32" },
+        { name: "score", type: "i32" },
+        { name: "suspicious", type: "bool" },
+        { name: "nickname", type: "string" },
+        { name: "team", type: "i32" },
+    ];
+    battleId: string | null; nickname: string | null; kills: number; score: number; suspicious: boolean; team: number;
+    constructor(data?: { battleId?: string | null; nickname?: string | null; kills?: number; score?: number; suspicious?: boolean; team?: number }) {
+        super();
+        this.battleId = data?.battleId ?? null;
+        this.nickname = data?.nickname ?? null;
+        this.kills = data?.kills ?? 0;
+        this.score = data?.score ?? 0;
+        this.suspicious = data?.suspicious ?? false;
+        this.team = data?.team ?? 0;
+    }
+    read(buffer: Buffer): void { readSchema(this, AddUserTeamPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, AddUserTeamPacket.schema); }
+    static getId(): number { return 118447426; }
+}
+
+// S->C (battle-details watchers): update a user's score in the battle roster.
+export class UpdateUserScorePacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "battleId", type: "string" },
+        { name: "nickname", type: "string" },
+        { name: "score", type: "i32" },
+    ];
+    battleId: string | null; nickname: string | null; score: number;
+    constructor(battleId: string | null = null, nickname: string | null = null, score: number = 0) {
+        super(); this.battleId = battleId; this.nickname = nickname; this.score = score;
+    }
+    read(buffer: Buffer): void { readSchema(this, UpdateUserScorePacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdateUserScorePacket.schema); }
+    static getId(): number { return -375282889; }
+}
+
+// S->C: hide a battle's info panel (e.g. the battle is no longer selectable).
+export class HideBattleInfoPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
+    battleId: string | null;
+    constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
+    read(buffer: Buffer): void { readSchema(this, HideBattleInfoPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, HideBattleInfoPacket.schema); }
+    static getId(): number { return -602527073; }
+}
+
+// S->C: remove a battle from the lobby battle list (e.g. it expired empty). Body: battleId. This is
+// the actual list-removal packet (id -1848001147), distinct from HideBattleInfo (panel toggle).
+export class RemoveBattleFromListPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
+    battleId: string | null;
+    constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
+    read(buffer: Buffer): void { readSchema(this, RemoveBattleFromListPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, RemoveBattleFromListPacket.schema); }
+    static getId(): number { return -1848001147; }
+}

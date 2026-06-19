@@ -88,6 +88,7 @@ export class LobbyService {
                 }
             }
 
+            battle.isSystem = !creator; // no player creator => system battle (never auto-removed)
             this.activeBattles.set(battle.battleId, battle);
             logger.info(`Battle created`, {
                 battleId: battle.battleId,
@@ -99,6 +100,10 @@ export class LobbyService {
             logger.error(`Failed to create battle due to missing map resource: ${error.message}`);
             throw new Error("Não foi possível criar a batalha. O mapa selecionado não está disponível no servidor.");
         }
+    }
+
+    public removeBattle(battleId: string): void {
+        this.activeBattles.delete(battleId);
     }
 
     public getBattles(): Battle[] {

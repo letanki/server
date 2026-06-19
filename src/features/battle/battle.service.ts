@@ -34,6 +34,7 @@ const HULL_YAW_OFFSET = 0;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
 const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
 const KILL_XP = 10; // rank experience per kill (tune later)
+const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -525,8 +526,9 @@ export class BattleService {
             }
 
             if (battle.settings.battleMode === BattleMode.DM) {
-                const releaseSlotPacket = new LobbyPackets.ReleasePlayerSlotDmPacket({ battleId: battle.battleId, nickname: user.username });
-                this.server.broadcastToBattleList(releaseSlotPacket);
+                this.server.broadcastToBattleList(new LobbyPackets.ReleasePlayerSlotDmPacket({ battleId: battle.battleId, nickname: user.username }));
+            } else {
+                this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket(battle.battleId, user.username));
             }
         }
 
@@ -585,9 +587,42 @@ export class BattleService {
         await this.finalizeBattleExit(user, battle, undefined, isSpectator);
     }
 
+    /** Start the empty-battle removal countdown (a player-created battle nobody is in is removed after
+     *  EMPTY_BATTLE_REMOVAL_MS). Called at creation (so a never-joined battle expires) and whenever a
+     *  battle becomes empty. System battles ("Batalha para Novatos") are kept. Cancelled on join. */
+    public scheduleEmptyRemoval(battle: Battle): void {
+        if (battle.isSystem || battle.emptyRemovalTimer) return;
+        battle.emptyRemovalTimer = setTimeout(() => this._removeEmptyBattle(battle), EMPTY_BATTLE_REMOVAL_MS);
+    }
+
+    /** Empty player-created battle that stayed empty for the timeout: remove it from the list + state. */
+    private _removeEmptyBattle(battle: Battle): void {
+        battle.emptyRemovalTimer = null;
+        if (battle.isSystem) return;
+        if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length > 0) return; // someone rejoined
+        logger.info(`Removing empty battle ${battle.battleId} after ${EMPTY_BATTLE_REMOVAL_MS / 1000}s idle.`);
+        // Remove it from everyone's battle list, and close the detail panel for anyone previewing it
+        // (else they'd try to join a battle that no longer exists).
+        this.server.broadcastToBattleList(new LobbyPackets.RemoveBattleFromListPacket(battle.battleId));
+        const hidePacket = new LobbyPackets.HideBattleInfoPacket(battle.battleId);
+        for (const c of this.server.getClients()) {
+            if ((c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId) {
+                c.sendPacket(hidePacket);
+                c.lastViewedBattleId = null;
+            }
+        }
+        this.lobbyService.removeBattle(battle.battleId);
+    }
+
     public addUserToBattle(user: UserDocument, battleId: string, teamIndex: number): Battle {
         const battle = this.lobbyService.getBattleById(battleId);
         if (!battle) throw new Error("A batalha selecionada não existe mais.");
+
+        // Someone joined — cancel any pending empty-battle removal.
+        if (battle.emptyRemovalTimer) {
+            clearTimeout(battle.emptyRemovalTimer);
+            battle.emptyRemovalTimer = null;
+        }
 
         const settings = battle.settings;
         if (user.rank < settings.minRank || user.rank > settings.maxRank) {
@@ -662,6 +697,8 @@ export class BattleService {
             this._clearFlagReturnTimer(battle, "RED");
             this._clearFlagReturnTimer(battle, "BLUE");
             logger.info(`Battle ${battle.battleId} is now empty. Round stopped and timer reset.`);
+
+            this.scheduleEmptyRemoval(battle);
         }
 
         logger.info(`User ${user.username} removed from battle ${battle.battleId}`);
