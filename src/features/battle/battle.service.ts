@@ -13,7 +13,7 @@ import { CtfService } from "./ctf.service";
 import { RoundService } from "./round.service";
 import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
-import { Battle, BattleMode } from "./battle.model";
+import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
@@ -95,7 +95,7 @@ export class BattleService {
 
         // During the round-finish freeze nobody may pick up the flag or trigger kill/void zones — the
         // carrier's flag just fell right under them and would otherwise be re-grabbed instantly.
-        if (currentBattle.roundFinishTimer) return;
+        if (currentBattle.roundState === BattleRoundState.FINISHED) return;
 
         this.ctf.checkFlagInteractions(client);
 
@@ -264,16 +264,16 @@ export class BattleService {
      *  EMPTY_BATTLE_REMOVAL_MS). Called at creation (so a never-joined battle expires) and whenever a
      *  battle becomes empty. System battles ("Batalha para Novatos") are kept. Cancelled on join. */
     public scheduleEmptyRemoval(battle: Battle): void {
-        if (battle.isSystem || battle.emptyRemovalTimer) return;
-        battle.emptyRemovalTimer = setTimeout(() => this._removeEmptyBattle(battle), EMPTY_BATTLE_REMOVAL_MS);
+        if (battle.isSystem || battle.timers.has("emptyRemoval")) return;
+        battle.timers.set("emptyRemoval", EMPTY_BATTLE_REMOVAL_MS, () => this._removeEmptyBattle(battle));
     }
 
     /** Empty player-created battle that stayed empty for the timeout: remove it from the list + state. */
     private _removeEmptyBattle(battle: Battle): void {
-        battle.emptyRemovalTimer = null;
         if (battle.isSystem) return;
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length > 0) return; // someone rejoined
         logger.info(`Removing empty battle ${battle.battleId} after ${EMPTY_BATTLE_REMOVAL_MS / 1000}s idle.`);
+        battle.timers.clearAll(); // no dangling timers once the battle is gone
         // Remove it from everyone's battle list, and close the detail panel for anyone previewing it
         // (else they'd try to join a battle that no longer exists).
         this.server.broadcastToBattleList(new LobbyPackets.RemoveBattleFromListPacket(battle.battleId));
@@ -292,10 +292,7 @@ export class BattleService {
         if (!battle) throw new Error("A batalha selecionada não existe mais.");
 
         // Someone joined — cancel any pending empty-battle removal.
-        if (battle.emptyRemovalTimer) {
-            clearTimeout(battle.emptyRemovalTimer);
-            battle.emptyRemovalTimer = null;
-        }
+        battle.timers.clear("emptyRemoval");
 
         const settings = battle.settings;
         if (user.rank < settings.minRank || user.rank > settings.maxRank) {
@@ -324,9 +321,8 @@ export class BattleService {
         }
 
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 1 && !battle.roundStarted) {
-            battle.roundStarted = true;
             battle.roundStartTime = Date.now();
-            this.round.startRoundTimer(battle);
+            this.round.startRoundTimer(battle); // -> RUNNING
             logger.info(`Round started for battle ${battle.battleId}.`);
         }
 
@@ -366,11 +362,11 @@ export class BattleService {
         }
 
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) {
-            battle.roundStarted = false;
+            battle.roundState = BattleRoundState.WAITING;
             battle.roundStartTime = null;
             this.ctf.clearReturnTimers(battle);
-            if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
-            if (battle.roundFinishTimer) { clearTimeout(battle.roundFinishTimer); battle.roundFinishTimer = null; }
+            battle.timers.clear("round");
+            battle.timers.clear("finish");
             logger.info(`Battle ${battle.battleId} is now empty. Round stopped and timer reset.`);
 
             this.scheduleEmptyRemoval(battle);

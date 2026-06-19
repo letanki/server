@@ -4,7 +4,7 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
-import { Battle, BattleMode } from "./battle.model";
+import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { PrepareToSpawnPacket, TankSpecificationPacket } from "./battle.packets";
 
 /**
@@ -68,9 +68,9 @@ export class SpawnService {
         if (!user || !battle) return;
 
         // During the round-finish freeze, hold the spawn — nobody (not even a player joining now) gets
-        // PrepareToSpawn until restartRound spawns everyone. restartRound clears roundFinishTimer first,
-        // so it isn't blocked by this guard.
-        if (battle.roundFinishTimer) return;
+        // PrepareToSpawn until restartRound spawns everyone. restartRound leaves the FINISHED state
+        // first, so its own respawn loop isn't blocked by this guard.
+        if (battle.roundState === BattleRoundState.FINISHED) return;
 
         const specs = ItemUtils.getTankSpecifications(user);
         battle.broadcast(new TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));

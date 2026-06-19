@@ -154,9 +154,7 @@ export class CtfService {
         logger.info(`User ${user.username} dropped the ${teamName} flag in battle ${battle.battleId} at ${JSON.stringify(groundPos)}`);
         battle.broadcast(new DropFlagPacket(groundPos, droppedTeamId));
 
-        this._clearFlagReturnTimer(battle, teamName);
-        const timerProp = teamName === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
-        battle[timerProp] = setTimeout(() => this.returnFlagToBase(battle, teamName), FLAG_RETURN_DELAY_MS);
+        battle.timers.set(`flagReturn:${teamName}`, FLAG_RETURN_DELAY_MS, () => this.returnFlagToBase(battle, teamName));
     }
 
     public returnFlagToBase(battle: Battle, flagTeam: "RED" | "BLUE", returningUser: UserDocument | null = null): void {
@@ -210,12 +208,7 @@ export class CtfService {
     }
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
-        const timerProp = flagTeam === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
-        if (battle[timerProp]) {
-            clearTimeout(battle[timerProp]!);
-            battle[timerProp] = null;
-            logger.info(`Cleared auto-return timer for ${flagTeam} flag in battle ${battle.battleId}`);
-        }
+        battle.timers.clear(`flagReturn:${flagTeam}`);
     }
 
     private _resetFlagState(battle: Battle, flagTeam: "RED" | "BLUE"): void {

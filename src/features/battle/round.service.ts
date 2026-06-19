@@ -4,7 +4,7 @@ import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import logger from "@/utils/logger";
-import { Battle, BattleMode } from "./battle.model";
+import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { BattleEvents, BattleEventMap } from "./battle-events";
 import { CtfService } from "./ctf.service";
 import { SpawnService } from "./spawn.service";
@@ -30,20 +30,24 @@ export class RoundService {
         this.events.on("flagCaptured", (p) => this._onFlagCaptured(p));
     }
 
-    /** (Re)starts the round clock: tells everyone the time limit and arms the time-up finish. */
+    /** (Re)starts the round clock: marks the round RUNNING, tells everyone the time limit and arms
+     *  the time-up finish. */
     public startRoundTimer(battle: Battle): void {
-        if (battle.roundTimer) clearTimeout(battle.roundTimer);
+        battle.roundState = BattleRoundState.RUNNING;
         const limit = battle.settings.timeLimitInSec;
         battle.broadcast(new SetRoundTimePacket(limit));
         if (limit > 0) {
-            battle.roundTimer = setTimeout(() => this.finishRound(battle), limit * 1000);
+            battle.timers.set("round", limit * 1000, () => this.finishRound(battle));
+        } else {
+            battle.timers.clear("round");
         }
     }
 
     /** End the round (time or score limit): broadcast final standings, then restart after the pause. */
     public finishRound(battle: Battle): void {
-        if (battle.roundFinishTimer) return; // already finishing
-        if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
+        if (battle.roundState === BattleRoundState.FINISHED) return; // already finishing
+        battle.roundState = BattleRoundState.FINISHED;
+        battle.timers.clear("round");
 
         const nicknames = [...battle.clients].filter((c) => c.user && !c.isSpectator).map((c) => c.user!.username);
         battle.broadcast(new FinishBattlePacket(nicknames, ROUND_FINISH_PAUSE_MS / 1000));
@@ -65,13 +69,17 @@ export class RoundService {
 
         logger.info(`Round finished in battle ${battle.battleId}.`);
 
-        battle.roundFinishTimer = setTimeout(() => this.restartRound(battle), ROUND_FINISH_PAUSE_MS);
+        battle.timers.set("finish", ROUND_FINISH_PAUSE_MS, () => this.restartRound(battle));
     }
 
     /** Restart a finished round: swap sides (team modes), reset scores/flags, respawn everyone, restart timer. */
     public restartRound(battle: Battle): void {
-        battle.roundFinishTimer = null;
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) return; // emptied during the pause
+
+        // Leave the FINISHED freeze up front so the respawn loop below isn't blocked by the freeze
+        // guard (combat/spawn gate on roundState === FINISHED). startRoundTimer re-affirms RUNNING.
+        battle.timers.clear("finish");
+        battle.roundState = BattleRoundState.RUNNING;
 
         // Switch sides (team modes): swap the rosters, then re-send them so the client reassigns each
         // player's team in the scoreboard (RestartRoundTeamPacket = field0 red, field1 blue).

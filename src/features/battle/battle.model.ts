@@ -5,7 +5,15 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ResourceId } from "@/types/resourceTypes";
 import { ResourceManager } from "@/utils/resource.manager";
+import { BattleTimers } from "./battle-timers";
 import * as crypto from "crypto";
+
+/** Round lifecycle: WAITING (no players yet / emptied), RUNNING (live), FINISHED (results pause). */
+export enum BattleRoundState {
+    WAITING,
+    RUNNING,
+    FINISHED,
+}
 
 export enum BattleMode {
     DM,
@@ -84,7 +92,7 @@ export class Battle {
     public spectators: UserDocument[] = [];
     public scoreBlue: number = 0;
     public scoreRed: number = 0;
-    public roundStarted: boolean = false;
+    public roundState: BattleRoundState = BattleRoundState.WAITING;
     public roundStartTime: number | null = null;
     public flagBasePositionBlue: IVector3 | null = null;
     public flagBasePositionRed: IVector3 | null = null;
@@ -92,19 +100,18 @@ export class Battle {
     public flagPositionRed: IVector3 | null = null;
     public flagCarrierBlue: UserDocument | null = null;
     public flagCarrierRed: UserDocument | null = null;
-    public flagReturnTimerBlue: NodeJS.Timeout | null = null;
-    public flagReturnTimerRed: NodeJS.Timeout | null = null;
     public flagLastDroppedByRed: { userId: string; timestamp: number } | null = null;
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
     public domPoints: IDomPointState[] = [];
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
-    // auto-removed. emptyRemovalTimer counts down once a player-created battle becomes empty.
+    // auto-removed.
     public isSystem: boolean = false;
-    public emptyRemovalTimer: NodeJS.Timeout | null = null;
-    // Round lifecycle: roundTimer fires at the time limit (-> finish); roundFinishTimer is the
-    // results pause before the round restarts.
-    public roundTimer: NodeJS.Timeout | null = null;
-    public roundFinishTimer: NodeJS.Timeout | null = null;
+
+    /**
+     * All this battle's named timers (round time limit, finish-results pause, empty-battle removal,
+     * per-flag auto-return). See BattleTimers; each service arms/clears its own names.
+     */
+    public readonly timers = new BattleTimers();
 
     /**
      * Live connections currently in this battle, maintained by GameClient's currentBattle setter
@@ -124,6 +131,11 @@ export class Battle {
 
     public isTeamMode(): boolean {
         return this.settings.battleMode !== BattleMode.DM;
+    }
+
+    /** True once the round has begun (RUNNING or in the FINISHED results pause); false while WAITING. */
+    public get roundStarted(): boolean {
+        return this.roundState !== BattleRoundState.WAITING;
     }
 
     /** Scoreboard team index for a user: 0 = red, 1 = blue, 2 = none/DM. */

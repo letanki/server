@@ -4,7 +4,7 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
-import { Battle } from "./battle.model";
+import { Battle, BattleRoundState } from "./battle.model";
 import { BattleEvents } from "./battle-events";
 import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
 
@@ -28,7 +28,7 @@ export class CombatService {
     public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
-        if (battle.roundFinishTimer) return; // no damage/kills during the round-finish freeze
+        if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
 
         const hullHP = ItemUtils.getHullArmor(targetUser);
         targetClient.currentHealth -= (realDamage * 10000) / hullHP;
