@@ -527,25 +527,28 @@ export class BattleWorkflow {
         const resourcesToLoad: ResourceId[] = [`turret/${turretId}/m${turretMod}/model` as ResourceId, `hull/${hullId}/m${hullMod}/model` as ResourceId, `paint/${paintId}/texture` as ResourceId];
         const depsPacket = new LoadDependencies({ resources: ResourceManager.getBulkResources(resourcesToLoad) }, callbackId);
 
-        // The client REBUILDS its whole score array from this list (each entry mapped through its
-        // local Dictionary), so it must contain EVERY player the receiver already knows — not just
-        // the joiner (sending only the joiner makes the receiver's own row vanish, leaving only the
-        // new name). Include only known players: finished joining (!isJoiningBattle) plus the joiner;
-        // this also drops disconnected ghosts and mid-join players (the 300-bot race) → avoids #1009.
-        const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter((p) => {
+        // Known players only: finished joining (!isJoiningBattle) plus the joiner (drops ghosts and
+        // mid-join players → avoids null-hole #1009).
+        const known = (p: UserDocument) => {
             const c = server.findClientByUsername(p.username);
             return c != null && (!c.isJoiningBattle || p.id === user.id);
-        });
+        };
 
         let userConnectPacket: IPacket;
         if (battle.isTeamMode()) {
-            const usersInfoForPacket = allPlayersInBattleForConnectPacket.map((p) => ({
+            // The client REBUILDS the joiner's TEAM COLUMN from this packet's entries, so send every
+            // player on the joiner's team (not just the joiner — else an existing same-team player's
+            // row vanishes; not the whole roster — else the other team's column is wiped). When the
+            // joiner's team has only them, this is the single-entry packet the official sends.
+            const team = battle.usersBlue.some((u) => u.id === user.id) ? 1 : 0;
+            const teamMembers = (team === 1 ? battle.usersBlue : battle.usersRed).filter(known);
+            const usersInfoForPacket: IBattleUserInfo[] = teamMembers.map((p) => ({
                 ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
-                team: battle.usersBlue.some((u) => u.id === p.id) ? 1 : 0,
             }));
-            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, usersInfoForPacket);
+            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, usersInfoForPacket, team);
         } else {
-            const usersInfoForPacket: IBattleUserInfo[] = allPlayersInBattleForConnectPacket.map((p) => ({
+            // DM: the client rebuilds its whole array, so include every known player.
+            const usersInfoForPacket: IBattleUserInfo[] = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter(known).map((p) => ({
                 ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
             }));
             userConnectPacket = new BattlePackets.UserConnectDMPacket(user.username, usersInfoForPacket);

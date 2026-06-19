@@ -157,6 +157,10 @@ export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUser
 // Team-battle variant of UserConnectDM: registers a joining player (and the user list)
 // in the existing players' team statistics model. Identical to the DM packet plus a
 // per-user `team` field. Sending the DM variant in a team battle crashes with #1009.
+// Per the client model: nickname (joiner) + Vector<entry> + a SINGLE trailing team (the joiner's
+// team). `usersInfo` is the joiner's whole team column (entries have NO per-entry team); the client
+// rebuilds that team's column from it. (A per-entry team only coincides for a 1-entry list and
+// corrupts 2+ entries → the same-team join bug.)
 export class UserConnectTeamPacket extends BasePacket {
     static readonly schema: PacketSchema = [
         { name: "nickname", type: "string" },
@@ -167,11 +171,11 @@ export class UserConnectTeamPacket extends BasePacket {
             { name: "rank", type: "u8" },
             { name: "score", type: "i32" },
             { name: "nickname", type: "string" },
-            { name: "team", type: "i32" },
         ] },
+        { name: "team", type: "i32" },
     ];
-    nickname: string | null; usersInfo: BattleTypes.IBattleUserInfoTeam[];
-    constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfoTeam[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
+    nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[]; team: number;
+    constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[], team: number = 0) { super(); this.nickname = nickname; this.usersInfo = usersInfo; this.team = team; }
     read(buffer: Buffer): void { readSchema(this, UserConnectTeamPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UserConnectTeamPacket.schema); }
     static getId(): number { return 2040021062; }
