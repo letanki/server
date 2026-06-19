@@ -368,10 +368,12 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             return;
         }
 
+        const isSpectator = client.isSpectator || battle.spectators.some((s: UserDocument) => s.id === user.id);
+
         let senderTeamId = 2;
         let senderTeam: UserDocument[] = [];
 
-        if (battle.isTeamMode()) {
+        if (battle.isTeamMode() && !isSpectator) {
             if (battle.usersBlue.some((p: UserDocument) => p.id === user.id)) {
                 senderTeamId = 1;
                 senderTeam = battle.usersBlue;
@@ -381,28 +383,39 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             }
         }
 
+        const sendTo = (users: UserDocument[], pkt: BattlePackets.BattleChatMessagePacket | BattlePackets.BattleChatTeamMessagePacket): void => {
+            for (const recipient of users) {
+                const recipientClient = server.findClientByUsername(recipient.username);
+                if (recipientClient && recipientClient.currentBattle?.battleId === battle.battleId) {
+                    recipientClient.sendPacket(pkt);
+                }
+            }
+        };
+
+        // A spectator isn't a registered battle player, so the client crashes (#1009) rendering a normal
+        // battle-chat line whose sender it can't look up in the scoreboard. Sending nickname=null routes
+        // the client to its built-in "Spectator:" render path (no player lookup). Fellow spectators see
+        // who spoke (name prefixed into the text); players just see the generic "Spectator: <msg>". The
+        // spectators' "team" channel is spectator-only — players receive nothing.
+        if (isSpectator) {
+            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: null, message: `${user.username}: ${packet.message}`, team: senderTeamId }));
+            if (!packet.team) {
+                const players = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
+                sendTo(players, new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId }));
+            }
+            return;
+        }
+
         const messageData = {
             nickname: user.username,
             message: packet.message,
             team: senderTeamId,
         };
 
-        let messagePacket: BattlePackets.BattleChatMessagePacket | BattlePackets.BattleChatTeamMessagePacket;
-        let recipients: UserDocument[];
-
         if (packet.team && battle.isTeamMode()) {
-            messagePacket = new BattlePackets.BattleChatTeamMessagePacket(messageData);
-            recipients = [...senderTeam, ...battle.spectators];
+            sendTo([...senderTeam, ...battle.spectators], new BattlePackets.BattleChatTeamMessagePacket(messageData));
         } else {
-            messagePacket = new BattlePackets.BattleChatMessagePacket(messageData);
-            recipients = battle.getAllParticipants();
-        }
-
-        for (const recipient of recipients) {
-            const recipientClient = server.findClientByUsername(recipient.username);
-            if (recipientClient && recipientClient.currentBattle?.battleId === battle.battleId) {
-                recipientClient.sendPacket(messagePacket);
-            }
+            sendTo(battle.getAllParticipants(), new BattlePackets.BattleChatMessagePacket(messageData));
         }
     }
 }
