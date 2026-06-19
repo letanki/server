@@ -6,28 +6,16 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { hullCollision } from "@/types/hullCollision";
 import { CollisionService } from "./collision.service";
 import { SpawnService } from "./spawn.service";
 import { BattleEvents, BattleEventMap } from "./battle-events";
 import { CombatService } from "./combat.service";
+import { CtfService } from "./ctf.service";
 import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, EffectStoppedPacket, FinishBattlePacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetRoundTimePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { DestroyTankPacket, EffectStoppedPacket, FinishBattlePacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
-// Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
-// models — mammoth's box is bigger than wasp's) oriented by the tank, plus an occlusion check so a
-// flag can't be grabbed through a wall or from another pavement.
-const FLAG_PICKUP_MARGIN = 100; // slack beyond the hull edge — flag has its own footprint
-// Vertical reach, asymmetric: the flag can be well BELOW the tank (you ramp/jump over it and still
-// touch it), only a little ABOVE. Cross-level grabs are stopped by occlusion, not by a tight bound.
-const FLAG_PICKUP_DOWN = 300;
-const FLAG_PICKUP_UP = 160;
-// Tweak if testing shows the box is rotated 90° (depends on the tank yaw convention vs the model's
-// forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
-const HULL_YAW_OFFSET = 0;
-const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
 
@@ -48,6 +36,7 @@ export class BattleService {
     private readonly collision = new CollisionService();
     private readonly events = new BattleEvents();
     private readonly combat = new CombatService(this.events);
+    private readonly ctf = new CtfService(this.events, this.collision);
     private readonly spawn: SpawnService;
     private server: GameServer;
     private lobbyService: LobbyService;
@@ -94,10 +83,7 @@ export class BattleService {
         const victim = victimClient.user;
         if (!killer || !victim) return;
 
-        // CTF: a flag the victim was carrying drops where they died.
-        if (victimClient.battlePosition) {
-            this.dropFlag(victim, battle, victimClient.battlePosition);
-        }
+        // (CTF flag drop on death is handled by CtfService's own `kill` listener.)
 
         // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
         if (killer.id !== victim.id) {
@@ -123,73 +109,6 @@ export class BattleService {
         this.combat.registerSuicideDeath(battle, client);
     }
 
-    private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
-        const timerProp = flagTeam === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
-        if (battle[timerProp]) {
-            clearTimeout(battle[timerProp]!);
-            battle[timerProp] = null;
-            logger.info(`Cleared auto-return timer for ${flagTeam} flag in battle ${battle.battleId}`);
-        }
-    }
-
-    private _resetFlagState(battle: Battle, flagTeam: "RED" | "BLUE"): void {
-        const flagPositionProp = flagTeam === "RED" ? "flagPositionRed" : "flagPositionBlue";
-        const flagBasePositionProp = flagTeam === "RED" ? "flagBasePositionRed" : "flagBasePositionBlue";
-        const carrierProp = flagTeam === "RED" ? "flagCarrierRed" : "flagCarrierBlue";
-        const lastDroppedProp = flagTeam === "RED" ? "flagLastDroppedByRed" : "flagLastDroppedByBlue";
-
-        battle[flagPositionProp] = battle[flagBasePositionProp];
-        battle[carrierProp] = null;
-        battle[lastDroppedProp] = null;
-        this._clearFlagReturnTimer(battle, flagTeam);
-    }
-
-    public returnFlagToBase(battle: Battle, flagTeam: "RED" | "BLUE", returningUser: UserDocument | null = null): void {
-        const teamId = flagTeam === "RED" ? 0 : 1;
-        const flagPositionProp = flagTeam === "RED" ? "flagPositionRed" : "flagPositionBlue";
-        const flagBasePositionProp = flagTeam === "RED" ? "flagBasePositionRed" : "flagBasePositionBlue";
-        const carrierProp = flagTeam === "RED" ? "flagCarrierRed" : "flagCarrierBlue";
-
-        if (battle[flagPositionProp] === battle[flagBasePositionProp] && !battle[carrierProp]) {
-            return;
-        }
-
-        this._resetFlagState(battle, flagTeam);
-
-        const nickname = returningUser ? returningUser.username : null;
-        logger.info(`${flagTeam} flag returned to base in battle ${battle.battleId}. Triggered by: ${nickname ?? "auto-timer/event"}`);
-
-        const returnPacket = new ReturnFlagPacket({ team: teamId, nickname });
-        this.broadcastToBattle(battle, returnPacket);
-    }
-
-    public captureFlag(user: UserDocument, battle: Battle, capturedFlagTeam: "RED" | "BLUE"): void {
-        const carrierProp = capturedFlagTeam === "RED" ? "flagCarrierRed" : "flagCarrierBlue";
-        if (battle[carrierProp]?.id !== user.id) return;
-
-        const capturingTeamId = capturedFlagTeam === "RED" ? 1 : 0;
-        const capturingTeamName = capturingTeamId === 0 ? "RED" : "BLUE";
-
-        logger.info(`Team ${capturingTeamName} (${user.username}) captured the ${capturedFlagTeam} flag in battle ${battle.battleId}`);
-
-        const capturePacket = new CaptureFlagPacket({ team: capturingTeamId, nickname: user.username });
-        this.broadcastToBattle(battle, capturePacket);
-
-        // Update and broadcast the capturing team's flag score (CTF scoreboard).
-        if (capturingTeamName === "RED") {
-            battle.scoreRed++;
-        } else {
-            battle.scoreBlue++;
-        }
-        const newScore = capturingTeamName === "RED" ? battle.scoreRed : battle.scoreBlue;
-        this.broadcastToBattle(battle, new SetCtfScorePacket(capturingTeamId, newScore));
-
-        this._resetFlagState(battle, capturedFlagTeam);
-
-        // Preview + score-limit reactions are decoupled via the bus (see _onFlagCaptured).
-        this.events.emit("flagCaptured", { battle, capturingTeamId, newScore });
-    }
-
     /** Reactions to a flag capture, wired off the bus. Behaviour-identical to the old captureFlag tail. */
     private _onFlagCaptured({ battle, capturingTeamId, newScore }: BattleEventMap["flagCaptured"]): void {
         // Lobby preview watchers see the team score rise.
@@ -198,30 +117,6 @@ export class BattleService {
         if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
             this.finishRound(battle);
         }
-    }
-
-    /** Tank close enough to pick up / interact with a flag: the flag falls inside the tank's REAL
-     *  hull collision box (per-hull, oriented by the tank yaw) plus a small margin, at roughly the
-     *  same height, AND nothing solid is between the tank and the flag. Hull box from the .3ds
-     *  models; collision from the map's <collision-geometry>. */
-    private _nearFlag(client: GameClient, flagPos: IVector3): boolean {
-        const tankPos = client.battlePosition;
-        if (!tankPos || !client.currentBattle) return false;
-        const dx = flagPos.x - tankPos.x;
-        const dy = flagPos.y - tankPos.y;
-
-        // Rotate the flag offset into the hull's local frame (yaw around z) and test the oriented box.
-        const yaw = (client.battleOrientation?.z ?? 0) + HULL_YAW_OFFSET;
-        const cos = Math.cos(yaw), sin = Math.sin(yaw);
-        const localX = dx * cos + dy * sin;   // along hull width  (model X)
-        const localY = -dx * sin + dy * cos;  // along hull length (model Y)
-        const hull = hullCollision[client.user?.equippedHull ?? ""] ?? HULL_FALLBACK;
-        if (Math.abs(localX) >= hull.halfX + FLAG_PICKUP_MARGIN) return false;
-        if (Math.abs(localY) >= hull.halfY + FLAG_PICKUP_MARGIN) return false;
-        const dz = tankPos.z - flagPos.z; // >0 = flag below the tank
-        if (dz > FLAG_PICKUP_DOWN || dz < -FLAG_PICKUP_UP) return false;
-
-        return !this.collision.isBlockedBetween(client.currentBattle.mapResourceId, tankPos, flagPos);
     }
 
     public async checkPlayerPosition(client: GameClient): Promise<void> {
@@ -241,37 +136,7 @@ export class BattleService {
         // carrier's flag just fell right under them and would otherwise be re-grabbed instantly.
         if (currentBattle.roundFinishTimer) return;
 
-        if (currentBattle.settings.battleMode === BattleMode.CTF) {
-            if (client.battleState !== "active") return;
-
-            const isOnRedTeam = currentBattle.usersRed.some((u) => u.id === user.id);
-            const isOnBlueTeam = currentBattle.usersBlue.some((u) => u.id === user.id);
-
-            if (isOnRedTeam) {
-                // Stepping on your own dropped flag returns it; reaching your base with the enemy flag scores.
-                if (currentBattle.flagPositionRed && currentBattle.flagBasePositionRed && currentBattle.flagPositionRed.x !== currentBattle.flagBasePositionRed.x && this._nearFlag(client, currentBattle.flagPositionRed)) {
-                    this.returnFlagToBase(currentBattle, "RED", user);
-                }
-                if (currentBattle.flagCarrierBlue?.id === user.id && currentBattle.flagBasePositionRed && this._nearFlag(client, currentBattle.flagBasePositionRed)) {
-                    this.captureFlag(user, currentBattle, "BLUE");
-                }
-            } else if (isOnBlueTeam) {
-                if (currentBattle.flagPositionBlue && currentBattle.flagBasePositionBlue && currentBattle.flagPositionBlue.x !== currentBattle.flagBasePositionBlue.x && this._nearFlag(client, currentBattle.flagPositionBlue)) {
-                    this.returnFlagToBase(currentBattle, "BLUE", user);
-                }
-                if (currentBattle.flagCarrierRed?.id === user.id && currentBattle.flagBasePositionBlue && this._nearFlag(client, currentBattle.flagBasePositionBlue)) {
-                    this.captureFlag(user, currentBattle, "RED");
-                }
-            }
-
-            // Touching the enemy flag picks it up.
-            if (currentBattle.flagPositionRed && this._nearFlag(client, currentBattle.flagPositionRed)) {
-                try { this.takeFlag(user, currentBattle, "RED"); } catch (e: any) { }
-            }
-            if (currentBattle.flagPositionBlue && this._nearFlag(client, currentBattle.flagPositionBlue)) {
-                try { this.takeFlag(user, currentBattle, "BLUE"); } catch (e: any) { }
-            }
-        }
+        this.ctf.checkFlagInteractions(client);
 
         const geometries = mapGeometries[currentBattle.mapResourceId];
         if (!geometries) return;
@@ -300,10 +165,10 @@ export class BattleService {
 
         if (action === "kill") {
             if (currentBattle.flagCarrierRed?.id === user.id) {
-                this.returnFlagToBase(currentBattle, "RED");
+                this.ctf.returnFlagToBase(currentBattle, "RED");
             }
             if (currentBattle.flagCarrierBlue?.id === user.id) {
-                this.returnFlagToBase(currentBattle, "BLUE");
+                this.ctf.returnFlagToBase(currentBattle, "BLUE");
             }
             if (client.battleState === "suicide") return;
 
@@ -542,8 +407,7 @@ export class BattleService {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) {
             battle.roundStarted = false;
             battle.roundStartTime = null;
-            this._clearFlagReturnTimer(battle, "RED");
-            this._clearFlagReturnTimer(battle, "BLUE");
+            this.ctf.clearReturnTimers(battle);
             if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
             if (battle.roundFinishTimer) { clearTimeout(battle.roundFinishTimer); battle.roundFinishTimer = null; }
             logger.info(`Battle ${battle.battleId} is now empty. Round stopped and timer reset.`);
@@ -618,8 +482,8 @@ export class BattleService {
         for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
 
         if (battle.settings.battleMode === BattleMode.CTF) {
-            this.returnFlagToBase(battle, "RED");
-            this.returnFlagToBase(battle, "BLUE");
+            this.ctf.returnFlagToBase(battle, "RED");
+            this.ctf.returnFlagToBase(battle, "BLUE");
             this.broadcastToBattle(battle, new SetCtfScorePacket(0, 0));
             this.broadcastToBattle(battle, new SetCtfScorePacket(1, 0));
         }
@@ -662,88 +526,9 @@ export class BattleService {
         this.spawn.prepareRespawn(client);
     }
 
-    public takeFlag(user: UserDocument, battle: Battle, flagTeam: "RED" | "BLUE"): void {
-        const now = Date.now();
-        const lastDroppedByRed = battle.flagLastDroppedByRed;
-        const lastDroppedByBlue = battle.flagLastDroppedByBlue;
-
-        if (flagTeam === "BLUE" && lastDroppedByBlue && lastDroppedByBlue.userId === user.id && now - lastDroppedByBlue.timestamp < 5000) {
-            throw new Error("Cannot pick up the flag so soon after dropping it.");
-        }
-        if (flagTeam === "RED" && lastDroppedByRed && lastDroppedByRed.userId === user.id && now - lastDroppedByRed.timestamp < 5000) {
-            throw new Error("Cannot pick up the flag so soon after dropping it.");
-        }
-
-        const teamId = flagTeam === "RED" ? 0 : 1;
-
-        const isOnRedTeam = battle.usersRed.some((u) => u.id === user.id);
-        const isOnBlueTeam = battle.usersBlue.some((u) => u.id === user.id);
-
-        if ((flagTeam === "RED" && isOnRedTeam) || (flagTeam === "BLUE" && isOnBlueTeam)) {
-            throw new Error("Cannot take your own team's flag.");
-        }
-
-        const flagPositionProp = flagTeam === "RED" ? "flagPositionRed" : "flagPositionBlue";
-        if (battle[flagPositionProp]) {
-            this._clearFlagReturnTimer(battle, flagTeam);
-        }
-
-        if (flagTeam === "RED") {
-            if (battle.flagCarrierRed) throw new Error("Red flag is already taken.");
-            battle.flagCarrierRed = user;
-            battle.flagPositionRed = null;
-        } else {
-            if (battle.flagCarrierBlue) throw new Error("Blue flag is already taken.");
-            battle.flagCarrierBlue = user;
-            battle.flagPositionBlue = null;
-        }
-
-        logger.info(`User ${user.username} took the ${flagTeam} flag in battle ${battle.battleId}`);
-
-        const takeFlagPacket = new TakeFlagPacket(user.username, teamId);
-        this.broadcastToBattle(battle, takeFlagPacket);
-    }
-
-    /** Highest floor surface z at (x,y) that is at/below `fromZ` (the ground under the tank), or
-     *  null if there's no floor there — i.e. over the void. Used to drop flags onto the ground. */
+    /** Drops the flag the user is carrying onto the ground beneath them (CtfService). Kept on the
+     *  facade because the disconnect/exit handlers and the garage workflow call it. */
     public dropFlag(user: UserDocument, battle: Battle, dropPosition: IVector3 | null): void {
-        if (!dropPosition) {
-            logger.warn(`Attempted to drop flag for ${user.username} but no drop position was provided.`);
-            return;
-        }
-
-        // Which flag (if any) is this user carrying?
-        const teamName: "RED" | "BLUE" | null = battle.flagCarrierRed?.id === user.id ? "RED" : battle.flagCarrierBlue?.id === user.id ? "BLUE" : null;
-        if (!teamName) return;
-
-        // Raycast straight down to the floor under the tank (handles ramps/jumps — the flag lands on
-        // the ground below, not in the air). No floor = over the void → the flag returns to base.
-        const groundZ = this.collision.raycastGroundZ(battle.mapResourceId, dropPosition.x, dropPosition.y, dropPosition.z);
-        if (groundZ === null) {
-            logger.info(`${user.username} dropped the ${teamName} flag over the void; returning it to base.`);
-            if (teamName === "RED") battle.flagCarrierRed = null;
-            else battle.flagCarrierBlue = null;
-            this.returnFlagToBase(battle, teamName);
-            return;
-        }
-
-        const groundPos: IVector3 = { x: dropPosition.x, y: dropPosition.y, z: groundZ };
-        const droppedTeamId = teamName === "RED" ? 0 : 1;
-        if (teamName === "RED") {
-            battle.flagCarrierRed = null;
-            battle.flagPositionRed = groundPos;
-            battle.flagLastDroppedByRed = { userId: user.id, timestamp: Date.now() };
-        } else {
-            battle.flagCarrierBlue = null;
-            battle.flagPositionBlue = groundPos;
-            battle.flagLastDroppedByBlue = { userId: user.id, timestamp: Date.now() };
-        }
-
-        logger.info(`User ${user.username} dropped the ${teamName} flag in battle ${battle.battleId} at ${JSON.stringify(groundPos)}`);
-        this.broadcastToBattle(battle, new DropFlagPacket(groundPos, droppedTeamId));
-
-        this._clearFlagReturnTimer(battle, teamName);
-        const timerProp = teamName === "RED" ? "flagReturnTimerRed" : "flagReturnTimerBlue";
-        battle[timerProp] = setTimeout(() => this.returnFlagToBase(battle, teamName), 30000);
+        this.ctf.dropFlag(user, battle, dropPosition);
     }
 }
