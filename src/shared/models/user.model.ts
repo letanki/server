@@ -29,7 +29,8 @@ const UserQuestSchema = new Schema<IUserQuest>(
 );
 
 export interface UserAttributes {
-    username: string;
+    username: string; // display name (original casing)
+    login: string; // lowercase of username — the unique, indexed key used for authentication
     password: string;
     email?: string | null;
     emailConfirmed: boolean;
@@ -77,7 +78,8 @@ export interface UserDocument extends UserAttributes, Document {
 }
 
 const UserSchema = new Schema<UserDocument>({
-    username: { type: String, required: true, unique: true, trim: true, minlength: 3, maxlength: 50, match: /^[a-zA-Z0-9]+$/ },
+    username: { type: String, required: true, trim: true, minlength: 3, maxlength: 50, match: /^[a-zA-Z0-9]+$/ },
+    login: { type: String, required: true, unique: true, lowercase: true, index: true }, // derived from username (pre-validate); the case-insensitive identity
     password: { type: String, required: true, minlength: 3 },
     email: { type: String, trim: true, lowercase: true, default: null },
     emailConfirmed: { type: Boolean, default: false },
@@ -133,6 +135,13 @@ const UserSchema = new Schema<UserDocument>({
 
 UserSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email: { $type: "string" } } });
 UserSchema.index({ loginToken: 1 }, { unique: true, partialFilterExpression: { loginToken: { $type: "string" } } });
+
+// Keep `login` (the unique, indexed auth key) in sync with `username`. Runs before validation so the
+// required `login` is always set, including on the first save.
+UserSchema.pre<UserDocument>("validate", function (next: (error?: Error) => void) {
+    if (this.username) this.login = this.username.toLowerCase();
+    next();
+});
 
 UserSchema.pre<UserDocument>("save", function (next: (error?: Error) => void) {
     if (!this.isModified("password")) {

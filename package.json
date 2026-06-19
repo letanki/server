@@ -11,7 +11,8 @@
     "dev": "ts-node -r tsconfig-paths/register scripts/dev.ts",
     "parse:logs": "ts-node -r tsconfig-paths/register scripts/log-parser.ts",
     "test": "node -r ts-node/register -r tsconfig-paths/register --test \"test/**/*.test.ts\"",
-    "stress": "ts-node scripts/stress-test.ts"
+    "stress": "ts-node scripts/stress-test.ts",
+    "migrate:login": "ts-node -r tsconfig-paths/register scripts/migrateLogin.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

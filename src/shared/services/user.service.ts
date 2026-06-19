@@ -44,9 +44,9 @@ export class UserService {
 
     public async findUserByUsername(username: string): Promise<UserDocument | null> {
         try {
-            return await User.findOne({
-                username: { $regex: new RegExp(`^${username}$`, "i") },
-            });
+            // `login` is the lowercase, indexed key — an equality lookup that is case-insensitive by
+            // construction (no collection-scanning case-insensitive regex).
+            return await User.findOne({ login: username.toLowerCase() });
         } catch (error) {
             logger.error(`Error finding user by username ${username}`, { error });
             throw error;
@@ -78,9 +78,7 @@ export class UserService {
 
     public async isUsernameAvailable(username: string): Promise<boolean> {
         try {
-            const user = await User.findOne({
-                username: { $regex: new RegExp(`^${username}$`, "i") },
-            });
+            const user = await User.findOne({ login: username.toLowerCase() });
             return !user;
         } catch (error) {
             logger.error(`Error checking username availability for ${username}`, { error });
