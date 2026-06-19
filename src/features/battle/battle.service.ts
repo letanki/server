@@ -10,6 +10,7 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { hullCollision } from "@/types/hullCollision";
 import { CollisionService } from "./collision.service";
 import { SpawnService } from "./spawn.service";
+import { BattleEvents, BattleEventMap } from "./battle-events";
 import { mapGeometries } from "@/types/mapGeometries";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -49,6 +50,7 @@ export class BattleService {
 
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
     private readonly collision = new CollisionService();
+    private readonly events = new BattleEvents();
     private readonly spawn: SpawnService;
     private server: GameServer;
     private lobbyService: LobbyService;
@@ -56,6 +58,8 @@ export class BattleService {
     constructor(server: GameServer, lobbyService: LobbyService) {
         this.server = server;
         this.spawn = new SpawnService(server);
+        this.events.on("kill", (p) => this._onKill(p));
+        this.events.on("flagCaptured", (p) => this._onFlagCaptured(p));
         this.lobbyService = lobbyService;
     }
 
@@ -123,12 +127,6 @@ export class BattleService {
         // Kill notice (victim, killer, respawn delay) — drives the death on every client.
         this.broadcastToBattle(battle, new KillPacket(victim.username, killer.username, KILL_RESPAWN_MS));
 
-        // If the victim was carrying a flag (CTF), it drops where they died (dropFlag lowers it to
-        // the ground at that spot).
-        if (victimClient.battlePosition) {
-            this.dropFlag(victim, battle, victimClient.battlePosition);
-        }
-
         // Scoreboard: victim +1 death, killer +1 kill and score.
         victimClient.deaths++;
         this._broadcastUserStat(battle, victimClient, victim);
@@ -144,6 +142,23 @@ export class BattleService {
         this._broadcastUserStat(battle, killerClient, killer);
 
         logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
+
+        // Cross-cutting reactions — flag drop (CTF), lobby preview, kill-based score limit — are
+        // decoupled via the bus (see _onKill), so combat doesn't call CTF/round directly.
+        this.events.emit("kill", { battle, killerClient, victimClient });
+    }
+
+    /** Reactions to a kill, wired off the bus (kept on BattleService for now; moves to CTF/round
+     *  services later). Behaviour-identical to the old inline tail of _handleKill. */
+    private _onKill({ battle, killerClient, victimClient }: BattleEventMap["kill"]): void {
+        const killer = killerClient.user;
+        const victim = victimClient.user;
+        if (!killer || !victim) return;
+
+        // CTF: a flag the victim was carrying drops where they died.
+        if (victimClient.battlePosition) {
+            this.dropFlag(victim, battle, victimClient.battlePosition);
+        }
 
         // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
         if (killer.id !== victim.id) {
@@ -247,11 +262,17 @@ export class BattleService {
         }
         const newScore = capturingTeamName === "RED" ? battle.scoreRed : battle.scoreBlue;
         this.broadcastToBattle(battle, new SetCtfScorePacket(capturingTeamId, newScore));
-        // Lobby preview watchers see the team score rise too.
-        this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, capturingTeamId, newScore));
 
         this._resetFlagState(battle, capturedFlagTeam);
 
+        // Preview + score-limit reactions are decoupled via the bus (see _onFlagCaptured).
+        this.events.emit("flagCaptured", { battle, capturingTeamId, newScore });
+    }
+
+    /** Reactions to a flag capture, wired off the bus. Behaviour-identical to the old captureFlag tail. */
+    private _onFlagCaptured({ battle, capturingTeamId, newScore }: BattleEventMap["flagCaptured"]): void {
+        // Lobby preview watchers see the team score rise.
+        this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, capturingTeamId, newScore));
         // Score limit reached -> end the round.
         if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
             this.finishRound(battle);
