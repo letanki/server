@@ -126,6 +126,13 @@ export class Battle {
         return this.settings.battleMode !== BattleMode.DM;
     }
 
+    /** Scoreboard team index for a user: 0 = red, 1 = blue, 2 = none/DM. */
+    public teamOf(user: UserDocument): number {
+        if (this.usersRed.some((u) => u.id === user.id)) return 0;
+        if (this.usersBlue.some((u) => u.id === user.id)) return 1;
+        return 2;
+    }
+
     public getAllParticipants(): UserDocument[] {
         return [...this.users, ...this.usersBlue, ...this.usersRed, ...this.spectators];
     }

@@ -1,7 +1,6 @@
 import * as LobbyPackets from "@/features/lobby/lobby.packets";
 import { LobbyService } from "@/features/lobby/lobby.service";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
-import * as ProfilePackets from "@/features/profile/profile.packets";
 import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -11,13 +10,12 @@ import { hullCollision } from "@/types/hullCollision";
 import { CollisionService } from "./collision.service";
 import { SpawnService } from "./spawn.service";
 import { BattleEvents, BattleEventMap } from "./battle-events";
+import { CombatService } from "./combat.service";
 import { mapGeometries } from "@/types/mapGeometries";
-import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, EffectStoppedPacket, FinishBattlePacket, KillPacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, SetRoundTimePacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { CaptureFlagPacket, DestroyTankPacket, DropFlagPacket, EffectStoppedPacket, FinishBattlePacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetRoundTimePacket, TakeFlagPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
-const KILL_RESPAWN_MS = 3000;
 // Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
 // models — mammoth's box is bigger than wasp's) oriented by the tank, plus an occlusion check so a
 // flag can't be grabbed through a wall or from another pavement.
@@ -30,8 +28,6 @@ const FLAG_PICKUP_UP = 160;
 // forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
 const HULL_YAW_OFFSET = 0;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
-const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
-const KILL_XP = 10; // rank experience per kill (tune later)
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
 
@@ -51,6 +47,7 @@ export class BattleService {
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
     private readonly collision = new CollisionService();
     private readonly events = new BattleEvents();
+    private readonly combat = new CombatService(this.events);
     private readonly spawn: SpawnService;
     private server: GameServer;
     private lobbyService: LobbyService;
@@ -75,21 +72,8 @@ export class BattleService {
      * HP: normalizedDamage = realDamage * 10000 / hullHP. Broadcasts SetHealth + the damage number,
      * and runs the kill flow when health drops to 0. Shared by all weapons (railgun, thunder, ...).
      */
-    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
-        const targetUser = targetClient.user;
-        if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
-        if (battle.roundFinishTimer) return; // no damage/kills during the round-finish freeze
-
-        const hullHP = ItemUtils.getHullArmor(targetUser);
-        targetClient.currentHealth -= (realDamage * 10000) / hullHP;
-
-        this.broadcastToBattle(battle, new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }));
-        this.broadcastToBattle(battle, new DamageIndicatorPacket(targetUser.username, Math.round(realDamage), 2));
-        logger.info(`${shooterClient.user?.username} hit ${targetUser.username}: ${Math.round(realDamage)} dmg (hull ${hullHP}hp) -> ${Math.round(targetClient.currentHealth)}/10000`);
-
-        if (targetClient.currentHealth <= 0) {
-            await this._handleKill(battle, shooterClient, targetClient);
-        }
+    public applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
+        return this.combat.applyDamage(battle, shooterClient, targetClient, realDamage);
     }
 
     /**
@@ -99,53 +83,8 @@ export class BattleService {
      * distance is scaled by SPLASH_WORLD_SCALE so a direct hit (~150u from center) stays inside
      * maxRadius and the splash reaches ~nearby tanks — calibrate this if the radius feels off.
      */
-    public async applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
-        const SPLASH_WORLD_SCALE = 10;
-        for (const targetClient of [...battle.clients]) {
-            if (targetClient.isDestroyed || targetClient.battleState !== "active" || !targetClient.battlePosition) continue;
-            const dx = targetClient.battlePosition.x - center.x;
-            const dy = targetClient.battlePosition.y - center.y;
-            const dz = targetClient.battlePosition.z - center.z;
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) / SPLASH_WORLD_SCALE;
-
-            let factor: number;
-            if (distance <= maxRadius) factor = 1;
-            else if (distance <= minRadius) factor = 1 - (1 - minPercent / 100) * ((distance - maxRadius) / (minRadius - maxRadius));
-            else continue;
-
-            await this.applyDamage(battle, shooterClient, targetClient, baseDamage * factor);
-        }
-    }
-
-    private async _handleKill(battle: Battle, killerClient: GameClient, victimClient: GameClient): Promise<void> {
-        const killer = killerClient.user;
-        const victim = victimClient.user;
-        if (!killer || !victim) return;
-
-        victimClient.battleState = "suicide";
-
-        // Kill notice (victim, killer, respawn delay) — drives the death on every client.
-        this.broadcastToBattle(battle, new KillPacket(victim.username, killer.username, KILL_RESPAWN_MS));
-
-        // Scoreboard: victim +1 death, killer +1 kill and score.
-        victimClient.deaths++;
-        this._broadcastUserStat(battle, victimClient, victim);
-
-        // No self/team-kill credit.
-        if (killer.id !== victim.id) {
-            killerClient.kills++;
-            killerClient.battleScore += KILL_SCORE;
-            killer.experience += KILL_XP;
-            await killer.save();
-            killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
-        }
-        this._broadcastUserStat(battle, killerClient, killer);
-
-        logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
-
-        // Cross-cutting reactions — flag drop (CTF), lobby preview, kill-based score limit — are
-        // decoupled via the bus (see _onKill), so combat doesn't call CTF/round directly.
-        this.events.emit("kill", { battle, killerClient, victimClient });
+    public applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
+        return this.combat.applySplashDamage(battle, shooterClient, center, baseDamage, maxRadius, minRadius, minPercent);
     }
 
     /** Reactions to a kill, wired off the bus (kept on BattleService for now; moves to CTF/round
@@ -168,9 +107,9 @@ export class BattleService {
         // Kill-based score limit (DM = individual kills; team non-CTF = team's total kills).
         const limit = battle.settings.scoreLimit;
         if (killer.id !== victim.id && battle.settings.battleMode !== BattleMode.CTF) {
-            const team = this._teamOf(battle, killer);
+            const team = battle.teamOf(killer);
             const teamKills = battle.isTeamMode()
-                ? [...battle.clients].filter((c) => c.user && this._teamOf(battle, c.user) === team).reduce((sum, c) => sum + c.kills, 0)
+                ? [...battle.clients].filter((c) => c.user && battle.teamOf(c.user) === team).reduce((sum, c) => sum + c.kills, 0)
                 : killerClient.kills;
             if (battle.isTeamMode()) {
                 this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, team, teamKills));
@@ -179,27 +118,9 @@ export class BattleService {
         }
     }
 
-    /** A death with no killer (self-destruct, void): +1 death on the scoreboard, no kill credit. */
+    /** A death with no killer (self-destruct, void). Delegates to CombatService. */
     public registerSuicideDeath(battle: Battle, client: GameClient): void {
-        if (!client.user) return;
-        client.deaths++;
-        this._broadcastUserStat(battle, client, client.user);
-    }
-
-    private _teamOf(battle: Battle, user: UserDocument): number {
-        if (battle.usersRed.some((u) => u.id === user.id)) return 0;
-        if (battle.usersBlue.some((u) => u.id === user.id)) return 1;
-        return 2;
-    }
-
-    /** Broadcasts a player's kills/deaths/score using the DM or team scoreboard packet for the mode. */
-    private _broadcastUserStat(battle: Battle, client: GameClient, user: UserDocument): void {
-        const data = { deaths: client.deaths, kills: client.kills, score: client.battleScore, nickname: user.username };
-        if (battle.isTeamMode()) {
-            this.broadcastToBattle(battle, new UpdateBattleUserTeamPacket({ ...data, team: this._teamOf(battle, user) }));
-        } else {
-            this.broadcastToBattle(battle, new UpdateBattleUserDMPacket(data));
-        }
+        this.combat.registerSuicideDeath(battle, client);
     }
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
