@@ -14,7 +14,7 @@ import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, FinishBattlePacket, KillPacket, PrepareToSpawnPacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, SetRoundTimePacket, TakeFlagPacket, TankSpecificationPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, EffectStoppedPacket, FinishBattlePacket, KillPacket, PrepareToSpawnPacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, SetRoundTimePacket, TakeFlagPacket, TankSpecificationPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
 // Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
@@ -760,6 +760,20 @@ export class BattleService {
         this.broadcastToBattle(battle, new FinishBattlePacket(nicknames, ROUND_FINISH_PAUSE_MS / 1000));
         // Lobby preview watchers: the running timer they see should reset.
         this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket(battle.battleId));
+
+        // Carried flags fall (CTF).
+        if (battle.settings.battleMode === BattleMode.CTF) {
+            for (const carrier of [battle.flagCarrierRed, battle.flagCarrierBlue]) {
+                if (carrier) this.dropFlag(carrier, battle, this.server.findClientByUsername(carrier.username)?.battlePosition ?? null);
+            }
+        }
+        // Active supply effects clear on every tank.
+        for (const c of battle.clients) {
+            if (!c.user) continue;
+            for (const e of c.activeEffects) this.broadcastToBattle(battle, new EffectStoppedPacket(c.user.username, e.itemIndex));
+            c.activeEffects = [];
+        }
+
         logger.info(`Round finished in battle ${battle.battleId}.`);
 
         battle.roundFinishTimer = setTimeout(() => this.restartRound(battle), ROUND_FINISH_PAUSE_MS);
@@ -827,6 +841,11 @@ export class BattleService {
     public prepareRespawn(client: GameClient): void {
         const { user, currentBattle: battle } = client;
         if (!user || !battle) return;
+
+        // During the round-finish freeze, hold the spawn — nobody (not even a player joining now) gets
+        // PrepareToSpawn until restartRound spawns everyone. restartRound clears roundFinishTimer first,
+        // so it isn't blocked by this guard.
+        if (battle.roundFinishTimer) return;
 
         const specs = ItemUtils.getTankSpecifications(user);
         battle.broadcast(new TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
