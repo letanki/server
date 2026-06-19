@@ -327,3 +327,62 @@ export class SuicidePacket extends BasePacket implements BattleTypes.ISuicidePac
     write(): Buffer { return new BufferWriter().getBuffer(); }
     static getId(): number { return 988664577; }
 }
+
+// --- Round lifecycle (decoded from log 2026-06-19_02-28) ---
+
+// S->C: set the round time remaining, in seconds. Sent at round start and restart.
+export class SetRoundTimePacket extends BasePacket {
+    constructor(private readonly seconds: number = 0) { super(); }
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer { return new BufferWriter().writeInt32BE(this.seconds).getBuffer(); }
+    static getId(): number { return 732434644; }
+}
+
+// (Team score = the existing SetCtfScorePacket, id 561771020 — reused on restart to reset to 0.)
+
+// S->C: round finished. Per the client model (decompiled): a Vector<reward> + an int "break
+// package in". Each reward entry = [i32 newbieAbonementBonus, i32 premiumBonus, i32 reward, optString
+// nick] (the per-user crystal reward breakdown — all 0 when there are no rewards). The trailing int
+// is the break/results-pause duration in seconds. Wire = i32 count + count×entry + i32 breakSeconds.
+export class FinishBattlePacket extends BasePacket {
+    constructor(private readonly nicknames: (string | null)[] = [], private readonly breakSeconds: number = 10) { super(); }
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer {
+        const w = new BufferWriter().writeInt32BE(this.nicknames.length);
+        for (const nick of this.nicknames) {
+            w.writeInt32BE(0).writeInt32BE(0).writeInt32BE(0).writeOptionalString(nick); // no rewards (0,0,0)
+        }
+        w.writeInt32BE(this.breakSeconds);
+        return w.getBuffer();
+    }
+    static getId(): number { return 560336625; }
+}
+
+// S->C: rebuild the battle scoreboard rosters on round restart (this is what reassigns players to
+// their new team in the Tab list). Per the client model: two Vector<entry> (field0 = RED, field1 =
+// BLUE). Each entry = [i32, i32, optString nick] (stats, 0 on a fresh round). Verified vs log.
+export class RestartRoundTeamPacket extends BasePacket {
+    constructor(private readonly red: (string | null)[] = [], private readonly blue: (string | null)[] = []) { super(); }
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer {
+        const w = new BufferWriter();
+        for (const team of [this.red, this.blue]) {
+            w.writeInt32BE(team.length);
+            for (const nick of team) w.writeInt32BE(0).writeInt32BE(0).writeOptionalString(nick);
+        }
+        return w.getBuffer();
+    }
+    static getId(): number { return -1668779175; }
+}
+
+// S->C: DM variant — one Vector<entry> (the full roster) rebuilt on round restart.
+export class RestartRoundDmPacket extends BasePacket {
+    constructor(private readonly users: (string | null)[] = []) { super(); }
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer {
+        const w = new BufferWriter().writeInt32BE(this.users.length);
+        for (const nick of this.users) w.writeInt32BE(0).writeInt32BE(0).writeOptionalString(nick);
+        return w.getBuffer();
+    }
+    static getId(): number { return 1061006142; }
+}

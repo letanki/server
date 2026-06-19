@@ -101,6 +101,10 @@ export class Battle {
     // auto-removed. emptyRemovalTimer counts down once a player-created battle becomes empty.
     public isSystem: boolean = false;
     public emptyRemovalTimer: NodeJS.Timeout | null = null;
+    // Round lifecycle: roundTimer fires at the time limit (-> finish); roundFinishTimer is the
+    // results pause before the round restarts.
+    public roundTimer: NodeJS.Timeout | null = null;
+    public roundFinishTimer: NodeJS.Timeout | null = null;
 
     /**
      * Live connections currently in this battle, maintained by GameClient's currentBattle setter

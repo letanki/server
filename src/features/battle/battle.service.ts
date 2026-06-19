@@ -13,7 +13,7 @@ import { mapSpawns } from "@/types/mapSpawns";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, KillPacket, RemoveTankPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, TakeFlagPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { CaptureFlagPacket, DamageIndicatorPacket, DestroyTankPacket, DropFlagPacket, FinishBattlePacket, KillPacket, PrepareToSpawnPacket, RemoveTankPacket, RestartRoundDmPacket, RestartRoundTeamPacket, ReturnFlagPacket, SetCtfScorePacket, SetHealthPacket, SetRoundTimePacket, TakeFlagPacket, TankSpecificationPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
 // Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
@@ -35,6 +35,7 @@ const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
 const KILL_SCORE = 10; // in-battle scoreboard points per kill (tune later)
 const KILL_XP = 10; // rank experience per kill (tune later)
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
+const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -142,6 +143,16 @@ export class BattleService {
         this._broadcastUserStat(battle, killerClient, killer);
 
         logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
+
+        // Kill-based score limit (DM = individual kills; team non-CTF = team's total kills).
+        const limit = battle.settings.scoreLimit;
+        if (limit > 0 && killer.id !== victim.id && battle.settings.battleMode !== BattleMode.CTF) {
+            const team = this._teamOf(battle, killer);
+            const teamKills = battle.isTeamMode()
+                ? [...battle.clients].filter((c) => c.user && this._teamOf(battle, c.user) === team).reduce((sum, c) => sum + c.kills, 0)
+                : killerClient.kills;
+            if (teamKills >= limit) this.finishRound(battle);
+        }
     }
 
     /** A death with no killer (self-destruct, void): +1 death on the scoreboard, no kill credit. */
@@ -229,6 +240,11 @@ export class BattleService {
         this.broadcastToBattle(battle, new SetCtfScorePacket(capturingTeamId, newScore));
 
         this._resetFlagState(battle, capturedFlagTeam);
+
+        // Score limit reached -> end the round.
+        if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
+            this.finishRound(battle);
+        }
     }
 
     /** Is there ANY collision (floor, wall, structure, anything solid) genuinely BETWEEN the tank
@@ -653,6 +669,7 @@ export class BattleService {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 1 && !battle.roundStarted) {
             battle.roundStarted = true;
             battle.roundStartTime = Date.now();
+            this._startRoundTimer(battle);
             logger.info(`Round started for battle ${battle.battleId}.`);
         }
 
@@ -696,12 +713,96 @@ export class BattleService {
             battle.roundStartTime = null;
             this._clearFlagReturnTimer(battle, "RED");
             this._clearFlagReturnTimer(battle, "BLUE");
+            if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
+            if (battle.roundFinishTimer) { clearTimeout(battle.roundFinishTimer); battle.roundFinishTimer = null; }
             logger.info(`Battle ${battle.battleId} is now empty. Round stopped and timer reset.`);
 
             this.scheduleEmptyRemoval(battle);
         }
 
         logger.info(`User ${user.username} removed from battle ${battle.battleId}`);
+    }
+
+    private _startRoundTimer(battle: Battle): void {
+        if (battle.roundTimer) clearTimeout(battle.roundTimer);
+        const limit = battle.settings.timeLimitInSec;
+        this.broadcastToBattle(battle, new SetRoundTimePacket(limit));
+        if (limit > 0) {
+            battle.roundTimer = setTimeout(() => this.finishRound(battle), limit * 1000);
+        }
+    }
+
+    /** End the round (time or score limit): broadcast final standings, then restart after the pause. */
+    public finishRound(battle: Battle): void {
+        if (battle.roundFinishTimer) return; // already finishing
+        if (battle.roundTimer) { clearTimeout(battle.roundTimer); battle.roundTimer = null; }
+
+        const nicknames = [...battle.clients].filter((c) => c.user && !c.isSpectator).map((c) => c.user!.username);
+        this.broadcastToBattle(battle, new FinishBattlePacket(nicknames, ROUND_FINISH_PAUSE_MS / 1000));
+        logger.info(`Round finished in battle ${battle.battleId}.`);
+
+        battle.roundFinishTimer = setTimeout(() => this.restartRound(battle), ROUND_FINISH_PAUSE_MS);
+    }
+
+    /** Restart a finished round: swap sides (team modes), reset scores/flags, respawn everyone, restart timer. */
+    public restartRound(battle: Battle): void {
+        battle.roundFinishTimer = null;
+        if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) return; // emptied during the pause
+
+        // Switch sides (team modes): swap the rosters, then re-send them so the client reassigns each
+        // player's team in the scoreboard (RestartRoundTeamPacket = field0 red, field1 blue).
+        if (battle.isTeamMode()) {
+            const red = battle.usersRed;
+            battle.usersRed = battle.usersBlue;
+            battle.usersBlue = red;
+        }
+
+        battle.scoreRed = 0;
+        battle.scoreBlue = 0;
+        const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
+        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
+
+        if (battle.settings.battleMode === BattleMode.CTF) {
+            this.returnFlagToBase(battle, "RED");
+            this.returnFlagToBase(battle, "BLUE");
+            this.broadcastToBattle(battle, new SetCtfScorePacket(0, 0));
+            this.broadcastToBattle(battle, new SetCtfScorePacket(1, 0));
+        }
+
+        // Rebuild the scoreboard rosters with reset stats + the new team assignment.
+        if (battle.isTeamMode()) {
+            this.broadcastToBattle(battle, new RestartRoundTeamPacket(battle.usersRed.map((u) => u.username), battle.usersBlue.map((u) => u.username)));
+        } else {
+            this.broadcastToBattle(battle, new RestartRoundDmPacket(battle.users.map((u) => u.username)));
+        }
+
+        for (const c of active) {
+            this.prepareRespawn(c); // -> client replies ReadyToPlace -> normal spawn finishes the placement
+        }
+
+        battle.roundStartTime = Date.now();
+        this._startRoundTimer(battle);
+        logger.info(`Round restarted in battle ${battle.battleId}.`);
+    }
+
+    /** Send a player into the spawn flow (spec + PrepareToSpawn). The client replies ReadyToPlace,
+     *  which the existing ReadyToPlaceHandler completes. Shared by the spawn handler and round restart. */
+    public prepareRespawn(client: GameClient): void {
+        const { user, currentBattle: battle } = client;
+        if (!user || !battle) return;
+
+        const specs = ItemUtils.getTankSpecifications(user);
+        battle.broadcast(new TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
+
+        let teamType: "DM" | "BLUE" | "RED" = "DM";
+        if (battle.isTeamMode()) {
+            if (battle.usersBlue.some((u) => u.id === user.id)) teamType = "BLUE";
+            if (battle.usersRed.some((u) => u.id === user.id)) teamType = "RED";
+        }
+        const spawnPoint = this.getSpawnPoint(battle, teamType);
+        const finalSpawnPosition = { x: spawnPoint.position.x, y: spawnPoint.position.y, z: spawnPoint.position.z + 200 };
+        client.pendingSpawnPoint = { position: finalSpawnPosition, rotation: spawnPoint.rotation };
+        client.sendPacket(new PrepareToSpawnPacket(finalSpawnPosition, spawnPoint.rotation));
     }
 
     public takeFlag(user: UserDocument, battle: Battle, flagTeam: "RED" | "BLUE"): void {

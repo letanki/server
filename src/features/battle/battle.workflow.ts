@@ -527,32 +527,26 @@ export class BattleWorkflow {
         const resourcesToLoad: ResourceId[] = [`turret/${turretId}/m${turretMod}/model` as ResourceId, `hull/${hullId}/m${hullMod}/model` as ResourceId, `paint/${paintId}/texture` as ResourceId];
         const depsPacket = new LoadDependencies({ resources: ResourceManager.getBulkResources(resourcesToLoad) }, callbackId);
 
+        // The client REBUILDS its whole score array from this list (each entry mapped through its
+        // local Dictionary), so it must contain EVERY player the receiver already knows — not just
+        // the joiner (sending only the joiner makes the receiver's own row vanish, leaving only the
+        // new name). Include only known players: finished joining (!isJoiningBattle) plus the joiner;
+        // this also drops disconnected ghosts and mid-join players (the 300-bot race) → avoids #1009.
+        const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter((p) => {
+            const c = server.findClientByUsername(p.username);
+            return c != null && (!c.isJoiningBattle || p.id === user.id);
+        });
+
         let userConnectPacket: IPacket;
         if (battle.isTeamMode()) {
-            // Team battles register the joiner in the existing players' team-stats model via
-            // the team variant (with a per-user team field); the DM variant crashes (#1009).
-            const team = battle.usersBlue.some((u) => u.id === user.id) ? 1 : 0;
-            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, [
-                { ChatModeratorLevel: user.chatModeratorLevel, deaths: 0, kills: 0, rank: user.rank, score: 0, nickname: user.username, team },
-            ]);
+            const usersInfoForPacket = allPlayersInBattleForConnectPacket.map((p) => ({
+                ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
+                team: battle.usersBlue.some((u) => u.id === p.id) ? 1 : 0,
+            }));
+            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, usersInfoForPacket);
         } else {
-            // The client rebuilds its WHOLE score array from this list, mapping each entry through
-            // its local Dictionary; any entry it hasn't registered yet becomes a null hole → #1009
-            // on the next lookup (e.g. InitTank). So include ONLY users the receiver already knows:
-            // players that finished joining (!isJoiningBattle) plus the joiner being announced here.
-            // This also excludes disconnected ghosts (offline → no client) and players still mid-join
-            // (in battle.users but whose own UserConnect hasn't been sent yet — the 300-bot race).
-            const allPlayersInBattleForConnectPacket = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter((p) => {
-                const c = server.findClientByUsername(p.username);
-                return c != null && (!c.isJoiningBattle || p.id === user.id);
-            });
             const usersInfoForPacket: IBattleUserInfo[] = allPlayersInBattleForConnectPacket.map((p) => ({
-                ChatModeratorLevel: p.chatModeratorLevel,
-                deaths: 0,
-                kills: 0,
-                rank: p.rank,
-                score: 0,
-                nickname: p.username,
+                ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
             }));
             userConnectPacket = new BattlePackets.UserConnectDMPacket(user.username, usersInfoForPacket);
         }
