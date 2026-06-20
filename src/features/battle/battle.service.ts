@@ -101,7 +101,6 @@ export class BattleService {
         if (currentBattle.roundState === BattleRoundState.FINISHED) return;
 
         this.ctf.checkFlagInteractions(client);
-        this.bonus.checkPickup(client);
 
         const geometries = mapGeometries[currentBattle.mapResourceId];
         if (!geometries) return;
@@ -327,6 +326,7 @@ export class BattleService {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 1 && !battle.roundStarted) {
             battle.roundStartTime = Date.now();
             this.round.startRoundTimer(battle); // -> RUNNING
+            this.bonus.startAutoSpawn(battle);
             logger.info(`Round started for battle ${battle.battleId}.`);
         }
 
@@ -368,6 +368,7 @@ export class BattleService {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) {
             battle.roundState = BattleRoundState.WAITING;
             battle.roundStartTime = null;
+            this.bonus.stopAutoSpawn(battle);
             this.ctf.clearReturnTimers(battle);
             battle.timers.clear("round");
             battle.timers.clear("finish");

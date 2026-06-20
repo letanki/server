@@ -42,3 +42,13 @@ export class TakeBonusPacket extends BasePacket {
     write(): Buffer { return writeSchema(this, TakeBonusPacket.schema); }
     static getId(): number { return -1291499147; }
 }
+
+// C->S: the client touched a bonus and requests to pick it up. Wire: optString id ("type#instance").
+// The client detects the collision (after the parachute lands the box), so the server just validates.
+export class TakeBonusCommandPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "id", type: "string" }];
+    id: string | null = null;
+    read(buffer: Buffer): void { readSchema(this, TakeBonusCommandPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, TakeBonusCommandPacket.schema); }
+    static getId(): number { return -1047185003; }
+}

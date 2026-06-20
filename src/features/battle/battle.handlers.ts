@@ -640,3 +640,14 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         startEffect(durationMs, () => sendSpec(baseSpecs));
     }
 }
+
+// C->S: the client touched a field bonus and asks to pick it up. BonusService validates + applies.
+export class TakeBonusCommandHandler implements IPacketHandler<BattlePackets.TakeBonusCommandPacket> {
+    public readonly packetId = BattlePackets.TakeBonusCommandPacket.getId();
+
+    public execute(client: GameClient, server: GameServer, packet: BattlePackets.TakeBonusCommandPacket): void {
+        const battle = client.currentBattle;
+        if (!battle || !packet.id) return;
+        server.battleService.bonus.takeBonus(client, battle, packet.id);
+    }
+}

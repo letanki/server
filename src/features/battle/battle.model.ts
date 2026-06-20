@@ -87,6 +87,8 @@ export interface IActiveBonus {
     position: IVector3;
     spawnedAt: number;
     lifeTimeMs: number;
+    /** Index into the map's bonus regions this drop came from (auto-spawn occupancy), if any. */
+    regionIndex?: number;
 }
 
 export class Battle {
