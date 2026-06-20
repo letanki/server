@@ -1,5 +1,6 @@
 import * as LobbyPackets from "@/features/lobby/lobby.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
+import { UpdateCrystals } from "@/features/profile/profile.packets";
 import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -51,10 +52,16 @@ export class RoundService {
         battle.roundState = BattleRoundState.FINISHED;
         battle.timers.clear("round");
 
-        const nicknames = [...battle.clients].filter((c) => c.user && !c.isSpectator).map((c) => c.user!.username);
-        battle.broadcast(new FinishBattlePacket(nicknames, ROUND_FINISH_PAUSE_MS / 1000));
+        // Crystal payout from the battle fund (team-first in team modes, then per player).
+        const players = [...battle.clients].filter((c) => c.user && !c.isSpectator);
+        const rewards = this._computeRewards(battle, players);
+
+        battle.broadcast(new FinishBattlePacket(rewards.map((r) => ({ nickname: r.nickname, reward: r.reward })), ROUND_FINISH_PAUSE_MS / 1000));
         // Lobby preview watchers: the running timer they see should reset.
         this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket(battle.battleId));
+
+        // Credit the earned crystals to each player's account (persist + refresh their balance).
+        void this._awardCrystals(rewards);
 
         // Carried flags fall (CTF).
         if (battle.settings.battleMode === BattleMode.CTF) {
@@ -178,6 +185,67 @@ export class RoundService {
     private _addFund(battle: Battle, amount: number): void {
         battle.fund += amount;
         battle.broadcast(new ChangeFundPacket(battle.fund));
+    }
+
+    /**
+     * Splits the battle fund into per-player crystal rewards. A player who scored nothing in the match
+     * gets nothing, regardless of outcome. DM: proportional to individual score. Team modes
+     * (TDM/CTF/AS/CP): the fund is split BETWEEN the teams first — proportional to the team score (flag
+     * captures in CTF, summed player score otherwise) — and each team's share is then split among its
+     * players by individual score. An empty team's (or all-zero-score team's) share is simply lost.
+     */
+    private _computeRewards(battle: Battle, players: GameClient[]): { client: GameClient; nickname: string; reward: number }[] {
+        const result = (rewardMap: Map<GameClient, number>) => players.map((c) => ({ client: c, nickname: c.user!.username, reward: rewardMap.get(c) ?? 0 }));
+        const fund = battle.fund;
+        if (fund <= 0 || players.length === 0) return result(new Map());
+
+        // Splits a pot among members proportional to individual score. Members who scored 0 get 0; if
+        // nobody in the group scored, the pot is lost (no even-split fallback — 0 score earns nothing).
+        const splitByScore = (members: GameClient[], pot: number): Map<GameClient, number> => {
+            const out = new Map<GameClient, number>();
+            const total = members.reduce((s, c) => s + Math.max(0, c.battleScore), 0);
+            if (pot <= 0 || total <= 0) return out;
+            for (const c of members) {
+                if (c.battleScore > 0) out.set(c, Math.floor((pot * c.battleScore) / total));
+            }
+            return out;
+        };
+
+        if (!battle.isTeamMode()) {
+            return result(splitByScore(players, fund));
+        }
+
+        // Team modes: team pot first (by team score), then within the team by individual score.
+        const isCtf = battle.settings.battleMode === BattleMode.CTF;
+        const red = players.filter((c) => battle.teamOf(c.user!) === 0);
+        const blue = players.filter((c) => battle.teamOf(c.user!) === 1);
+        const teamScore = (members: GameClient[], flagScore: number) =>
+            isCtf ? flagScore : members.reduce((s, c) => s + Math.max(0, c.battleScore), 0);
+        const redScore = teamScore(red, battle.scoreRed);
+        const blueScore = teamScore(blue, battle.scoreBlue);
+        const totalTeamScore = redScore + blueScore;
+
+        // Team pot is proportional to team score; if neither team scored, the fund is split evenly between
+        // the two teams (each team then still only pays out to players who actually scored).
+        const redPot = totalTeamScore > 0 ? Math.floor((fund * redScore) / totalTeamScore) : Math.floor(fund / 2);
+        const bluePot = totalTeamScore > 0 ? Math.floor((fund * blueScore) / totalTeamScore) : Math.floor(fund / 2);
+
+        return result(new Map<GameClient, number>([...splitByScore(red, redPot), ...splitByScore(blue, bluePot)]));
+    }
+
+    /** Persists each player's earned crystals and refreshes their displayed balance. */
+    private async _awardCrystals(rewards: { client: GameClient; reward: number }[]): Promise<void> {
+        for (const { client, reward } of rewards) {
+            if (reward <= 0 || !client.user) continue;
+            try {
+                const newTotal = client.user.crystals + reward;
+                const updated = await this.server.userService.updateResources(client.user.id, { crystals: newTotal });
+                client.user = updated;
+                client.sendPacket(new UpdateCrystals(updated.crystals));
+            } catch (error: any) {
+                logger.error(`Failed to award ${reward} crystals to ${client.user?.username}`, { error: error.message });
+            }
+        }
     }
 
     /** Lobby clients currently watching this battle's preview (battle-details panel). */

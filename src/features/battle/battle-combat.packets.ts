@@ -350,17 +350,23 @@ export class ChangeFundPacket extends BasePacket {
     static getId(): number { return 1149211509; }
 }
 
+export interface IFinishBattleReward {
+    nickname: string | null;
+    /** Crystals awarded to this player from the battle fund (shown on the results screen). */
+    reward: number;
+}
+
 // S->C: round finished. Per the client model (decompiled): a Vector<reward> + an int "break
 // package in". Each reward entry = [i32 newbieAbonementBonus, i32 premiumBonus, i32 reward, optString
-// nick] (the per-user crystal reward breakdown — all 0 when there are no rewards). The trailing int
-// is the break/results-pause duration in seconds. Wire = i32 count + count×entry + i32 breakSeconds.
+// nick] (the per-user crystal reward breakdown). The trailing int is the break/results-pause duration
+// in seconds. Wire = i32 count + count×entry + i32 breakSeconds.
 export class FinishBattlePacket extends BasePacket {
-    constructor(private readonly nicknames: (string | null)[] = [], private readonly breakSeconds: number = 10) { super(); }
+    constructor(private readonly rewards: IFinishBattleReward[] = [], private readonly breakSeconds: number = 10) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
-        const w = new BufferWriter().writeInt32BE(this.nicknames.length);
-        for (const nick of this.nicknames) {
-            w.writeInt32BE(0).writeInt32BE(0).writeInt32BE(0).writeOptionalString(nick); // no rewards (0,0,0)
+        const w = new BufferWriter().writeInt32BE(this.rewards.length);
+        for (const r of this.rewards) {
+            w.writeInt32BE(0).writeInt32BE(0).writeInt32BE(r.reward).writeOptionalString(r.nickname); // newbie/premium bonus = 0
         }
         w.writeInt32BE(this.breakSeconds);
         return w.getBuffer();

@@ -20,6 +20,7 @@ const FLAG_PICKUP_UP = 160;
 // forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
 const HULL_YAW_OFFSET = 0;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
+const CAPTURE_SCORE_PER_ENEMY = 10; // capturing a flag is worth this much per player on the enemy team
 const FLAG_RETURN_DELAY_MS = 30000; // a dropped flag auto-returns to base after this
 const FLAG_PICKUP_COOLDOWN_MS = 5000; // can't re-grab a flag you just dropped, for this long
 
@@ -56,14 +57,14 @@ export class CtfService {
                 this.returnFlagToBase(currentBattle, "RED", user);
             }
             if (currentBattle.flagCarrierBlue?.id === user.id && currentBattle.flagBasePositionRed && this._nearFlag(client, currentBattle.flagBasePositionRed)) {
-                this.captureFlag(user, currentBattle, "BLUE");
+                this.captureFlag(client, currentBattle, "BLUE");
             }
         } else if (isOnBlueTeam) {
             if (currentBattle.flagPositionBlue && currentBattle.flagBasePositionBlue && currentBattle.flagPositionBlue.x !== currentBattle.flagBasePositionBlue.x && this._nearFlag(client, currentBattle.flagPositionBlue)) {
                 this.returnFlagToBase(currentBattle, "BLUE", user);
             }
             if (currentBattle.flagCarrierRed?.id === user.id && currentBattle.flagBasePositionBlue && this._nearFlag(client, currentBattle.flagBasePositionBlue)) {
-                this.captureFlag(user, currentBattle, "RED");
+                this.captureFlag(client, currentBattle, "RED");
             }
         }
 
@@ -175,12 +176,22 @@ export class CtfService {
         battle.broadcast(new ReturnFlagPacket({ team: teamId, nickname }));
     }
 
-    public captureFlag(user: UserDocument, battle: Battle, capturedFlagTeam: "RED" | "BLUE"): void {
+    public captureFlag(client: GameClient, battle: Battle, capturedFlagTeam: "RED" | "BLUE"): void {
+        const user = client.user;
+        if (!user) return;
         const carrierProp = capturedFlagTeam === "RED" ? "flagCarrierRed" : "flagCarrierBlue";
         if (battle[carrierProp]?.id !== user.id) return;
 
         const capturingTeamId = capturedFlagTeam === "RED" ? 1 : 0;
         const capturingTeamName = capturingTeamId === 0 ? "RED" : "BLUE";
+
+        // Credit the capturer with battle score so captures count toward their individual share of the
+        // end-of-round crystal payout. A capture is worth CAPTURE_SCORE_PER_ENEMY per CONNECTED player on
+        // the enemy team (the team whose flag was captured) — e.g. 10 enemies => 100 points. Players who
+        // closed the game without leaving are no longer in battle.clients, so they don't count.
+        const enemyTeamId = capturedFlagTeam === "RED" ? 0 : 1;
+        const enemyCount = [...battle.clients].filter((c) => !c.isDestroyed && c.user && battle.teamOf(c.user) === enemyTeamId).length;
+        client.battleScore += CAPTURE_SCORE_PER_ENEMY * enemyCount;
 
         logger.info(`Team ${capturingTeamName} (${user.username}) captured the ${capturedFlagTeam} flag in battle ${battle.battleId}`);
 
