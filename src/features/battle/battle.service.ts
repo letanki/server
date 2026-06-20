@@ -13,6 +13,7 @@ import { CtfService } from "./ctf.service";
 import { RoundService } from "./round.service";
 import { BonusService } from "./bonus.service";
 import { SupplyService } from "./supply.service";
+import { MineService } from "./mine.service";
 import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
@@ -42,12 +43,14 @@ export class BattleService {
     private readonly round: RoundService;
     public readonly supply = new SupplyService();
     public readonly bonus: BonusService;
+    public readonly mine: MineService;
     private server: GameServer;
     private lobbyService: LobbyService;
 
     constructor(server: GameServer, lobbyService: LobbyService) {
         this.server = server;
         this.spawn = new SpawnService(server);
+        this.mine = new MineService(server, this.combat);
         this.bonus = new BonusService(server, this.supply);
         this.round = new RoundService(server, this.events, this.ctf, this.spawn, this.bonus);
         this.lobbyService = lobbyService;
@@ -103,6 +106,7 @@ export class BattleService {
         if (currentBattle.roundState === BattleRoundState.FINISHED) return;
 
         this.ctf.checkFlagInteractions(client);
+        this.mine.checkTriggers(client);
 
         const geometries = mapGeometries[currentBattle.mapResourceId];
         if (!geometries) return;
@@ -178,6 +182,7 @@ export class BattleService {
 
     public announceTankRemoval(user: UserDocument, battle: Battle, lastPosition: IVector3 | null): void {
         this.dropFlag(user, battle, lastPosition);
+        this.mine.removeMinesOf(battle, user.username);
 
         // Notify remaining players that this user left the battle (shown in the stats list),
         // then remove their tank object. Team modes (TDM/CTF/CP) use a different "left"

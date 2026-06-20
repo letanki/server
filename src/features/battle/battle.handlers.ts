@@ -593,11 +593,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (!user || !battle || !packet.itemId || client.battleState !== "active") return;
 
         const supplyId = packet.itemId;
-        if (!suppliesData.some((s) => s.id === supplyId)) return;
+        const supply = suppliesData.find((s) => s.id === supplyId);
+        if (!supply) return;
 
-        // Timed-buff supplies (the effect lifecycle lives in SupplyService). health (repair) and mine
-        // are handled elsewhere / not yet implemented.
-        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor") {
+        // Implemented: n2o/double_damage/armor (buffs) + mine. health (repair) not yet.
+        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor" && supplyId !== "mine") {
             logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
             return;
         }
@@ -606,6 +606,13 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (count <= 0) return;
         user.supplies.set(supplyId, count - 1);
         await user.save();
+
+        if (supplyId === "mine") {
+            server.battleService.mine.placeMine(client, battle);
+            const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
+            return;
+        }
 
         const cooldownMs = server.battleService.supply.applyEffect(client, battle, supplyId);
         client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));

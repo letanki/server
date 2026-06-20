@@ -81,6 +81,14 @@ export interface IDomPointState {
     tanksOnPoint: UserDocument[];
 }
 
+export interface IActiveMine {
+    id: string;
+    owner: string; // nickname
+    ownerTeam: number; // teamOf the owner at placement (0 red, 1 blue, 2 none/DM)
+    position: IVector3;
+    armed: boolean; // only armed mines trigger (armed ~1s after placement)
+}
+
 export interface IActiveBonus {
     id: string;
     type: string;
@@ -118,6 +126,9 @@ export class Battle {
     /** Active drops on the field, keyed by bonus id ("type#instance"). Managed by BonusService. */
     public readonly activeBonuses = new Map<string, IActiveBonus>();
     public bonusCounter: number = 0;
+    /** Active mines on the field, keyed by mine id. Managed by MineService. */
+    public readonly activeMines = new Map<string, IActiveMine>();
+    public mineCounter: number = 0;
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
     // auto-removed.
     public isSystem: boolean = false;

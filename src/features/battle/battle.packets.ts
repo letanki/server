@@ -6,3 +6,4 @@ export * from "./battle-combat.packets";
 export * from "./battle-flow.packets";
 export * from "./battle-flags.packets";
 export * from "./battle-bonus.packets";
+export * from "./battle-mine.packets";
