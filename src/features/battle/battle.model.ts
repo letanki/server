@@ -5,8 +5,8 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ResourceId } from "@/types/resourceTypes";
 import { ResourceManager } from "@/utils/resource.manager";
-import { BattleTimers } from "./battle-timers";
 import * as crypto from "crypto";
+import { BattleTimers } from "./battle-timers";
 
 /** Round lifecycle: WAITING (no players yet / emptied), RUNNING (live), FINISHED (results pause). */
 export enum BattleRoundState {
