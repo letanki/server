@@ -1,3 +1,4 @@
+import { getBonusData } from "@/config/bonus.data";
 import { UpdateCrystals } from "@/features/profile/profile.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -7,7 +8,19 @@ import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { RemoveBonusPacket, SetHealthPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
 
-const BONUS_LIFETIME_MS = 30000; // a dropped bonus auto-disappears after this if not picked up
+const BONUS_FALLBACK_LIFETIME_MS = 30000; // used if a type has no lifeTimeMs in getBonusData
+// Extra time the server keeps the box AFTER its disappear time, so the client's final fade-out blink
+// plays smoothly before the box is actually removed.
+const BONUS_BLINK_GRACE_MS = 1000;
+
+// Per-type lifeTimeMs from getBonusData — the SAME value sent to the client in packet 228171466. It
+// already accounts for the blink, so the server removes the box exactly at this time. Built lazily
+// (getBonusData touches the ResourceManager, which isn't ready at import time).
+let bonusLifetimes: Map<string, number> | null = null;
+function lifeTimeFor(type: string): number {
+    if (!bonusLifetimes) bonusLifetimes = new Map(getBonusData().bonuses.map((b) => [b.id, b.lifeTimeMs]));
+    return bonusLifetimes.get(type) ?? BONUS_FALLBACK_LIFETIME_MS;
+}
 // The CLIENT detects the actual touch (it simulates the parachute fall) and sends TakeBonusCommand;
 // the server only sanity-checks horizontal (x,y) distance, generously, against grossly-wrong claims.
 const BONUS_PICKUP_SAFETY_RADIUS = 800;
@@ -78,15 +91,17 @@ export class BonusService {
         // A random point anywhere inside the region's min/max box — including z (no ground raycast).
         const rand = (a: number, b: number) => a + Math.random() * (b - a);
         const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
-        this.spawnBonus(battle, type, position, BONUS_LIFETIME_MS, regionIndex);
+        this.spawnBonus(battle, type, position, regionIndex);
     }
 
-    /** Drops a bonus of `type` at `position`; broadcasts it and arms its auto-disappear timer. */
-    public spawnBonus(battle: Battle, type: string, position: IVector3, lifeTimeMs = BONUS_LIFETIME_MS, regionIndex?: number): string {
+    /** Drops a bonus of `type` at `position`. The per-type lifeTimeMs from getBonusData (sent to the
+     *  client as disappearingTimeMs, blink included) is when the box disappears; the server removes it then. */
+    public spawnBonus(battle: Battle, type: string, position: IVector3, regionIndex?: number): string {
+        const lifeTimeMs = lifeTimeFor(type);
         const id = `${type}#${++battle.bonusCounter}`;
         battle.activeBonuses.set(id, { id, type, position, spawnedAt: Date.now(), lifeTimeMs, regionIndex });
         battle.broadcast(new SpawnBonusPacket({ id, position, disappearingTimeMs: lifeTimeMs }));
-        battle.timers.set(`bonus:${id}`, lifeTimeMs, () => this.removeBonus(battle, id));
+        battle.timers.set(`bonus:${id}`, lifeTimeMs + BONUS_BLINK_GRACE_MS, () => this.removeBonus(battle, id));
         logger.info(`Bonus ${id} spawned in battle ${battle.battleId} at (${position.x | 0},${position.y | 0},${position.z | 0})`);
         return id;
     }
