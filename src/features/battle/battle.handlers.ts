@@ -9,7 +9,6 @@ import { GameServer } from "@/server/game.server";
 import { IPacket } from "@/packets/packet.interfaces";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { UserDocument } from "@/shared/models/user.model";
-import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import * as BattlePackets from "./battle.packets";
@@ -594,11 +593,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (!user || !battle || !packet.itemId || client.battleState !== "active") return;
 
         const supplyId = packet.itemId;
-        const supply = suppliesData.find((s) => s.id === supplyId);
-        if (!supply) return;
+        if (!suppliesData.some((s) => s.id === supplyId)) return;
 
-        // Implemented one at a time.
-        if (supplyId !== "n2o") {
+        // Timed-buff supplies (the effect lifecycle lives in SupplyService). health (repair) and mine
+        // are handled elsewhere / not yet implemented.
+        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor") {
             logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
             return;
         }
@@ -608,36 +607,8 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         user.supplies.set(supplyId, count - 1);
         await user.save();
 
-        // Broadcasts EffectStarted, tracks the effect for join-replay (InitEffects), and schedules
-        // EffectStopped at the end. `onEnd` runs at expiry (e.g. nitro reverts its spec there).
-        const startEffect = (durationMs: number, onEnd?: () => void) => {
-            const endAt = Date.now() + durationMs;
-            client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
-            client.activeEffects.push({ itemIndex: supply.slotId, durationTime: durationMs, endAt });
-            battle.broadcast(new BattlePackets.EffectStartedPacket(user.username, supply.slotId, durationMs, 0));
-            setTimeout(() => {
-                if (client.isDestroyed) return;
-                const cur = client.activeEffects.find((e) => e.itemIndex === supply.slotId);
-                if (cur && cur.endAt !== endAt) return; // superseded by a re-activation
-                client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== supply.slotId);
-                if (client.currentBattle !== battle || client.battleState !== "active") return;
-                battle.broadcast(new BattlePackets.EffectStoppedPacket(user.username, supply.slotId));
-                onEnd?.();
-            }, durationMs);
-        };
-
-        // Nitro: cooldown (effectTime+restSec)*1000 = 75000, effect 60000. The boost is real
-        // only because the server resends TankSpecificationPacket with a higher speed.
-        const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
-        const durationMs = supply.itemEffectTime * 1000;
-        const baseSpecs = ItemUtils.getTankSpecifications(user);
-        const sendSpec = (specs: typeof baseSpecs) => battle.broadcast(new BattlePackets.TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
-
-        // Boosted spec FIRST (speed x1.3: 12.0->15.6, acceleration +0.5: 11.33->11.83), then the
-        // activation confirm, then the effect. Revert the base spec when it ends.
-        sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
+        const cooldownMs = server.battleService.supply.applyEffect(client, battle, supplyId);
         client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
-        startEffect(durationMs, () => sendSpec(baseSpecs));
     }
 }
 

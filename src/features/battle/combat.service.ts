@@ -5,6 +5,7 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleRoundState } from "./battle.model";
+import { SUPPLY_SLOT, SupplyService } from "./supply.service";
 import { BattleEvents } from "./battle-events";
 import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
 
@@ -29,6 +30,10 @@ export class CombatService {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
+
+        // Supply/bonus multipliers: shooter's Double Damage doubles output, target's Double Armor halves it.
+        if (SupplyService.hasEffect(shooterClient, SUPPLY_SLOT.DOUBLE_DAMAGE)) realDamage *= 2;
+        if (SupplyService.hasEffect(targetClient, SUPPLY_SLOT.ARMOR)) realDamage *= 0.5;
 
         const hullHP = ItemUtils.getHullArmor(targetUser);
         targetClient.currentHealth -= (realDamage * 10000) / hullHP;

@@ -6,6 +6,7 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { bonusRegions, IBonusRegion } from "@/types/bonusRegions";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
+import { SupplyService } from "./supply.service";
 import { RemoveBonusPacket, SetHealthPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
 
 const BONUS_FALLBACK_LIFETIME_MS = 30000; // used if a type has no lifeTimeMs in getBonusData
@@ -55,8 +56,15 @@ const MODE_TOKEN: Record<BattleMode, string> = {
  * the client received in BonusDataPacket. Spawn/remove/take are broadcast to the whole battle; per-drop
  * lifetimes and the spawn loop use battle.timers. Pickup effects (crystals/heal) are applied here.
  */
+// Maps a supply-buff bonus type to the supply id whose effect it triggers (no inventory cost).
+const BONUS_SUPPLY_MAP: Record<string, string> = {
+    nitro: "n2o",
+    damage: "double_damage",
+    armor: "armor",
+};
+
 export class BonusService {
-    constructor(private readonly server: GameServer) {}
+    constructor(private readonly server: GameServer, private readonly supply: SupplyService) {}
 
     /** Starts the per-battle auto-spawn loop (drops bonuses at the map's bonus regions over time). */
     public startAutoSpawn(battle: Battle): void {
@@ -175,8 +183,13 @@ export class BonusService {
             return;
         }
 
-        // nitro / damage / armor (supply buffs) — pickup works; gameplay effect to be added later
-        // (needs the supply-effect logic extracted from ActivateSupplyHandler so it can be reused).
-        logger.info(`${user.username} picked up bonus type "${type}" (supply effect not yet implemented)`);
+        // nitro / damage / armor: trigger the matching supply effect for free (no inventory cost).
+        const supplyId = BONUS_SUPPLY_MAP[type];
+        if (supplyId) {
+            this.supply.applyEffect(client, battle, supplyId);
+            return;
+        }
+
+        logger.info(`${user.username} picked up bonus type "${type}" (no effect mapped)`);
     }
 }
