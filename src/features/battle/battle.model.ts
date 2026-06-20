@@ -92,6 +92,8 @@ export class Battle {
     public spectators: UserDocument[] = [];
     public scoreBlue: number = 0;
     public scoreRed: number = 0;
+    /** Battle fund: the crystal pool shown in the stats panel; grows on kills/captures, reset each round. */
+    public fund: number = 0;
     public roundState: BattleRoundState = BattleRoundState.WAITING;
     public roundStartTime: number | null = null;
     public flagBasePositionBlue: IVector3 | null = null;

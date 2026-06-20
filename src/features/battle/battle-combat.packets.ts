@@ -340,6 +340,16 @@ export class SetRoundTimePacket extends BasePacket {
 
 // (Team score = the existing SetCtfScorePacket, id 561771020 — reused on restart to reset to 0.)
 
+// S->C: the battle fund (crystal pool shown in the stats panel). Single i32 = the new TOTAL fund
+// (cumulative, not a delta), per the decompiled client (battle-stats handler case 1149211509 ->
+// statsPanel.setFund(int)). Sent whenever the fund grows; resets to 0 on round restart.
+export class ChangeFundPacket extends BasePacket {
+    constructor(private readonly fund: number = 0) { super(); }
+    read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
+    write(): Buffer { return new BufferWriter().writeInt32BE(this.fund).getBuffer(); }
+    static getId(): number { return 1149211509; }
+}
+
 // S->C: round finished. Per the client model (decompiled): a Vector<reward> + an int "break
 // package in". Each reward entry = [i32 newbieAbonementBonus, i32 premiumBonus, i32 reward, optString
 // nick] (the per-user crystal reward breakdown — all 0 when there are no rewards). The trailing int

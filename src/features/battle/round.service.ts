@@ -8,9 +8,11 @@ import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { BattleEvents, BattleEventMap } from "./battle-events";
 import { CtfService } from "./ctf.service";
 import { SpawnService } from "./spawn.service";
-import { EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
+import { ChangeFundPacket, EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
 
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
+const FUND_PER_KILL = 1; // crystals added to the battle fund per kill
+const FUND_PER_FLAG = 10; // crystals added to the battle fund per flag capture
 
 /**
  * Round lifecycle: the per-round time/score limits, the finish→pause→restart cycle (side switch,
@@ -91,6 +93,8 @@ export class RoundService {
 
         battle.scoreRed = 0;
         battle.scoreBlue = 0;
+        battle.fund = 0;
+        battle.broadcast(new ChangeFundPacket(0));
         const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
         for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
 
@@ -142,6 +146,7 @@ export class RoundService {
         // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
         if (killer.id !== victim.id) {
             this._sendToWatchers(battle, new LobbyPackets.UpdateUserScorePacket(battle.battleId, killer.username, killerClient.battleScore));
+            this._addFund(battle, FUND_PER_KILL);
         }
 
         // Kill-based score limit (DM = individual kills; team non-CTF = team's total kills).
@@ -162,10 +167,17 @@ export class RoundService {
     private _onFlagCaptured({ battle, capturingTeamId, newScore }: BattleEventMap["flagCaptured"]): void {
         // Lobby preview watchers see the team score rise.
         this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, capturingTeamId, newScore));
+        this._addFund(battle, FUND_PER_FLAG);
         // Score limit reached -> end the round.
         if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
             this.finishRound(battle);
         }
+    }
+
+    /** Adds to the battle fund (crystal pool) and broadcasts the new total to everyone in the battle. */
+    private _addFund(battle: Battle, amount: number): void {
+        battle.fund += amount;
+        battle.broadcast(new ChangeFundPacket(battle.fund));
     }
 
     /** Lobby clients currently watching this battle's preview (battle-details panel). */

@@ -380,7 +380,7 @@ export class BattleWorkflow {
         const battleStatsData = {
             battleMode: settings.battleMode,
             equipmentConstraintsMode: settings.equipmentConstraintsMode,
-            fund: 0,
+            fund: battle.fund,
             scoreLimit: settings.scoreLimit,
             timeLimitInSec: settings.timeLimitInSec,
             mapName: settings.name,
