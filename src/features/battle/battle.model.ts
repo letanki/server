@@ -81,6 +81,14 @@ export interface IDomPointState {
     tanksOnPoint: UserDocument[];
 }
 
+export interface IActiveBonus {
+    id: string;
+    type: string;
+    position: IVector3;
+    spawnedAt: number;
+    lifeTimeMs: number;
+}
+
 export class Battle {
     public readonly battleId: string;
     public readonly settings: IBattleCreationSettings;
@@ -105,6 +113,9 @@ export class Battle {
     public flagLastDroppedByRed: { userId: string; timestamp: number } | null = null;
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
     public domPoints: IDomPointState[] = [];
+    /** Active drops on the field, keyed by bonus id ("type#instance"). Managed by BonusService. */
+    public readonly activeBonuses = new Map<string, IActiveBonus>();
+    public bonusCounter: number = 0;
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
     // auto-removed.
     public isSystem: boolean = false;

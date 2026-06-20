@@ -11,6 +11,7 @@ import { BattleEvents } from "./battle-events";
 import { CombatService } from "./combat.service";
 import { CtfService } from "./ctf.service";
 import { RoundService } from "./round.service";
+import { BonusService } from "./bonus.service";
 import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
@@ -38,6 +39,7 @@ export class BattleService {
     private readonly ctf = new CtfService(this.events, this.collision);
     private readonly spawn: SpawnService;
     private readonly round: RoundService;
+    public readonly bonus: BonusService;
     private server: GameServer;
     private lobbyService: LobbyService;
 
@@ -45,6 +47,7 @@ export class BattleService {
         this.server = server;
         this.spawn = new SpawnService(server);
         this.round = new RoundService(server, this.events, this.ctf, this.spawn);
+        this.bonus = new BonusService(server);
         this.lobbyService = lobbyService;
     }
 
@@ -98,6 +101,7 @@ export class BattleService {
         if (currentBattle.roundState === BattleRoundState.FINISHED) return;
 
         this.ctf.checkFlagInteractions(client);
+        this.bonus.checkPickup(client);
 
         const geometries = mapGeometries[currentBattle.mapResourceId];
         if (!geometries) return;

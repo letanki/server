@@ -630,7 +630,8 @@ export class BattleWorkflow {
             bonusRegionData: [],
         });
         client.sendPacket(bonusRegionsPacket);
-        client.sendPacket(new BattlePackets.InitBonusesPacket("[]"));
+        const activeBonuses = [...battle.activeBonuses.values()].map((b) => ({ id: b.id, position: b.position, timeFromAppearing: Date.now() - b.spawnedAt }));
+        client.sendPacket(new BattlePackets.InitBonusesPacket(JSON.stringify(activeBonuses)));
         client.sendPacket(new ConfirmLayoutChange(3, 3));
         client.isJoiningBattle = false;
     }
