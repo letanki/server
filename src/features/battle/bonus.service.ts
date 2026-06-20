@@ -8,9 +8,6 @@ import { RemoveBonusPacket, SetHealthPacket, SpawnBonusPacket, TakeBonusPacket }
 
 const BONUS_LIFETIME_MS = 30000; // a dropped bonus auto-disappears after this if not picked up
 const BONUS_PICKUP_RADIUS = 250; // how close a tank must be to grab a bonus (world units)
-// Crystals granted by crystal-type drops.
-const CRYSTAL_BONUS_AMOUNT = 30;
-const GOLD_BONUS_AMOUNT = 1000;
 
 /**
  * Field drops (bonuses): spawn → live for a while → auto-remove or get picked up. The bonus id is
@@ -59,19 +56,30 @@ export class BonusService {
         void this._applyEffect(client, battle, type);
     }
 
+    /** Crystals granted by each crystal-type drop ("special" is randomized at pickup time). */
+    private _crystalAmount(type: string): number | null {
+        switch (type) {
+            case "crystall": return 10;
+            case "gold": return 1000;
+            case "moon": return 3000;
+            case "special": return 1000 + Math.floor(Math.random() * 1001); // 1000..2000
+            default: return null;
+        }
+    }
+
     /** Applies a picked-up bonus's effect. Crystals are persisted; health restores HP. */
     private async _applyEffect(client: GameClient, battle: Battle, type: string): Promise<void> {
         const user = client.user;
         if (!user) return;
 
-        if (type === "crystall" || type === "gold") {
-            const amount = type === "gold" ? GOLD_BONUS_AMOUNT : CRYSTAL_BONUS_AMOUNT;
+        const crystals = this._crystalAmount(type);
+        if (crystals !== null) {
             try {
-                const updated = await this.server.userService.updateResources(user.id, { crystals: user.crystals + amount });
+                const updated = await this.server.userService.updateResources(user.id, { crystals: user.crystals + crystals });
                 client.user = updated;
                 client.sendPacket(new UpdateCrystals(updated.crystals));
             } catch (error: any) {
-                logger.error(`Failed to grant ${amount} crystals from bonus to ${user.username}`, { error: error.message });
+                logger.error(`Failed to grant ${crystals} crystals from bonus to ${user.username}`, { error: error.message });
             }
             return;
         }
@@ -82,7 +90,8 @@ export class BonusService {
             return;
         }
 
-        // nitro / damage / armor (supply buffs) — pickup works; gameplay effect to be added later.
-        logger.info(`${user.username} picked up bonus type "${type}" (effect not yet implemented)`);
+        // nitro / damage / armor (supply buffs) — pickup works; gameplay effect to be added later
+        // (needs the supply-effect logic extracted from ActivateSupplyHandler so it can be reused).
+        logger.info(`${user.username} picked up bonus type "${type}" (supply effect not yet implemented)`);
     }
 }
