@@ -67,6 +67,11 @@ export class BonusService {
     /** Stops the auto-spawn loop and clears every active drop. */
     public stopAutoSpawn(battle: Battle): void {
         battle.timers.clear("bonusSpawn");
+        this.clearAll(battle);
+    }
+
+    /** Removes every active drop (e.g. on round restart) without stopping the auto-spawn loop. */
+    public clearAll(battle: Battle): void {
         for (const id of [...battle.activeBonuses.keys()]) this.removeBonus(battle, id);
     }
 

@@ -46,8 +46,8 @@ export class BattleService {
     constructor(server: GameServer, lobbyService: LobbyService) {
         this.server = server;
         this.spawn = new SpawnService(server);
-        this.round = new RoundService(server, this.events, this.ctf, this.spawn);
         this.bonus = new BonusService(server);
+        this.round = new RoundService(server, this.events, this.ctf, this.spawn, this.bonus);
         this.lobbyService = lobbyService;
     }
 

@@ -7,6 +7,7 @@ import { GameServer } from "@/server/game.server";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { BattleEvents, BattleEventMap } from "./battle-events";
+import { BonusService } from "./bonus.service";
 import { CtfService } from "./ctf.service";
 import { SpawnService } from "./spawn.service";
 import { ChangeFundPacket, EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
@@ -28,6 +29,7 @@ export class RoundService {
         private readonly events: BattleEvents,
         private readonly ctf: CtfService,
         private readonly spawn: SpawnService,
+        private readonly bonus: BonusService,
     ) {
         this.events.on("kill", (p) => this._onKill(p));
         this.events.on("flagCaptured", (p) => this._onFlagCaptured(p));
@@ -102,6 +104,7 @@ export class RoundService {
         battle.scoreBlue = 0;
         battle.fund = 0;
         battle.broadcast(new ChangeFundPacket(0));
+        this.bonus.clearAll(battle); // fresh round starts with no leftover drops
         const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
         for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
 
