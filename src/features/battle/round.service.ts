@@ -91,6 +91,7 @@ export class RoundService {
         // guard (combat/spawn gate on roundState === FINISHED). startRoundTimer re-affirms RUNNING.
         battle.timers.clear("finish");
         battle.roundState = BattleRoundState.RUNNING;
+        this.events.emit("roundRestarted", { battle }); // modes (e.g. domination) reset their own state
 
         // Switch sides (team modes): swap the rosters, then re-send them so the client reassigns each
         // player's team in the scoreboard (RestartRoundTeamPacket = field0 red, field1 blue).
@@ -159,9 +160,10 @@ export class RoundService {
             this._addFund(battle, FUND_PER_KILL);
         }
 
-        // Kill-based score limit (DM = individual kills; team non-CTF = team's total kills).
+        // Kill-based score limit (DM = individual kills; TDM = team's total kills). CTF (flags) and CP
+        // (control-point time) have their own scoring, so kills don't count toward their limit.
         const limit = battle.settings.scoreLimit;
-        if (killer.id !== victim.id && battle.settings.battleMode !== BattleMode.CTF) {
+        if (killer.id !== victim.id && battle.settings.battleMode !== BattleMode.CTF && battle.settings.battleMode !== BattleMode.CP) {
             const team = battle.teamOf(killer);
             const teamKills = battle.isTeamMode()
                 ? [...battle.clients].filter((c) => c.user && battle.teamOf(c.user) === team).reduce((sum, c) => sum + c.kills, 0)

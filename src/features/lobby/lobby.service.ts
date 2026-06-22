@@ -79,8 +79,10 @@ export class LobbyService {
                         id: index,
                         name: kp.name,
                         position: kp.position,
-                        state: 2,
+                        radius: kp.radius,
+                        state: 2 as const,
                         score: 0,
+                        scoreChangeRate: 0,
                         tanksOnPoint: [],
                     }));
                 } else {

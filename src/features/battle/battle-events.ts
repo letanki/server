@@ -14,6 +14,8 @@ export interface BattleEventMap {
     kill: { battle: Battle; killerClient: GameClient; victimClient: GameClient };
     /** A CTF flag was captured. Emitted by CTF AFTER the flag score broadcast. */
     flagCaptured: { battle: Battle; capturingTeamId: number; newScore: number };
+    /** A finished round restarted. Emitted by the round service so modes can reset their own state. */
+    roundRestarted: { battle: Battle };
 }
 
 export class BattleEvents {

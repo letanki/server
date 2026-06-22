@@ -76,8 +76,10 @@ export interface IDomPointState {
     id: number;
     name: string;
     position: IVector3;
-    state: 0 | 1 | 2; // 0: Red, 1: Blue, 2: Neutral
-    score: number;
+    radius: number; // capture radius (the keypoint's `distance`)
+    state: 0 | 1 | 2; // 0: Red, 1: Blue, 2: Neutral (owner; persists until the meter crosses 0)
+    score: number; // SIGNED capture meter: -100 = red, 0 = neutral, +100 = blue
+    scoreChangeRate: number; // last broadcast change-per-second (client extrapolates from this)
     tanksOnPoint: UserDocument[];
 }
 

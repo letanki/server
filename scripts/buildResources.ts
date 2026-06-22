@@ -49,6 +49,7 @@ interface ICtfFlags {
 
 interface IDomKeypoint {
   name: string;
+  radius: number;
   position: IVector3;
 }
 
@@ -302,6 +303,7 @@ function extractDomKeypoints(parsedMap: any, mapResource: ResourceDefinition): I
       }
       return {
         name: kpData.$.name,
+        radius: parseFloat(kpData.$.distance ?? "0"),
         position: { x: parseFloat(pos.x?.[0] ?? "0"), y: parseFloat(pos.y?.[0] ?? "0"), z: parseFloat(pos.z?.[0] ?? "0") },
       };
     })
@@ -340,7 +342,7 @@ async function generateCtfFlagsFile(allFlags: { [key: string]: ICtfFlags }): Pro
 async function generateDomKeypointsFile(allKeypoints: { [key: string]: IDomKeypoint[] }): Promise<void> {
   let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
   content += `interface IVector3 { x: number; y: number; z: number; }\n`;
-  content += `export interface IDomKeypoint { name: string; position: IVector3; }\n\n`;
+  content += `export interface IDomKeypoint { name: string; radius: number; position: IVector3; }\n\n`;
   content += `export const mapDomKeypoints: { [key: string]: IDomKeypoint[] } = ${JSON.stringify(allKeypoints, null, 4)};\n`;
 
   await fs.promises.writeFile(path.join(TYPES_DIR, "mapDomKeypoints.ts"), content);
