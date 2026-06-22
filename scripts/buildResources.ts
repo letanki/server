@@ -395,6 +395,7 @@ async function build() {
 
   await rimraf(RESOURCE_BUILD_DIR);
   await fs.promises.mkdir(RESOURCE_BUILD_DIR, { recursive: true });
+  await fs.promises.mkdir(TYPES_DIR, { recursive: true }); // src/types is generated; ensure it exists
 
   console.log("Discovering resources from 'resources' directory...");
   const resources = await findResources(RESOURCES_DIR);
