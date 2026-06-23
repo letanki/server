@@ -14,6 +14,8 @@ export interface BattleEventMap {
     kill: { battle: Battle; killerClient: GameClient; victimClient: GameClient };
     /** A CTF flag was captured. Emitted by CTF AFTER the flag score broadcast. */
     flagCaptured: { battle: Battle; capturingTeamId: number; newScore: number };
+    /** A tank was destroyed by ANY cause (combat kill, suicide, void). For cleanup (mines, points). */
+    tankDestroyed: { battle: Battle; client: GameClient };
     /** A finished round restarted. Emitted by the round service so modes can reset their own state. */
     roundRestarted: { battle: Battle };
 }

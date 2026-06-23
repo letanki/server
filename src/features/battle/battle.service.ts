@@ -52,7 +52,7 @@ export class BattleService {
     constructor(server: GameServer, lobbyService: LobbyService) {
         this.server = server;
         this.spawn = new SpawnService(server);
-        this.mine = new MineService(server, this.combat);
+        this.mine = new MineService(server, this.combat, this.events);
         this.bonus = new BonusService(server, this.supply);
         this.round = new RoundService(server, this.events, this.ctf, this.spawn, this.bonus);
         this.domination = new DominationService(server, this.round, this.events);

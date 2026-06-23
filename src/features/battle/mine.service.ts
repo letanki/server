@@ -2,6 +2,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
+import { BattleEvents } from "./battle-events";
 import { CombatService } from "./combat.service";
 import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
@@ -15,7 +16,12 @@ const MINE_DAMAGE = 800; // damage dealt to the tank that steps on it (garage HP
  * enemies' mines until they activate). Constructed with the server + CombatService for the explosion.
  */
 export class MineService {
-    constructor(private readonly server: GameServer, private readonly combat: CombatService) {}
+    constructor(private readonly server: GameServer, private readonly combat: CombatService, events: BattleEvents) {
+        // When a tank is destroyed (any cause), its mines are deactivated/removed.
+        events.on("tankDestroyed", ({ battle, client }) => {
+            if (client.user) this.removeMinesOf(battle, client.user.username);
+        });
+    }
 
     /** Drops a mine at the caller's current position (Mine supply activation). */
     public placeMine(client: GameClient, battle: Battle): void {

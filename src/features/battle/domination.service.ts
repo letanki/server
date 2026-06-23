@@ -23,6 +23,9 @@ const STATE_NEUTRAL = 2;
 export class DominationService {
     constructor(private readonly server: GameServer, private readonly round: RoundService, events: BattleEvents) {
         events.on("roundRestarted", ({ battle }) => this.resetRound(battle));
+        events.on("tankDestroyed", ({ battle, client }) => {
+            if (client.user) this.removeTankFromPoints(battle, client.user.username);
+        });
     }
 
     /** Starts the per-battle capture + team-scoring loops (CP battles only). */

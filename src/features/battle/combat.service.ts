@@ -75,6 +75,7 @@ export class CombatService {
         if (!client.user) return;
         client.deaths++;
         this._broadcastUserStat(battle, client, client.user);
+        this.events.emit("tankDestroyed", { battle, client });
     }
 
     private async _handleKill(battle: Battle, killerClient: GameClient, victimClient: GameClient): Promise<void> {
@@ -106,6 +107,7 @@ export class CombatService {
         // Cross-cutting reactions — flag drop (CTF), lobby preview, kill-based score limit — are
         // decoupled via the bus, so combat doesn't call CTF/round directly.
         this.events.emit("kill", { battle, killerClient, victimClient });
+        this.events.emit("tankDestroyed", { battle, client: victimClient });
     }
 
     /** Broadcasts a player's kills/deaths/score using the DM or team scoreboard packet for the mode. */
