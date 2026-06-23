@@ -21,6 +21,20 @@ export class MineService {
         events.on("tankDestroyed", ({ battle, client }) => {
             if (client.user) this.removeMinesOf(battle, client.user.username);
         });
+        // On round restart, wipe every mine — the client clears its visuals, so leftover server-side
+        // mines would keep detonating invisibly on the new round.
+        events.on("roundRestarted", ({ battle }) => this.clearAll(battle));
+    }
+
+    /** Removes every mine in the battle (e.g. on round restart). */
+    public clearAll(battle: Battle): void {
+        const owners = new Set<string>();
+        for (const [id, mine] of battle.activeMines) {
+            battle.timers.clear(`mineArm:${id}`);
+            owners.add(mine.owner);
+        }
+        battle.activeMines.clear();
+        for (const owner of owners) battle.broadcast(new RemoveMinesPacket(owner));
     }
 
     /** Drops a mine at the caller's current position (Mine supply activation). */
