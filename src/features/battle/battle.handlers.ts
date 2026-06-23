@@ -8,7 +8,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacket } from "@/packets/packet.interfaces";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
-import { UserDocument } from "@/shared/models/user.model";
+import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import * as BattlePackets from "./battle.packets";
@@ -604,8 +604,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
 
         const count = user.supplies.get(supplyId) ?? 0;
         if (count <= 0) return;
+        // Decrement in memory synchronously (so back-to-back activations see the new count) and persist
+        // with an atomic $inc instead of user.save(). A full save() on the same Mongoose document from
+        // concurrent activations (e.g. rapid parkour mine drops) throws ParallelSaveError.
         user.supplies.set(supplyId, count - 1);
-        await user.save();
+        await User.updateOne({ _id: user._id }, { $inc: { [`supplies.${supplyId}`]: -1 } });
 
         if (supplyId === "mine") {
             server.battleService.mine.placeMine(client, battle);
