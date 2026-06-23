@@ -321,17 +321,21 @@ export class BattleService {
             throw new Error("Você já está nesta batalha.");
         }
 
-        const activePlayersCount = battle.users.length + battle.usersBlue.length + battle.usersRed.length;
-        const capacity = Math.min(settings.maxPeopleCount, BattleService.MAX_TANKS_PER_BATTLE);
-        if (activePlayersCount >= capacity) {
-            throw new Error("Esta batalha está cheia.");
-        }
-
+        // Capacity: in TEAM modes the client's maxPeopleCount is PER TEAM (CTF=1 => 1v1, CP=3 => 3v3),
+        // so cap each team independently (prevents 3x1 / 4x0); in DM it's the total player count.
         if (battle.isTeamMode()) {
-            if (teamIndex === 0) battle.usersRed.push(user);
-            else if (teamIndex === 1) battle.usersBlue.push(user);
-            else throw new Error("Time inválido selecionado.");
+            if (teamIndex !== 0 && teamIndex !== 1) throw new Error("Time inválido selecionado.");
+            const perTeamCap = Math.min(settings.maxPeopleCount, BattleService.MAX_TANKS_PER_BATTLE / 2);
+            const team = teamIndex === 0 ? battle.usersRed : battle.usersBlue;
+            if (team.length >= perTeamCap) {
+                throw new Error("Esta batalha está cheia.");
+            }
+            team.push(user);
         } else {
+            const capacity = Math.min(settings.maxPeopleCount, BattleService.MAX_TANKS_PER_BATTLE);
+            if (battle.users.length >= capacity) {
+                throw new Error("Esta batalha está cheia.");
+            }
             battle.users.push(user);
         }
 
