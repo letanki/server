@@ -35,23 +35,29 @@ function buildAndRun() {
     });
 }
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
+// Permite definir o comportamento por parâmetro, evitando o prompt interativo (necessário no pm2):
+//   npm run dev -- --build     -> builda os recursos e executa
+//   npm run dev -- --no-build  -> executa direto (sem build)
+// Sem parâmetro: usa o prompt interativo se houver TTY; caso contrário, executa direto.
+const args = process.argv.slice(2);
+const wantsBuild = args.includes('--build') || args.includes('-b') || args.includes('build');
+const skipBuild = args.includes('--no-build') || args.includes('-n');
 
-console.log('Como você gostaria de iniciar o ambiente de desenvolvimento?');
-console.log('1 - Executar servidores (padrão)');
-console.log('2 - Buildar recursos e executar servidores');
-console.log('');
+if (wantsBuild) {
+    buildAndRun();
+} else if (skipBuild || !process.stdin.isTTY) {
+    runServer();
+} else {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-rl.question('Escolha uma opção (pressione Enter para a padrão): ', (answer) => {
-    rl.close();
-    const choice = answer.trim();
+    console.log('Como você gostaria de iniciar o ambiente de desenvolvimento?');
+    console.log('1 - Executar servidores (padrão)');
+    console.log('2 - Buildar recursos e executar servidores');
+    console.log('');
 
-    if (choice === '2') {
-        buildAndRun();
-    } else {
-        runServer();
-    }
-});
+    rl.question('Escolha uma opção (pressione Enter para a padrão): ', (answer) => {
+        rl.close();
+        if (answer.trim() === '2') buildAndRun();
+        else runServer();
+    });
+}
