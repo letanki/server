@@ -23,7 +23,11 @@ export class SupplyService {
         if (!supply || !user) return 0;
 
         const durationMs = supply.itemEffectTime * 1000;
-        const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+        // Parkour mode: no reactivation delay — reactivation is allowed the moment the effect ends,
+        // so the cooldown is just the active duration (itemRestSec is dropped).
+        const cooldownMs = battle.settings.parkourMode
+            ? durationMs
+            : (supply.itemEffectTime + supply.itemRestSec) * 1000;
         if (durationMs <= 0) return cooldownMs; // health/mine have no timed buff here
 
         let onEnd: (() => void) | undefined;

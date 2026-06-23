@@ -32,8 +32,9 @@ export class MineService {
         const id = `${++battle.mineCounter}`;
         battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: { ...pos }, armed: false });
         battle.broadcast(new PutMinePacket(id, pos, user.username));
-        // Arm it after a short delay — only then can it trigger.
-        battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
+        // Parkour mode: no delay at all — arm immediately. Otherwise arm after a short delay.
+        if (battle.settings.parkourMode) this._arm(battle, id);
+        else battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
         logger.info(`Mine ${id} placed by ${user.username} in battle ${battle.battleId}`);
     }
 

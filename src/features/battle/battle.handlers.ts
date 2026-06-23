@@ -609,7 +609,9 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
 
         if (supplyId === "mine") {
             server.battleService.mine.placeMine(client, battle);
-            const cooldownMs = (supply.itemEffectTime + supply.itemRestSec) * 1000;
+            // Parkour mode: mines have no delay — reactivation is instant so the player can stack one
+            // mine on top of another.
+            const cooldownMs = battle.settings.parkourMode ? 0 : (supply.itemEffectTime + supply.itemRestSec) * 1000;
             client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
             return;
         }
