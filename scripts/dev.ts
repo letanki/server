@@ -17,7 +17,7 @@ function runServer() {
 
 function buildAndRun() {
     console.log('Iniciando o build dos recursos...');
-    const buildProcess = spawn('npm', ['run', 'build:resources'], { stdio: 'inherit', shell: true });
+    const buildProcess = spawn('npm', ['run', 'build:gen'], { stdio: 'inherit', shell: true });
 
     buildProcess.on('close', (code) => {
         if (code === 0) {
