@@ -1,5 +1,7 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
+import * as BattlePackets from "@/features/battle/battle.packets";
+import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import * as ProfilePackets from "@/features/profile/profile.packets";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
@@ -40,8 +42,23 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
             const result = await server.garageService.purchaseItem(client.user, packet.itemId, packet.quantity, packet.price);
             // The "1000_scores" supply is consumed instantly and grants experience; refresh the
             // client's score counter with the new total.
-            if (result && typeof result.newExperience === "number") {
+            if (result && "newExperience" in result) {
                 client.sendPacket(new ProfilePackets.UpdateScorePacket(result.newExperience));
+            } else if (result && "supplyId" in result) {
+                // Bought a stackable supply: keep the in-battle supply panel in sync. If the player had
+                // supplies already (panel loaded), update just this item's count; otherwise this is their
+                // first supply, so load the panel.
+                const battle = client.currentBattle;
+                const filtered =
+                    (result.supplyId === "mine" && battle?.settings.withoutMines) ||
+                    (result.supplyId === "health" && battle?.settings.withoutMedkit);
+                if (battle && !client.isSpectator && !battle.settings.withoutSupplies && !filtered) {
+                    if (result.hadSuppliesBefore) {
+                        client.sendPacket(new BattlePackets.UpdateConsumableCountPacket(result.supplyId, result.newCount));
+                    } else {
+                        BattleWorkflow.sendConsumables(client, battle);
+                    }
+                }
             }
         } catch (error: any) {
             logger.warn(`Failed to purchase item ${packet.itemId} for user ${client.user.username}`, {

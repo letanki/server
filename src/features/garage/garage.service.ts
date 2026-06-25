@@ -4,7 +4,7 @@ import { ResourceManager } from "@/utils/resource.manager";
 import { itemBlueprints, supplyPreviewResources } from "./garage.data";
 
 export class GarageService {
-    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | void> {
+    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | { supplyId: string; newCount: number; hadSuppliesBefore: boolean } | void> {
         const { baseId, modification: clientRefMod } = this._parseItemId(fullItemId);
         const itemBlueprint = this._findItemBlueprint(baseId);
 
@@ -80,10 +80,12 @@ export class GarageService {
                 }
 
                 const currentCount = user.supplies.get(baseId) ?? 0;
-                user.supplies.set(baseId, currentCount + quantity);
+                const hadSuppliesBefore = [...user.supplies.values()].some((c) => c > 0);
+                const newCount = currentCount + quantity;
+                user.supplies.set(baseId, newCount);
                 await user.save();
-                logger.info(`User ${user.username} bought ${quantity}x supply ${baseId} (now ${currentCount + quantity}).`);
-                return;
+                logger.info(`User ${user.username} bought ${quantity}x supply ${baseId} (now ${newCount}).`);
+                return { supplyId: baseId, newCount, hadSuppliesBefore };
             }
             default:
                 throw new Error("Tipo de item desconhecido ou não comprável.");

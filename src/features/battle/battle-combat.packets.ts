@@ -36,6 +36,21 @@ export class ActivatedSupplyPacket extends BasePacket {
     static getId(): number { return 2032104949; }
 }
 
+// S->C: updates a single consumable's count in the in-battle supply panel after a garage purchase
+// (e.g. bought more mines mid-battle). Body = optionalString(base supply id, e.g. "mine") + i32(new
+// total count).
+export class UpdateConsumableCountPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "itemId", type: "string" },
+        { name: "count", type: "i32" },
+    ];
+    itemId: string | null; count: number;
+    constructor(itemId: string | null = null, count: number = 0) { super(); this.itemId = itemId; this.count = count; }
+    read(buffer: Buffer): void { readSchema(this, UpdateConsumableCountPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, UpdateConsumableCountPacket.schema); }
+    static getId(): number { return -502907094; }
+}
+
 // S->C (broadcast): a supply effect started on a tank, so every client renders it. `effectType`
 // is the supply slotId (armor=2, double_damage=3, n2o=4, mine=5), `durationMs` is effectTime*1000.
 export class EffectStartedPacket extends BasePacket {

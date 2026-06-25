@@ -594,18 +594,25 @@ export class BattleWorkflow {
         };
     }
 
+    /** (Re)loads the in-battle supply panel for the player with their current counts. Sent at battle
+     *  entry (when they have supplies) and when they buy their first supply mid-battle. Respects the
+     *  battle's supply settings. */
+    public static sendConsumables(client: GameClient, battle: Battle): void {
+        const user = client.user;
+        if (!user || client.isSpectator || battle.settings.withoutSupplies) return;
+        let availableSupplies = suppliesData;
+        if (battle.settings.withoutMines) availableSupplies = availableSupplies.filter((s) => s.id !== "mine");
+        if (battle.settings.withoutMedkit) availableSupplies = availableSupplies.filter((s) => s.id !== "health");
+        const consumableItems = availableSupplies.map((si) => ({ id: si.id, count: user.supplies.get(si.id) || 0, slotId: si.slotId, itemEffectTime: si.itemEffectTime, itemRestSec: si.itemRestSec }));
+        client.sendPacket(new BattlePackets.BattleConsumablesPacket(JSON.stringify({ items: consumableItems })));
+    }
+
     private static _sendFinalBattlePackets(client: GameClient, battle: Battle): void {
         const user = client.user!;
-        const withoutSupplies = battle.settings.withoutSupplies;
         const userHasNoSupplies = Array.from(user.supplies.values()).every((count) => count === 0);
-        if (!withoutSupplies && !userHasNoSupplies && !client.isSpectator) {
-            const userSupplies = user.supplies;
-            let availableSupplies = suppliesData;
-            if (battle.settings.withoutMines) availableSupplies = availableSupplies.filter((s) => s.id !== "mine");
-            if (battle.settings.withoutMedkit) availableSupplies = availableSupplies.filter((s) => s.id !== "health");
-            const consumableItems = availableSupplies.map((si) => ({ id: si.id, count: userSupplies.get(si.id) || 0, slotId: si.slotId, itemEffectTime: si.itemEffectTime, itemRestSec: si.itemRestSec }));
-            client.sendPacket(new BattlePackets.BattleConsumablesPacket(JSON.stringify({ items: consumableItems })));
-        }
+        // The supply panel only loads when the player actually has supplies; if they have none, buying
+        // one mid-battle loads it via BattleWorkflow.sendConsumables (see the BuyItem handler).
+        if (!userHasNoSupplies) BattleWorkflow.sendConsumables(client, battle);
         if (!client.isSpectator) {
             // Team and DM battles use different statistics models on the client; sending the
             // wrong score-update variant looks the user up in an empty collection -> #1009.
