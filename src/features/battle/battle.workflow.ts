@@ -1,6 +1,7 @@
 import { getBonusData } from "@/config/bonus.data";
 import { IPacket } from "@/packets/packet.interfaces";
 import { CALLBACK } from "@/config/constants";
+import { hullPhysicsData, turretPhysicsData } from "@/config/hull-physics.data";
 import { mapThemeConfigs } from "@/config/map-themes.data";
 import { weaponPhysicsData } from "@/config/physics.data";
 import { sfxBlueprints } from "@/config/sfx.blueprints";
@@ -147,6 +148,11 @@ export class BattleWorkflow {
 
         const team_type = battle.isTeamMode() ? (battle.usersBlue.some((u: UserDocument) => u.id === user.id) ? "BLUE" : "RED") : "NONE";
 
+        // Per-item physics captured from the original server (see hull-physics.data). Where an item
+        // isn't captured yet, these are undefined and we fall back to the old formula/defaults below.
+        const hullPhys = hullPhysicsData[`${user.equippedHull}_m${user.hulls.get(user.equippedHull) ?? 0}`];
+        const turretPhys = turretPhysicsData[`${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`];
+
         const partsObject: { [key: string]: number } = {
             engineIdleSound: ResourceManager.getIdlowById("sounds/hull/engine_idle"),
             engineStartMovingSound: ResourceManager.getIdlowById("sounds/hull/engine_start"),
@@ -207,18 +213,18 @@ export class BattleWorkflow {
             maxSpeed: ItemUtils.getPropertyValue(hullMod, "HULL_SPEED") ?? 10,
             maxTurnSpeed: toRadians(hullTurnSpeed),
             acceleration: ItemUtils.getPropertyValue(hullMod, "HULL_POWER", "HULL_ACCELERATION") ?? 14,
-            reverseAcceleration: 18,
-            sideAcceleration: 16,
-            turnAcceleration: toRadians(hullTurnSpeed) * 1.15,
-            reverseTurnAcceleration: toRadians(hullTurnSpeed) * 2.0,
-            mass: ItemUtils.getPropertyValue(hullMod, "HULL_MASS") ?? 2000,
+            reverseAcceleration: hullPhys?.reverseAcceleration ?? 18,
+            sideAcceleration: hullPhys?.sideAcceleration ?? 16,
+            turnAcceleration: hullPhys?.turnAcceleration ?? toRadians(hullTurnSpeed) * 1.15,
+            reverseTurnAcceleration: hullPhys?.reverseTurnAcceleration ?? toRadians(hullTurnSpeed) * 2.0,
+            mass: hullPhys?.mass ?? ItemUtils.getPropertyValue(hullMod, "HULL_MASS") ?? 2000,
             power: ItemUtils.getPropertyValue(hullMod, "HULL_POWER", "HULL_ACCELERATION") ?? 14,
-            dampingCoeff: 1500,
+            dampingCoeff: hullPhys?.dampingCoeff ?? 1500,
             turret_turn_speed: toRadians(turretTurnSpeed),
             health: isSpawningOrDead ? 0 : clientHealth,
             rank: user.rank,
-            kickback: 2.5,
-            turretTurnAcceleration: toRadians(turretTurnSpeed) * 1.6,
+            kickback: turretPhys?.kickback ?? 2.5,
+            turretTurnAcceleration: turretPhys?.turretTurnAcceleration ?? toRadians(turretTurnSpeed) * 1.6,
             impact_force: finalImpactForce,
         };
 
