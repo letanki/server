@@ -70,6 +70,10 @@ export class LobbyWorkflow {
         this.sendInitialSettings(client, server);
         this.sendAchievementTips(user, client);
 
+        // Reconnect: the player is still in the battle roster (held by the 1-min reconnect timer), so we
+        // re-enter the battle directly — the player is in the battle, NOT the lobby. enterBattle skips
+        // the lobby-teardown packet (UnloadLobbyChat, id -920985123) on reconnect, which otherwise
+        // null-derefs on a client that never loaded the lobby (#1009).
         const reconnectData = server.battleService.handlePlayerReconnection(user);
         if (reconnectData) {
             const battle = server.lobbyService.getBattleById(reconnectData.battleId);
@@ -78,7 +82,7 @@ export class LobbyWorkflow {
                 client.currentBattle = battle;
 
                 server.notifySubscribersOfStatusChange(user.username, true);
-                await BattleWorkflow.enterBattle(client, server, battle);
+                await BattleWorkflow.enterBattle(client, server, battle, true);
                 return true;
             }
         }

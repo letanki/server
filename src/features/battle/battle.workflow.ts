@@ -23,7 +23,7 @@ import * as BattlePackets from "./battle.packets";
 import { BonusType, IBattleUser, IBattleUserInfo } from "./battle.types";
 
 export class BattleWorkflow {
-    public static async enterBattle(client: GameClient, server: GameServer, battle: Battle): Promise<void> {
+    public static async enterBattle(client: GameClient, server: GameServer, battle: Battle, isReconnect: boolean = false): Promise<void> {
         if (!client.user) {
             logger.error("Attempted to enter battle without a user authenticated.", { client: client.getRemoteAddress() });
             return;
@@ -34,8 +34,13 @@ export class BattleWorkflow {
         logger.info(`User ${client.user.username} is entering battle ${battle.battleId}`);
 
         client.sendPacket(new SetLayout(3));
-        client.sendPacket(new UnloadBattleListPacket());
-        client.sendPacket(new UnloadLobbyChatPacket());
+        // Lobby-teardown packets: only valid when entering FROM the lobby. On reconnect the player is
+        // still in the battle (never went to the lobby), and UnloadLobbyChat (id -920985123, the
+        // client's UnloadBattleEntity) null-derefs on a client with no lobby loaded (#1009).
+        if (!isReconnect) {
+            client.sendPacket(new UnloadBattleListPacket());
+            client.sendPacket(new UnloadLobbyChatPacket());
+        }
         client.isChatLoaded = false;
         client.startTimeChecker();
         client.sendPacket(new BattlePackets.WeaponPhysicsPacket(JSON.stringify(weaponPhysicsData)));
