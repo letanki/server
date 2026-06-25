@@ -1,7 +1,7 @@
 import { GameClient } from "@/server/game.client";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { hullCollision } from "@/types/hullCollision";
+import { hullCollision } from "@/generated/hullCollision";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";

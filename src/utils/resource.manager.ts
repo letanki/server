@@ -1,7 +1,7 @@
 import { MapTheme } from "@/features/battle/battle.model";
 import { IDependency } from "@/features/loader/loader.types";
-import { mapDependencies } from "@/types/mapDependencies";
-import { ResourceData, ResourceId } from "@/types/resourceTypes";
+import { mapDependencies } from "@/generated/mapDependencies";
+import { ResourceData, ResourceId } from "@/generated/resourceTypes";
 import fs from "fs";
 import path from "path";
 import logger from "./logger";

@@ -3,7 +3,7 @@ import { UpdateCrystals } from "@/features/profile/profile.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { bonusRegions, IBonusRegion } from "@/types/bonusRegions";
+import { getMapBonusRegions, IBonusRegion } from "@/maps/mapData";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { SupplyService } from "./supply.service";
@@ -84,7 +84,7 @@ export class BonusService {
     }
 
     private _spawnTick(battle: Battle): void {
-        const regions = bonusRegions[battle.mapResourceId] ?? [];
+        const regions = getMapBonusRegions(battle.mapResourceId);
         const mode = MODE_TOKEN[battle.settings.battleMode];
         const occupied = new Set([...battle.activeBonuses.values()].map((b) => b.regionIndex).filter((i) => i !== undefined));
 

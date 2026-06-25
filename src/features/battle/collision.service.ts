@@ -1,4 +1,4 @@
-import { getMapCollision, ICollisionTri } from "@/types/mapCollision";
+import { getMapCollision, ICollisionTri } from "@/maps/mapCollision";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 
 // When checking if collision is BETWEEN two points, trim this much off each end of the line so the

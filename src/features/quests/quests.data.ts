@@ -1,4 +1,4 @@
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 
 export type QuestType = "KILLS" | "SCORE" | "CRYSTALS";
 export type QuestDifficulty = "easy" | "medium" | "hard";

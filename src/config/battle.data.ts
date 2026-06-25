@@ -1,4 +1,4 @@
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 
 interface IMapData {
   enabled: boolean;

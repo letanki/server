@@ -1,7 +1,7 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { mapSpawns } from "@/types/mapSpawns";
+import { getMapSpawns } from "@/maps/mapData";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
@@ -16,7 +16,7 @@ export class SpawnService {
 
     /** A free-ish spawn point for the team (avoids points within ~100u of an active tank). */
     public getSpawnPoint(battle: Battle, team: "DM" | "BLUE" | "RED"): { position: IVector3; rotation: IVector3 } {
-        const allMapSpawns = mapSpawns[battle.mapResourceId];
+        const allMapSpawns = getMapSpawns(battle.mapResourceId);
         if (!allMapSpawns || allMapSpawns.length === 0) {
             logger.warn(`No spawn points found for map ${battle.mapResourceId}. Using fallback.`);
             return { position: { x: 0, y: 0, z: 200 }, rotation: { x: 0, y: 0, z: 0 } };

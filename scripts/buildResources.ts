@@ -6,11 +6,12 @@ import { rimraf } from "rimraf";
 import { Builder, parseStringPromise } from "xml2js";
 import { create } from "xmlbuilder2";
 import { ResourcePathUtils } from "../src/utils/resource.path.utils";
+import { extractCtfFlags, extractDomKeypoints, extractPropLibs, extractSpawnPoints, extractSpecialGeometries, idToFile, IBonusRegion, parseBonusRegions } from "./lib/mapData";
 
 const ROOT_DIR = path.join(__dirname, "..");
 const RESOURCES_DIR = path.join(ROOT_DIR, "resources");
 const RESOURCE_BUILD_DIR = path.join(ROOT_DIR, ".resource");
-const TYPES_DIR = path.join(ROOT_DIR, "src", "types");
+const TYPES_DIR = path.join(ROOT_DIR, "src", "generated"); // generated output (data + literal modules)
 
 interface ResourceDefinition {
   id: string;
@@ -18,39 +19,6 @@ interface ResourceDefinition {
   versionLow: number;
   sourcePath: string;
   buildPath: string;
-}
-
-interface IVector3 {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface ISpawnPoint {
-  type: string;
-  position: IVector3;
-  rotation: IVector3;
-}
-
-interface ISpecialBox {
-  minX: number;
-  minY: number;
-  minZ: number;
-  maxX: number;
-  maxY: number;
-  maxZ: number;
-  action: "kill" | "kick";
-}
-
-interface ICtfFlags {
-  red: IVector3;
-  blue: IVector3;
-}
-
-interface IDomKeypoint {
-  name: string;
-  radius: number;
-  position: IVector3;
 }
 
 function generateResourceId(friendlyPath: string): number {
@@ -132,221 +100,82 @@ function friendlyNameToResourceId(name: string): string {
   return `library/${name.toLowerCase().replace(/\s+/g, "_")}`;
 }
 
-async function generatePropLibsXmls(resources: ResourceDefinition[]): Promise<void> {
-  console.log("Generating proplibs.xml for maps...");
+const MAP_DATA_DIR = path.join(TYPES_DIR, "map-data"); // one JSON per map (battle data), loaded lazily at runtime by src/maps/mapData.ts
 
+/**
+ * Single pass over every map.xml: ONE read + ONE xml2js parse per map, from which we derive
+ * proplibs.xml, map dependencies, the per-map battle JSON (spawns/geometry/ctf/dom/bonus) and the
+ * cleaned client XML (battle nodes stripped). Replaces the old generatePropLibsXmls +
+ * generateMapDependenciesFile + inline loop, which parsed each map three times.
+ */
+async function processMaps(resources: ResourceDefinition[]): Promise<void> {
+  console.log("Processing maps (single parse per map)...");
   const resourceMap = new Map<string, ResourceDefinition>(resources.map((r) => [r.id, r]));
   const mapResources = resources.filter((r) => r.id.startsWith("map/") && r.id.endsWith("/xml"));
+
+  const builder = new Builder();
+
+  fs.rmSync(MAP_DATA_DIR, { recursive: true, force: true });
+  fs.mkdirSync(MAP_DATA_DIR, { recursive: true });
+
+  let depsContent = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
+  depsContent += `import { ResourceId } from "./resourceTypes";\n\n`;
+  depsContent += `export const mapDependencies: { [key: number]: ResourceId[] } = {\n`;
 
   for (const mapResource of mapResources) {
     const mapXmlPath = path.join(mapResource.sourcePath, "map.xml");
     if (!fs.existsSync(mapXmlPath)) continue;
 
     try {
-      const mapXmlContent = await fs.promises.readFile(mapXmlPath, "utf8");
-      const parsedMap = await parseStringPromise(mapXmlContent, { trim: true });
+      const raw = await fs.promises.readFile(mapXmlPath, "utf8");
+      const parsed = await parseStringPromise(raw, { trim: true });
 
-      const propLibs = new Set<string>();
-      if (parsedMap.map && parsedMap.map["static-geometry"] && parsedMap.map["static-geometry"][0] && parsedMap.map["static-geometry"][0].prop) {
-        parsedMap.map["static-geometry"][0].prop.forEach((prop: any) => {
-          if (prop.$ && prop.$["library-name"]) {
-            propLibs.add(prop.$["library-name"]);
-          }
-        });
-      }
-
+      // 1) Prop libraries -> proplibs.xml (.resource) + map dependencies (extracted once).
+      const propLibs = extractPropLibs(parsed);
       const root = create({ version: "1.0", encoding: "UTF-8" }).ele("proplibs");
+      const libResourceIds: string[] = [];
       for (const libName of propLibs) {
         const resourceId = friendlyNameToResourceId(libName);
         const libResource = resourceMap.get(resourceId);
-
         if (libResource) {
-          root.ele("library", {
-            name: libName,
-            "resource-id": libResource.idLow.toString(16),
-            version: libResource.versionLow,
-          });
+          root.ele("library", { name: libName, "resource-id": libResource.idLow.toString(16), version: libResource.versionLow });
+          libResourceIds.push(resourceId);
         } else {
           console.warn(`Warning: Library "${libName}" referenced in map "${mapResource.id}" not found.`);
         }
       }
+      await fs.promises.writeFile(path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "proplibs.xml"), root.end({ prettyPrint: true }));
+      depsContent += `    ${mapResource.idLow}: [${libResourceIds.map((id) => `"${id}"`).join(", ")}],\n`;
 
-      const propLibsXmlContent = root.end({ prettyPrint: true });
-      const destPath = path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "proplibs.xml");
-      await fs.promises.writeFile(destPath, propLibsXmlContent);
-      console.log(`Generated proplibs.xml for ${mapResource.id}`);
+      // 2) Battle data (same parse) — accumulate for the eager literals + the per-map JSON, then strip
+      //    the extracted nodes from the shipped client XML (same behaviour as before).
+      const spawns = extractSpawnPoints(parsed);
+      const geometries = extractSpecialGeometries(parsed);
+      const ctfFlags = extractCtfFlags(parsed);
+      const domKeypoints = extractDomKeypoints(parsed, mapResource.id);
+      const bonus = parseBonusRegions(raw);
+
+      // Strip the battle nodes from the shipped client XML (same behaviour as before).
+      if (spawns) delete parsed.map["spawn-points"];
+      if (geometries) delete parsed.map["special-geometry"];
+      if (ctfFlags) delete parsed.map["ctf-flags"];
+      if (domKeypoints) delete parsed.map["dom-keypoints"];
+
+      fs.writeFileSync(path.join(MAP_DATA_DIR, idToFile(mapResource.id)), JSON.stringify({
+        spawns: spawns ?? [], geometries: geometries ?? [], ctfFlags: ctfFlags ?? null, domKeypoints: domKeypoints ?? [], bonusRegions: bonus,
+      }));
+
+      // 3) Cleaned client XML (battle nodes removed).
+      await fs.promises.writeFile(path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "map.xml"), builder.buildObject(parsed));
     } catch (error) {
       console.error(`Failed to process map ${mapResource.id}:`, error);
     }
   }
-}
 
-async function generateMapDependenciesFile(resources: ResourceDefinition[]): Promise<void> {
-  console.log("Generating mapDependencies.ts...");
-  const resourceMap = new Map<string, ResourceDefinition>(resources.map((r) => [r.id, r]));
-  const mapResources = resources.filter((r) => r.id.startsWith("map/") && r.id.endsWith("/xml"));
+  depsContent += `};\n`;
+  await fs.promises.writeFile(path.join(TYPES_DIR, "mapDependencies.ts"), depsContent);
 
-  let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
-  content += `import { ResourceId } from "./resourceTypes";\n\n`;
-  content += `export const mapDependencies: { [key: number]: ResourceId[] } = {\n`;
-
-  for (const mapResource of mapResources) {
-    const mapXmlPath = path.join(mapResource.sourcePath, "map.xml");
-    if (!fs.existsSync(mapXmlPath)) continue;
-
-    try {
-      const mapXmlContent = await fs.promises.readFile(mapXmlPath, "utf8");
-      const parsedMap = await parseStringPromise(mapXmlContent, { trim: true });
-
-      const propLibs = new Set<string>();
-      if (parsedMap.map && parsedMap.map["static-geometry"] && parsedMap.map["static-geometry"][0] && parsedMap.map["static-geometry"][0].prop) {
-        parsedMap.map["static-geometry"][0].prop.forEach((prop: any) => {
-          if (prop.$ && prop.$["library-name"]) {
-            propLibs.add(prop.$["library-name"]);
-          }
-        });
-      }
-
-      const libResourceIds: string[] = [];
-      for (const libName of propLibs) {
-        const resourceId = friendlyNameToResourceId(libName);
-        if (resourceMap.has(resourceId)) {
-          libResourceIds.push(resourceId);
-        }
-      }
-
-      content += `    ${mapResource.idLow}: [${libResourceIds.map((id) => `"${id}"`).join(", ")}],\n`;
-    } catch (error) {
-      console.error(`Failed to generate dependencies for map ${mapResource.id}:`, error);
-    }
-  }
-
-  content += `};\n`;
-
-  await fs.promises.writeFile(path.join(TYPES_DIR, "mapDependencies.ts"), content);
-  console.log("Generated mapDependencies.ts successfully.");
-}
-
-function extractSpawnPoints(parsedMap: any): ISpawnPoint[] | null {
-  const spawnPointsNode = parsedMap.map?.["spawn-points"]?.[0]?.["spawn-point"];
-  if (!spawnPointsNode) return null;
-
-  delete parsedMap.map["spawn-points"];
-
-  return spawnPointsNode.map((spData: any) => {
-    const pos = spData.position[0];
-    const rot = spData.rotation[0];
-    return {
-      type: spData.$.type,
-      position: { x: parseFloat(pos.x?.[0] ?? "0"), y: parseFloat(pos.y?.[0] ?? "0"), z: parseFloat(pos.z?.[0] ?? "0") },
-      rotation: { x: parseFloat(rot.x?.[0] ?? "0"), y: parseFloat(rot.y?.[0] ?? "0"), z: parseFloat(rot.z?.[0] ?? "0") },
-    };
-  });
-}
-
-function extractSpecialGeometries(parsedMap: any): ISpecialBox[] | null {
-  const geometryNode = parsedMap.map?.["special-geometry"]?.[0]?.["special-box"];
-  if (!geometryNode) return null;
-
-  delete parsedMap.map["special-geometry"];
-
-  return geometryNode.map((boxData: any) => ({
-    minX: parseFloat(boxData.minX[0]),
-    minY: parseFloat(boxData.minY[0]),
-    minZ: parseFloat(boxData.minZ[0]),
-    maxX: parseFloat(boxData.maxX[0]),
-    maxY: parseFloat(boxData.maxY[0]),
-    maxZ: parseFloat(boxData.maxZ[0]),
-    action: boxData.action[0],
-  }));
-}
-
-function extractCtfFlags(parsedMap: any): ICtfFlags | null {
-  const flagsNode = parsedMap.map?.["ctf-flags"]?.[0];
-  if (!flagsNode) return null;
-
-  delete parsedMap.map["ctf-flags"];
-
-  const redFlag = flagsNode["flag-red"]?.[0];
-  const blueFlag = flagsNode["flag-blue"]?.[0];
-
-  if (redFlag && blueFlag) {
-    return {
-      red: { x: parseFloat(redFlag.x[0]), y: parseFloat(redFlag.y[0]), z: parseFloat(redFlag.z[0]) },
-      blue: { x: parseFloat(blueFlag.x[0]), y: parseFloat(blueFlag.y[0]), z: parseFloat(blueFlag.z[0]) },
-    };
-  }
-  return null;
-}
-
-function extractDomKeypoints(parsedMap: any, mapResource: ResourceDefinition): IDomKeypoint[] | null {
-  const keypointsNode = parsedMap.map?.["dom-keypoints"]?.[0]?.["dom-keypoint"];
-  if (!keypointsNode) return null;
-
-  delete parsedMap.map["dom-keypoints"];
-
-  return keypointsNode
-    .map((kpData: any, index: number) => {
-      if (!kpData || typeof kpData !== "object") {
-        console.warn(`Warning: Malformed keypoint entry at index ${index} in map ${mapResource.id}. Entry is not an object.`);
-        return null;
-      }
-      if (!kpData.$ || !kpData.$.name) {
-        console.warn(`Warning: Found a dom-keypoint without a 'name' attribute in map ${mapResource.id}. Skipping keypoint at index ${index}.`);
-        console.log(`[DEBUG] Problematic kpData object: ${JSON.stringify(kpData)}`);
-        return null;
-      }
-      const pos = kpData.position?.[0];
-      if (!pos) {
-        console.warn(`Warning: Found a dom-keypoint without a 'position' tag in map ${mapResource.id}. Skipping keypoint named "${kpData.$.name}".`);
-        return null;
-      }
-      return {
-        name: kpData.$.name,
-        radius: parseFloat(kpData.$.distance ?? "0"),
-        position: { x: parseFloat(pos.x?.[0] ?? "0"), y: parseFloat(pos.y?.[0] ?? "0"), z: parseFloat(pos.z?.[0] ?? "0") },
-      };
-    })
-    .filter((kp: IDomKeypoint | null): kp is IDomKeypoint => kp !== null);
-}
-
-async function generateSpawnPointsFile(allSpawns: { [key: string]: ISpawnPoint[] }): Promise<void> {
-  let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
-  content += `interface IVector3 { x: number; y: number; z: number; }\n`;
-  content += `interface ISpawnPoint { type: string; position: IVector3; rotation: IVector3; }\n\n`;
-  content += `export const mapSpawns: { [key: string]: ISpawnPoint[] } = ${JSON.stringify(allSpawns, null, 4)};\n`;
-
-  await fs.promises.writeFile(path.join(TYPES_DIR, "mapSpawns.ts"), content);
-  console.log("Generated mapSpawns.ts successfully.");
-}
-
-async function generateGeometriesFile(allGeometries: { [key: string]: ISpecialBox[] }): Promise<void> {
-  let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
-  content += `export interface ISpecialBox { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number; action: 'kill' | 'kick'; }\n\n`;
-  content += `export const mapGeometries: { [key: string]: ISpecialBox[] } = ${JSON.stringify(allGeometries, null, 4)};\n`;
-
-  await fs.promises.writeFile(path.join(TYPES_DIR, "mapGeometries.ts"), content);
-  console.log("Generated mapGeometries.ts successfully.");
-}
-
-async function generateCtfFlagsFile(allFlags: { [key: string]: ICtfFlags }): Promise<void> {
-  let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
-  content += `interface IVector3 { x: number; y: number; z: number; }\n`;
-  content += `interface ICtfFlags { red: IVector3; blue: IVector3; }\n\n`;
-  content += `export const mapCtfFlags: { [key: string]: ICtfFlags } = ${JSON.stringify(allFlags, null, 4)};\n`;
-
-  await fs.promises.writeFile(path.join(TYPES_DIR, "mapCtfFlags.ts"), content);
-  console.log("Generated mapCtfFlags.ts successfully.");
-}
-
-async function generateDomKeypointsFile(allKeypoints: { [key: string]: IDomKeypoint[] }): Promise<void> {
-  let content = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
-  content += `interface IVector3 { x: number; y: number; z: number; }\n`;
-  content += `export interface IDomKeypoint { name: string; radius: number; position: IVector3; }\n\n`;
-  content += `export const mapDomKeypoints: { [key: string]: IDomKeypoint[] } = ${JSON.stringify(allKeypoints, null, 4)};\n`;
-
-  await fs.promises.writeFile(path.join(TYPES_DIR, "mapDomKeypoints.ts"), content);
-  console.log("Generated mapDomKeypoints.ts successfully.");
+  console.log(`Processed ${mapResources.length} maps (1 parse each).`);
 }
 
 async function validateSkyboxDirectories(resources: ResourceDefinition[]): Promise<void> {
@@ -395,7 +224,7 @@ async function build() {
 
   await rimraf(RESOURCE_BUILD_DIR);
   await fs.promises.mkdir(RESOURCE_BUILD_DIR, { recursive: true });
-  await fs.promises.mkdir(TYPES_DIR, { recursive: true }); // src/types is generated; ensure it exists
+  await fs.promises.mkdir(TYPES_DIR, { recursive: true }); // src/generated is build output; ensure it exists
 
   console.log("Discovering resources from 'resources' directory...");
   const resources = await findResources(RESOURCES_DIR);
@@ -416,63 +245,14 @@ async function build() {
   const typesContent = generateResourceTypesFileContent(resources);
   await fs.promises.writeFile(path.join(TYPES_DIR, "resourceTypes.ts"), typesContent);
 
-  await generateMapDependenciesFile(resources);
-
   console.log("Copying categorized resource files to '.resource' directory...");
   for (const res of resources) {
     const destPath = path.join(RESOURCE_BUILD_DIR, res.buildPath);
     await fse.copy(res.sourcePath, destPath);
   }
 
-  await generatePropLibsXmls(resources);
-
-  const mapResources = resources.filter((r) => r.id.startsWith("map/") && r.id.endsWith("/xml"));
-  const allSpawns: { [key: string]: ISpawnPoint[] } = {};
-  const allGeometries: { [key: string]: ISpecialBox[] } = {};
-  const allCtfFlags: { [key: string]: ICtfFlags } = {};
-  const allDomKeypoints: { [key: string]: IDomKeypoint[] } = {};
-  const builder = new Builder();
-
-  for (const mapResource of mapResources) {
-    const sourceXmlPath = path.join(mapResource.sourcePath, "map.xml");
-    if (!fs.existsSync(sourceXmlPath)) continue;
-
-    const mapXmlContent = await fs.promises.readFile(sourceXmlPath, "utf8");
-    const parsedMap = await parseStringPromise(mapXmlContent, { trim: true });
-
-    const spawns = extractSpawnPoints(parsedMap);
-    if (spawns) {
-      allSpawns[mapResource.id] = spawns;
-      console.log(`Extracted ${spawns.length} spawn points for ${mapResource.id}`);
-    }
-
-    const geometries = extractSpecialGeometries(parsedMap);
-    if (geometries) {
-      allGeometries[mapResource.id] = geometries;
-      console.log(`Extracted ${geometries.length} special geometry boxes for ${mapResource.id}`);
-    }
-
-    const ctfFlags = extractCtfFlags(parsedMap);
-    if (ctfFlags) {
-      allCtfFlags[mapResource.id] = ctfFlags;
-      console.log(`Extracted CTF flag positions for ${mapResource.id}`);
-    }
-
-    const domKeypoints = extractDomKeypoints(parsedMap, mapResource);
-    if (domKeypoints) {
-      allDomKeypoints[mapResource.id] = domKeypoints;
-      console.log(`Extracted ${domKeypoints.length} DOM keypoints for ${mapResource.id}`);
-    }
-
-    const newXmlString = builder.buildObject(parsedMap);
-    const destXmlPath = path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "map.xml");
-    await fs.promises.writeFile(destXmlPath, newXmlString);
-  }
-
-  await generateSpawnPointsFile(allSpawns);
-  await generateGeometriesFile(allGeometries);
-  await generateCtfFlagsFile(allCtfFlags);
-  await generateDomKeypointsFile(allDomKeypoints);
+  // Single pass: proplibs.xml, mapDependencies, per-map battle JSON, eager literals + cleaned XML.
+  await processMaps(resources);
 
   await copyRootFiles();
   console.log("Resource build process completed successfully!");

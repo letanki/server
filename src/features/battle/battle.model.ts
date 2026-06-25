@@ -3,7 +3,7 @@ import type { IPacket } from "@/packets/packet.interfaces";
 import type { GameClient } from "@/server/game.client";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as crypto from "crypto";
 import { BattleTimers } from "./battle-timers";

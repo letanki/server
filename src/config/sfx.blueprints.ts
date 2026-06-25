@@ -1,4 +1,4 @@
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 
 export const sfxBlueprints: { [key: string]: any } = {
   flamethrower_m0: {

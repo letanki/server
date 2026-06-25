@@ -1,5 +1,5 @@
 import { ResourceManager } from "@/utils/resource.manager";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 
 // Resource keys (in resourceTypes.ts) for the supply preview icons. The actual images were
 // downloaded from the official CDN into resources/bonuses/<X>/preview, so they're served by OUR

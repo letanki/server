@@ -14,7 +14,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";

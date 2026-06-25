@@ -1,7 +1,6 @@
 import { Battle, BattleMode, EquipmentConstraintsMode, IBattleCreationSettings, MapTheme } from "@/features/battle/battle.model";
 import { UserDocument } from "@/shared/models/user.model";
-import { mapCtfFlags } from "@/types/mapCtfFlags";
-import { mapDomKeypoints } from "@/types/mapDomKeypoints";
+import { getMapCtfFlags, getMapDomKeypoints } from "@/maps/mapData";
 import logger from "@/utils/logger";
 import { ValidationUtils } from "@/utils/validation.utils";
 
@@ -61,7 +60,7 @@ export class LobbyService {
             const battle = new Battle(settings);
 
             if (settings.battleMode === BattleMode.CTF) {
-                const flags = mapCtfFlags[battle.mapResourceId];
+                const flags = getMapCtfFlags(battle.mapResourceId);
                 if (flags) {
                     battle.flagBasePositionBlue = flags.blue;
                     battle.flagPositionBlue = flags.blue;
@@ -73,8 +72,8 @@ export class LobbyService {
             }
 
             if (settings.battleMode === BattleMode.CP) {
-                const keypoints = mapDomKeypoints[battle.mapResourceId];
-                if (keypoints) {
+                const keypoints = getMapDomKeypoints(battle.mapResourceId);
+                if (keypoints.length > 0) {
                     battle.domPoints = keypoints.map((kp, index) => ({
                         id: index,
                         name: kp.name,

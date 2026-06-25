@@ -15,7 +15,8 @@ import { BonusService } from "./bonus.service";
 import { SupplyService } from "./supply.service";
 import { MineService } from "./mine.service";
 import { DominationService } from "./domination.service";
-import { mapGeometries } from "@/types/mapGeometries";
+import { evictMapData, getMapGeometries } from "@/maps/mapData";
+import { evictMapCollision } from "@/maps/mapCollision";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
@@ -114,8 +115,8 @@ export class BattleService {
         this.mine.checkTriggers(client);
         this.domination.checkPointOccupancy(client);
 
-        const geometries = mapGeometries[currentBattle.mapResourceId];
-        if (!geometries) return;
+        const geometries = getMapGeometries(currentBattle.mapResourceId);
+        if (geometries.length === 0) return;
 
         for (const box of geometries) {
             const isInside =
@@ -302,6 +303,14 @@ export class BattleService {
             }
         }
         this.lobbyService.removeBattle(battle.battleId);
+        this._evictMapCachesIfUnused(battle.mapResourceId);
+    }
+
+    /** Frees a map's cached data (battle data + collision) once no active battle uses it anymore. */
+    private _evictMapCachesIfUnused(mapResourceId: string): void {
+        if (this.server.lobbyService.getBattles().some((b) => b.mapResourceId === mapResourceId)) return;
+        evictMapData(mapResourceId);
+        evictMapCollision(mapResourceId);
     }
 
     public addUserToBattle(user: UserDocument, battleId: string, teamIndex: number): Battle {

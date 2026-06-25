@@ -4,7 +4,7 @@ import { SocialNetwork } from "@/features/social/social.packets";
 import { CaptchaLocation, InviteEnabled, Ping } from "@/features/system/system.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 import generateCaptcha from "@/utils/captcha.generator";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as AuthPackets from "./auth.packets";

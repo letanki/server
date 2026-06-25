@@ -6,7 +6,7 @@ import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import { itemBlueprints, supplyPreviewResources } from "./garage.data";

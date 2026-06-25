@@ -17,7 +17,7 @@ import { GameServer } from "@/server/game.server";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
-import { ResourceId } from "@/types/resourceTypes";
+import { ResourceId } from "@/generated/resourceTypes";
 import { FormatUtils } from "@/utils/format.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";

@@ -151,8 +151,8 @@ scripts/sfx_transformed.json
 scripts/visualizador.html
 scripts/alpha.jpg
 scripts/image.jpg
-# Generated at build time (npm run build:resources) — never commit.
-src/types/
+# Generated at build time (npm run build:gen) — never commit. Loaders live in src/maps (tracked).
+src/generated/
 client-decompiled
 *.ndjson
 PHYSICS-CAPTURE-STATUS.md

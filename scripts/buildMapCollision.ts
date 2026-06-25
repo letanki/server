@@ -1,14 +1,13 @@
 /**
- * Generates the server-side collision data. Two outputs:
+ * Generates the server-side collision data. Two outputs (the loader is src/maps/mapCollision.ts):
  *
- *   src/types/mapCollision.ts
- *     - mapCollision : per-map collision SURFACES the flag can land on when dropped (it falls to the
- *       FIRST collision below the tank — a floor, the top of a wall, a box, any solid). AABB with a
- *       top z. Built from the map's authoritative <collision-geometry> (collision-plane tops +
- *       collision-box tops), the SAME geometry the client physics uses.
- *     - mapOccluders : per-map SOLID 3D boxes (collision-box) — line-of-sight: a flag can't be
- *       picked up through a wall or another pavement.
- *   src/types/hullCollision.ts
+ *   src/generated/collision/<id>.json
+ *     - per-map collision SURFACES the flag can land on when dropped (it falls to the FIRST collision
+ *       below the tank — a floor, the top of a wall, a box, any solid). AABB with a top z. Built from
+ *       the map's authoritative <collision-geometry> (collision-plane tops + collision-box tops), the
+ *       SAME geometry the client physics uses. Plus SOLID 3D obstacle boxes (collision-box) for
+ *       line-of-sight: a flag can't be picked up through a wall or another pavement.
+ *   src/generated/hullCollision.ts
  *     - hullCollision : per-hull collision half-extents (mammoth is bigger than wasp), parsed from
  *       each hull's .3ds model, for the oriented flag-contact box.
  *
@@ -24,9 +23,8 @@ import path from "path";
 const ROOT = path.join(__dirname, "..");
 const MAPS_DIR = path.join(ROOT, "resources", "map");
 const HULL_DIR = path.join(ROOT, "resources", "hull");
-const OUT_MAP = path.join(ROOT, "src", "types", "mapCollision.ts");
-const OUT_COLLISION_DIR = path.join(ROOT, "src", "types", "collision"); // one JSON per map (loaded lazily)
-const OUT_HULL = path.join(ROOT, "src", "types", "hullCollision.ts");
+const OUT_COLLISION_DIR = path.join(ROOT, "src", "generated", "collision"); // one JSON per map (loaded lazily by src/maps/mapCollision.ts)
+const OUT_HULL = path.join(ROOT, "src", "generated", "hullCollision.ts");
 
 function round(n: number): number { return Math.round(n * 10) / 10; }
 
@@ -217,33 +215,7 @@ for (const m of maps) {
     console.log(`${m.id}: ${boxes.length} boxes, ${triangles.length} triangles, ${obstacles.length} obstacles`);
 }
 
-const loader = `// Arquivo gerado automaticamente por scripts/buildMapCollision.ts. Não edite manualmente.
-import fs from "fs";
-import path from "path";
-
-export interface ICollisionBox { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number; }
-export interface ICollisionTri { ax: number; ay: number; az: number; bx: number; by: number; bz: number; cx: number; cy: number; cz: number; }
-export interface IMapCollision { boxes: ICollisionBox[]; triangles: ICollisionTri[]; obstacles: ICollisionBox[]; }
-
-// Per-map collision is stored as JSON (collision/<id>.json) and loaded + cached on first use, so only
-// the maps with active battles ever sit in memory (the full set is ~50MB).
-const EMPTY: IMapCollision = { boxes: [], triangles: [], obstacles: [] };
-const cache = new Map<string, IMapCollision>();
-const idToFile = (id: string) => id.replace(/[^a-z0-9]+/gi, "_") + ".json";
-
-export function getMapCollision(mapResourceId: string): IMapCollision {
-    let c = cache.get(mapResourceId);
-    if (c) return c;
-    try {
-        c = JSON.parse(fs.readFileSync(path.join(__dirname, "collision", idToFile(mapResourceId)), "utf8")) as IMapCollision;
-    } catch {
-        c = EMPTY; // no collision data for this map (or not built yet)
-    }
-    cache.set(mapResourceId, c);
-    return c;
-}
-`;
-fs.writeFileSync(OUT_MAP, loader);
+// The collision loader is hand-written source at src/maps/mapCollision.ts (reads collision/<id>.json).
 
 let hullBody = "// Arquivo gerado automaticamente por scripts/buildMapCollision.ts. Não edite manualmente.\n\n";
 hullBody += "// halfX/halfY = collision half-extents along the hull model's X (width) / Y (length) axes;\n";
@@ -256,4 +228,4 @@ for (const [hull, b] of Object.entries(hullCollision)) {
 hullBody += "};\n";
 fs.writeFileSync(OUT_HULL, hullBody);
 
-console.log(`Wrote ${OUT_MAP} and ${OUT_HULL}.`);
+console.log(`Wrote collision JSON + ${OUT_HULL}.`);
