@@ -1,8 +1,8 @@
 import { getBonusData } from "@/config/bonus.data";
 import { IPacket } from "@/packets/packet.interfaces";
 import { CALLBACK } from "@/config/constants";
-import { turretPhysicsData } from "@/config/hull-physics.data";
 import { getHullMod } from "@/config/hulls.data";
+import { getTurretMod } from "@/config/turrets.data";
 import { mapThemeConfigs } from "@/config/map-themes.data";
 import { weaponPhysicsData } from "@/config/physics.data";
 import { sfxBlueprints } from "@/config/sfx.blueprints";
@@ -154,10 +154,10 @@ export class BattleWorkflow {
 
         const team_type = battle.isTeamMode() ? (battle.usersBlue.some((u: UserDocument) => u.id === user.id) ? "BLUE" : "RED") : "NONE";
 
-        // Per-item physics captured from the original server (see hull-physics.data). Where an item
-        // isn't captured yet, these are undefined and we fall back to the old formula/defaults below.
+        // Per-item physics from the unified hulls.data / turrets.data (captured TankModelData values).
+        // Uncaptured mods have the physics fields undefined and fall back to the old formula below.
         const hullPhys = getHullMod(user.equippedHull, user.hulls.get(user.equippedHull) ?? 0);
-        const turretPhys = turretPhysicsData[`${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`];
+        const turretPhys = getTurretMod(user.equippedTurret, user.turrets.get(user.equippedTurret) ?? 0);
 
         const partsObject: { [key: string]: number } = {
             engineIdleSound: ResourceManager.getIdlowById("sounds/hull/engine_idle"),
