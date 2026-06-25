@@ -6,7 +6,7 @@ import { rimraf } from "rimraf";
 import { Builder, parseStringPromise } from "xml2js";
 import { create } from "xmlbuilder2";
 import { ResourcePathUtils } from "../src/utils/resource.path.utils";
-import { extractCtfFlags, extractDomKeypoints, extractPropLibs, extractSpawnPoints, extractSpecialGeometries, idToFile, IBonusRegion, parseBonusRegions } from "./lib/mapData";
+import { extractPropLibs } from "./lib/mapData";
 
 const ROOT_DIR = path.join(__dirname, "..");
 const RESOURCES_DIR = path.join(ROOT_DIR, "resources");
@@ -100,23 +100,17 @@ function friendlyNameToResourceId(name: string): string {
   return `library/${name.toLowerCase().replace(/\s+/g, "_")}`;
 }
 
-const MAP_DATA_DIR = path.join(TYPES_DIR, "map-data"); // one JSON per map (battle data), loaded lazily at runtime by src/maps/mapData.ts
-
 /**
- * Single pass over every map.xml: ONE read + ONE xml2js parse per map, from which we derive
- * proplibs.xml, map dependencies, the per-map battle JSON (spawns/geometry/ctf/dom/bonus) and the
- * cleaned client XML (battle nodes stripped). Replaces the old generatePropLibsXmls +
- * generateMapDependenciesFile + inline loop, which parsed each map three times.
+ * Per map.xml: parse once to derive its prop-library dependencies (proplibs.xml in .resource +
+ * mapDependencies.ts) and to write the cleaned client XML (gameplay nodes stripped — those are
+ * extracted into per-map JSON separately by scripts/buildMapData.ts). Resource-only concern.
  */
 async function processMaps(resources: ResourceDefinition[]): Promise<void> {
-  console.log("Processing maps (single parse per map)...");
+  console.log("Processing map resources (proplibs + dependencies + cleaned XML)...");
   const resourceMap = new Map<string, ResourceDefinition>(resources.map((r) => [r.id, r]));
   const mapResources = resources.filter((r) => r.id.startsWith("map/") && r.id.endsWith("/xml"));
 
   const builder = new Builder();
-
-  fs.rmSync(MAP_DATA_DIR, { recursive: true, force: true });
-  fs.mkdirSync(MAP_DATA_DIR, { recursive: true });
 
   let depsContent = `// Arquivo gerado automaticamente. Não edite manualmente.\n\n`;
   depsContent += `import { ResourceId } from "./resourceTypes";\n\n`;
@@ -127,10 +121,9 @@ async function processMaps(resources: ResourceDefinition[]): Promise<void> {
     if (!fs.existsSync(mapXmlPath)) continue;
 
     try {
-      const raw = await fs.promises.readFile(mapXmlPath, "utf8");
-      const parsed = await parseStringPromise(raw, { trim: true });
+      const parsed = await parseStringPromise(await fs.promises.readFile(mapXmlPath, "utf8"), { trim: true });
 
-      // 1) Prop libraries -> proplibs.xml (.resource) + map dependencies (extracted once).
+      // Prop libraries -> proplibs.xml (.resource) + map dependencies.
       const propLibs = extractPropLibs(parsed);
       const root = create({ version: "1.0", encoding: "UTF-8" }).ele("proplibs");
       const libResourceIds: string[] = [];
@@ -147,25 +140,12 @@ async function processMaps(resources: ResourceDefinition[]): Promise<void> {
       await fs.promises.writeFile(path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "proplibs.xml"), root.end({ prettyPrint: true }));
       depsContent += `    ${mapResource.idLow}: [${libResourceIds.map((id) => `"${id}"`).join(", ")}],\n`;
 
-      // 2) Battle data (same parse) — accumulate for the eager literals + the per-map JSON, then strip
-      //    the extracted nodes from the shipped client XML (same behaviour as before).
-      const spawns = extractSpawnPoints(parsed);
-      const geometries = extractSpecialGeometries(parsed);
-      const ctfFlags = extractCtfFlags(parsed);
-      const domKeypoints = extractDomKeypoints(parsed, mapResource.id);
-      const bonus = parseBonusRegions(raw);
-
-      // Strip the battle nodes from the shipped client XML (same behaviour as before).
-      if (spawns) delete parsed.map["spawn-points"];
-      if (geometries) delete parsed.map["special-geometry"];
-      if (ctfFlags) delete parsed.map["ctf-flags"];
-      if (domKeypoints) delete parsed.map["dom-keypoints"];
-
-      fs.writeFileSync(path.join(MAP_DATA_DIR, idToFile(mapResource.id)), JSON.stringify({
-        spawns: spawns ?? [], geometries: geometries ?? [], ctfFlags: ctfFlags ?? null, domKeypoints: domKeypoints ?? [], bonusRegions: bonus,
-      }));
-
-      // 3) Cleaned client XML (battle nodes removed).
+      // Cleaned client XML: strip the gameplay nodes (delete is a no-op if absent). buildMapData
+      // extracts these into per-map JSON.
+      delete parsed.map["spawn-points"];
+      delete parsed.map["special-geometry"];
+      delete parsed.map["ctf-flags"];
+      delete parsed.map["dom-keypoints"];
       await fs.promises.writeFile(path.join(RESOURCE_BUILD_DIR, mapResource.buildPath, "map.xml"), builder.buildObject(parsed));
     } catch (error) {
       console.error(`Failed to process map ${mapResource.id}:`, error);
@@ -175,7 +155,7 @@ async function processMaps(resources: ResourceDefinition[]): Promise<void> {
   depsContent += `};\n`;
   await fs.promises.writeFile(path.join(TYPES_DIR, "mapDependencies.ts"), depsContent);
 
-  console.log(`Processed ${mapResources.length} maps (1 parse each).`);
+  console.log(`Processed ${mapResources.length} map resources.`);
 }
 
 async function validateSkyboxDirectories(resources: ResourceDefinition[]): Promise<void> {
