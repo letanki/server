@@ -1,60 +1,14 @@
 /**
- * Extra tank physics sent in the TankModelData JSON (not in SetSpecification): reverse/side/turn
- * accelerations, damping, mass (hull) and kickback / turret-turn acceleration (turret).
- *
- * In the original server these are per-modification tuning constants, NOT derivable from the
- * speed/turn values. Our battle.workflow used hardcoded/approximated values, which made movement
- * feel wrong. Entries here are the EXACT values decoded from captured TankModelData packets; any
- * item NOT listed falls back to the old formula/defaults in battle.workflow until we capture it.
- *
- * Keys are `<base>_m<mod>` (e.g. "wasp_m2"). Angular values are in RADIANS (as sent on the wire).
- * To add more: decode TankModelData (id -1643824092) for the item and copy the fields verbatim.
+ * Per-turret TankModelData physics: kickback (recoil) + turret-turn acceleration. Per-modification
+ * tuning constants decoded from captured TankModelData (id -1643824092); items not listed fall back
+ * to the old formula in battle.workflow. Keys are `<base>_m<mod>` (e.g. "railgun_m2"); angular values
+ * in RADIANS. (Hull physics moved into the unified hulls.data.ts; turrets to follow.)
  */
-export interface HullPhysics {
-    reverseAcceleration: number;
-    sideAcceleration: number;
-    turnAcceleration: number; // radians
-    reverseTurnAcceleration: number; // radians
-    dampingCoeff: number;
-    mass: number; // overrides garage HULL_MASS where the capture disagrees
-}
-
 export interface TurretPhysics {
     kickback: number;
     turretTurnAcceleration: number; // radians
 }
 
-export const hullPhysicsData: Record<string, HullPhysics> = {
-    // m0
-    dictator_m0: { reverseAcceleration: 12.04, sideAcceleration: 9.04, turnAcceleration: 1.81, reverseTurnAcceleration: 3.41, dampingCoeff: 2500, mass: 2170 },
-    mammoth_m0: { reverseAcceleration: 8.09, sideAcceleration: 17.17, turnAcceleration: 1.36, reverseTurnAcceleration: 2.81, dampingCoeff: 2000, mass: 3935 },
-    hornet_m0: { reverseAcceleration: 16.38, sideAcceleration: 12.8, turnAcceleration: 2.82, reverseTurnAcceleration: 3.85, dampingCoeff: 1250, mass: 1409 },
-    hunter_m0: { reverseAcceleration: 10, sideAcceleration: 8.5, turnAcceleration: 2.09, reverseTurnAcceleration: 3.32, dampingCoeff: 1500, mass: 1700 },
-    viking_m0: { reverseAcceleration: 14.09, sideAcceleration: 10.61, turnAcceleration: 2.28, reverseTurnAcceleration: 3.16, dampingCoeff: 2000, mass: 2039 },
-    // m1
-    wasp_m1: { reverseAcceleration: 13.74, sideAcceleration: 18.12, turnAcceleration: 3.04, reverseTurnAcceleration: 5.21, dampingCoeff: 900, mass: 1483 },
-    hornet_m1: { reverseAcceleration: 18.83, sideAcceleration: 15.09, turnAcceleration: 2.88, reverseTurnAcceleration: 4.49, dampingCoeff: 1250, mass: 1774 },
-    hunter_m1: { reverseAcceleration: 12.43, sideAcceleration: 10.78, turnAcceleration: 2.31, reverseTurnAcceleration: 3.79, dampingCoeff: 1500, mass: 2096 },
-    viking_m1: { reverseAcceleration: 16.52, sideAcceleration: 13.65, turnAcceleration: 2.49, reverseTurnAcceleration: 3.58, dampingCoeff: 2000, mass: 2435 },
-    titan_m1: { reverseAcceleration: 12.13, sideAcceleration: 13.91, turnAcceleration: 1.39, reverseTurnAcceleration: 3.34, dampingCoeff: 2100, mass: 3783 },
-    mammoth_m1: { reverseAcceleration: 9.61, sideAcceleration: 20.22, turnAcceleration: 1.49, reverseTurnAcceleration: 3.07, dampingCoeff: 2000, mass: 4543 },
-    // m2
-    wasp_m2: { reverseAcceleration: 15.26, sideAcceleration: 20.87, turnAcceleration: 3.25, reverseTurnAcceleration: 5.79, dampingCoeff: 900, mass: 1817 },
-    hornet_m2: { reverseAcceleration: 21.26, sideAcceleration: 17.37, turnAcceleration: 2.93, reverseTurnAcceleration: 5.13, dampingCoeff: 1250, mass: 2139 },
-    hunter_m2: { reverseAcceleration: 14.87, sideAcceleration: 13.07, turnAcceleration: 2.52, reverseTurnAcceleration: 4.27, dampingCoeff: 1500, mass: 2491 },
-    viking_m2: { reverseAcceleration: 18.96, sideAcceleration: 16.7, turnAcceleration: 2.7, reverseTurnAcceleration: 4.01, dampingCoeff: 2000, mass: 2830 },
-    dictator_m2: { reverseAcceleration: 16.91, sideAcceleration: 13.91, turnAcceleration: 2.13, reverseTurnAcceleration: 4.69, dampingCoeff: 2500, mass: 2961 },
-    titan_m2: { reverseAcceleration: 14.57, sideAcceleration: 16.96, turnAcceleration: 1.65, reverseTurnAcceleration: 3.76, dampingCoeff: 2100, mass: 4391 },
-    mammoth_m2: { reverseAcceleration: 11.13, sideAcceleration: 23.26, turnAcceleration: 1.65, reverseTurnAcceleration: 3.34, dampingCoeff: 2000, mass: 5152 },
-    // m3 — full set
-    wasp_m3: { reverseAcceleration: 17, sideAcceleration: 24, turnAcceleration: 3.490658503988659, reverseTurnAcceleration: 6.457718232379019, dampingCoeff: 900, mass: 2200 },
-    hornet_m3: { reverseAcceleration: 23, sideAcceleration: 19, turnAcceleration: 2.9670597283903604, reverseTurnAcceleration: 5.585053606381854, dampingCoeff: 1250, mass: 2400 },
-    hunter_m3: { reverseAcceleration: 18, sideAcceleration: 16, turnAcceleration: 2.792526803190927, reverseTurnAcceleration: 4.886921905584122, dampingCoeff: 1500, mass: 3000 },
-    viking_m3: { reverseAcceleration: 20, sideAcceleration: 18, turnAcceleration: 2.792526803190927, reverseTurnAcceleration: 4.1887902047863905, dampingCoeff: 2000, mass: 3000 },
-    dictator_m3: { reverseAcceleration: 19, sideAcceleration: 16, turnAcceleration: 2.2689280275926285, reverseTurnAcceleration: 5.235987755982989, dampingCoeff: 2500, mass: 3300 },
-    titan_m3: { reverseAcceleration: 17, sideAcceleration: 20, turnAcceleration: 1.9198621771937625, reverseTurnAcceleration: 4.1887902047863905, dampingCoeff: 2100, mass: 5000 },
-    mammoth_m3: { reverseAcceleration: 12, sideAcceleration: 25, turnAcceleration: 1.7453292519943295, reverseTurnAcceleration: 3.490658503988659, dampingCoeff: 2000, mass: 5500 },
-};
 
 export const turretPhysicsData: Record<string, TurretPhysics> = {
     // m0

@@ -1,7 +1,8 @@
 import { getBonusData } from "@/config/bonus.data";
 import { IPacket } from "@/packets/packet.interfaces";
 import { CALLBACK } from "@/config/constants";
-import { hullPhysicsData, turretPhysicsData } from "@/config/hull-physics.data";
+import { turretPhysicsData } from "@/config/hull-physics.data";
+import { getHullMod } from "@/config/hulls.data";
 import { mapThemeConfigs } from "@/config/map-themes.data";
 import { weaponPhysicsData } from "@/config/physics.data";
 import { sfxBlueprints } from "@/config/sfx.blueprints";
@@ -155,7 +156,7 @@ export class BattleWorkflow {
 
         // Per-item physics captured from the original server (see hull-physics.data). Where an item
         // isn't captured yet, these are undefined and we fall back to the old formula/defaults below.
-        const hullPhys = hullPhysicsData[`${user.equippedHull}_m${user.hulls.get(user.equippedHull) ?? 0}`];
+        const hullPhys = getHullMod(user.equippedHull, user.hulls.get(user.equippedHull) ?? 0);
         const turretPhys = turretPhysicsData[`${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`];
 
         const partsObject: { [key: string]: number } = {
