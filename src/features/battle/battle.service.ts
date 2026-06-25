@@ -19,6 +19,8 @@ import { mapGeometries } from "@/types/mapGeometries";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
+import { UnloadSpaceBattlePacket } from "./battle-init.packets";
+import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
 
@@ -408,5 +410,44 @@ export class BattleService {
      *  facade because the disconnect/exit handlers and the garage workflow call it. */
     public dropFlag(user: UserDocument, battle: Battle, dropPosition: IVector3 | null): void {
         this.ctf.dropFlag(user, battle, dropPosition);
+    }
+
+    /** Ends every running round ahead of a server restart (shows the results screen). The
+     *  restart-pending guard in RoundService.restartRound then evacuates the players instead of
+     *  recommencing the round. */
+    public endAllBattlesForRestart(): void {
+        for (const battle of this.server.lobbyService.getBattles()) {
+            if (battle.roundState === BattleRoundState.RUNNING) {
+                this.round.finishRound(battle); // results screen, then guard evacuates after the 10s pause
+            } else if (battle.roundState !== BattleRoundState.FINISHED) {
+                // WAITING (no round in progress): no finish→restart cycle, so evacuate right away.
+                void this.evacuateForRestart(battle);
+            }
+            // FINISHED battles already have a pending finish timer -> restartRound -> guard -> evacuate.
+        }
+        logger.info("All battles ended for server restart.");
+    }
+
+    /** Removes every player/spectator from `battle` and sends them back to the battle list. Called
+     *  when a finished round would restart but the server is shutting down. */
+    public async evacuateForRestart(battle: Battle): Promise<void> {
+        for (const client of [...battle.clients]) {
+            const user = client.user;
+            if (!user) continue;
+            const isSpectator = client.isSpectator;
+
+            if (!isSpectator) this.announceTankRemoval(user, battle, client.battlePosition);
+            await this.finalizeBattleExit(user, battle, client.friendsCache, isSpectator);
+
+            client.sendPacket(new UnloadSpaceBattlePacket());
+            client.currentBattle = null;
+            client.isSpectator = false;
+            client.battleState = "suicide";
+            client.stopTimeChecker();
+
+            if (client.getState() === "battle_lobby") client.sendPacket(new LobbyPackets.UnloadBattleListPacket());
+            await LobbyWorkflow.returnToLobby(client, this.server, false);
+        }
+        logger.info(`Battle ${battle.battleId} evacuated for server restart.`);
     }
 }

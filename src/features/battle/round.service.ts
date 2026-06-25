@@ -86,6 +86,11 @@ export class RoundService {
     /** Restart a finished round: swap sides (team modes), reset scores/flags, respawn everyone, restart timer. */
     public restartRound(battle: Battle): void {
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) return; // emptied during the pause
+        // Server restarting: don't recommence — send everyone back to the battle list instead.
+        if (this.server.isRestartPending()) {
+            void this.server.battleService.evacuateForRestart(battle);
+            return;
+        }
 
         // Leave the FINISHED freeze up front so the respawn loop below isn't blocked by the freeze
         // guard (combat/spawn gate on roundState === FINISHED). startRoundTimer re-affirms RUNNING.

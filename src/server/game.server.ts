@@ -218,6 +218,20 @@ export class GameServer {
     this.clientManager.getClients().forEach((client) => client.sendPacket(packet));
   }
 
+  // Pending-restart window (set by the /update admin command). While active, creating or joining a
+  // battle is refused with a BattleHaltPacket.
+  private restartAt: number | null = null;
+
+  /** Opens the restart window for `seconds` (matches the HaltServer countdown shown to clients). */
+  public beginRestart(seconds: number): void {
+    this.restartAt = Date.now() + seconds * 1000;
+  }
+
+  /** True while the restart countdown is still running. */
+  public isRestartPending(): boolean {
+    return this.restartAt !== null && Date.now() < this.restartAt;
+  }
+
   public broadcastToLobbyChat(packet: IPacket): void {
     this.clientManager.sendToLobbyChatListeners(packet);
   }

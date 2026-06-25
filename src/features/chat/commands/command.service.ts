@@ -1,3 +1,4 @@
+import { hasModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
 import logger from "@/utils/logger";
 import fs from "fs";
 import path from "path";
@@ -50,7 +51,7 @@ export class CommandService {
             return;
         }
 
-        if (context.executor.user!.chatModeratorLevel < command.permissionLevel) {
+        if (!hasModeratorPower(context.executor.user!.chatModeratorLevel, command.permissionLevel)) {
             context.reply("Você não tem permissão para usar este comando.");
             return;
         }

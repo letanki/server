@@ -3,6 +3,7 @@ import { suppliesData } from "@/config/supplies.data";
 import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { AddUserToBattleDmPacket, AddUserTeamPacket, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
+import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -46,6 +47,12 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
     public async execute(client: GameClient, server: GameServer, packet: BattlePackets.EnterBattlePacket): Promise<void> {
         if (!client.user || !client.lastViewedBattleId) {
             logger.warn(`Tentativa de entrar em batalha sem batalha selecionada.`, { user: client.user?.username, client: client.getRemoteAddress() });
+            return;
+        }
+
+        // Server about to restart: refuse the join, echoing the battleId the player tried to enter.
+        if (server.isRestartPending()) {
+            client.sendPacket(new BattleHaltPacket(client.lastViewedBattleId));
             return;
         }
 

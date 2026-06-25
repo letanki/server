@@ -1,4 +1,5 @@
 import { BattleMode, EquipmentConstraintsMode } from "@/features/battle/battle.model";
+import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -11,6 +12,12 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
 
     public async execute(client: GameClient, server: GameServer, packet: LobbyPackets.CreateBattleRequest): Promise<void> {
         if (!client.user) {
+            return;
+        }
+
+        // Server about to restart: refuse the create. The client ignores the string's value here.
+        if (server.isRestartPending()) {
+            client.sendPacket(new BattleHaltPacket("restart"));
             return;
         }
 
