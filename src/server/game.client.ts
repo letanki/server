@@ -106,6 +106,9 @@ export class GameClient {
   public railgunChargeStart: number = 0;
   // When the shaft entered aiming mode (the sniper damage scales with how long it has charged).
   public shaftAimStart: number = 0;
+  // Flamethrower residual burn: current burn damage/sec on this tank, and who lit it (for kill credit).
+  public flameTemperature: number = 0;
+  public flameSource: string | null = null;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
