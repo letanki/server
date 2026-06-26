@@ -47,8 +47,16 @@ export class TwinsTargetShotCommandPacket extends BasePacket {
         const reader = new BufferReader(buffer);
         this.clientTime = reader.readInt32BE();
         this.shotId = reader.readInt32BE();
-        this.target = reader.readOptionalString();
-        this.hitGlobalPosition = reader.readOptionalVector3();
+        // A miss (wall/void) sends a short packet with no target — never over-read past the end (that
+        // crashed the client). Only a real hit carries the target + global hit position.
+        if (!reader.hasRemaining) return;
+        try {
+            this.target = reader.readOptionalString();
+            this.hitGlobalPosition = reader.readOptionalVector3();
+        } catch {
+            this.target = null;
+            this.hitGlobalPosition = null;
+        }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
     public static getId(): number { return -1723353904; }

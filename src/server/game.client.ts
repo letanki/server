@@ -104,6 +104,8 @@ export class GameClient {
   public battleScore: number = 0;
   // When the railgun charge began (server-enforced fixed charge time = anti fire-rate hack).
   public railgunChargeStart: number = 0;
+  // When the shaft entered aiming mode (the sniper damage scales with how long it has charged).
+  public shaftAimStart: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
