@@ -28,6 +28,20 @@ export class RicochetShotCommandPacket extends BasePacket implements RicochetTyp
     }
 }
 
+/** C→S: the ricochet ball hit a tank. We only need clientTime + the target nickname for damage; the
+ *  trailing hit descriptor + bounce-point vector (per the client codec) are not needed server-side. */
+export class RicochetTargetShotCommandPacket extends BasePacket {
+    public clientTime: number = 0;
+    public target: string | null = null;
+    public read(buffer: Buffer): void {
+        const reader = new BufferReader(buffer);
+        this.clientTime = reader.readInt32BE();
+        this.target = reader.readOptionalString();
+    }
+    public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
+    public static getId(): number { return 1229701582; }
+}
+
 export class RicochetShotPacket extends BasePacket implements RicochetTypes.IRicochetShotPacket {
     public nickname: string | null;
     public x: number;
