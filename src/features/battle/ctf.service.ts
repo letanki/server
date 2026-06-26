@@ -56,14 +56,14 @@ export class CtfService {
             if (currentBattle.flagPositionRed && currentBattle.flagBasePositionRed && currentBattle.flagPositionRed.x !== currentBattle.flagBasePositionRed.x && this._nearFlag(client, currentBattle.flagPositionRed)) {
                 this.returnFlagToBase(currentBattle, "RED", user);
             }
-            if (currentBattle.flagCarrierBlue?.id === user.id && currentBattle.flagBasePositionRed && this._nearFlag(client, currentBattle.flagBasePositionRed)) {
+            if (currentBattle.flagCarrierBlue?.id === user.id && this._isOwnFlagAtBase(currentBattle, "RED") && currentBattle.flagBasePositionRed && this._nearFlag(client, currentBattle.flagBasePositionRed)) {
                 this.captureFlag(client, currentBattle, "BLUE");
             }
         } else if (isOnBlueTeam) {
             if (currentBattle.flagPositionBlue && currentBattle.flagBasePositionBlue && currentBattle.flagPositionBlue.x !== currentBattle.flagBasePositionBlue.x && this._nearFlag(client, currentBattle.flagPositionBlue)) {
                 this.returnFlagToBase(currentBattle, "BLUE", user);
             }
-            if (currentBattle.flagCarrierRed?.id === user.id && currentBattle.flagBasePositionBlue && this._nearFlag(client, currentBattle.flagBasePositionBlue)) {
+            if (currentBattle.flagCarrierRed?.id === user.id && this._isOwnFlagAtBase(currentBattle, "BLUE") && currentBattle.flagBasePositionBlue && this._nearFlag(client, currentBattle.flagBasePositionBlue)) {
                 this.captureFlag(client, currentBattle, "RED");
             }
         }
@@ -185,6 +185,9 @@ export class CtfService {
         const capturingTeamId = capturedFlagTeam === "RED" ? 1 : 0;
         const capturingTeamName = capturingTeamId === 0 ? "RED" : "BLUE";
 
+        // Classic CTF rule: you can only score the enemy flag while your OWN flag is home at base.
+        if (!this._isOwnFlagAtBase(battle, capturingTeamName)) return;
+
         // Credit the capturer with battle score so captures count toward their individual share of the
         // end-of-round crystal payout. A capture is worth CAPTURE_SCORE_PER_ENEMY per CONNECTED player on
         // the enemy team (the team whose flag was captured) — e.g. 10 enemies => 100 points. Players who
@@ -220,6 +223,14 @@ export class CtfService {
 
     private _clearFlagReturnTimer(battle: Battle, flagTeam: "RED" | "BLUE"): void {
         battle.timers.clear(`flagReturn:${flagTeam}`);
+    }
+
+    /** A team's OWN flag is home: at its base position and not carried by anyone (required to score). */
+    private _isOwnFlagAtBase(battle: Battle, team: "RED" | "BLUE"): boolean {
+        const pos = team === "RED" ? battle.flagPositionRed : battle.flagPositionBlue;
+        const base = team === "RED" ? battle.flagBasePositionRed : battle.flagBasePositionBlue;
+        const carrier = team === "RED" ? battle.flagCarrierRed : battle.flagCarrierBlue;
+        return !carrier && !!pos && !!base && pos.x === base.x && pos.y === base.y;
     }
 
     private _resetFlagState(battle: Battle, flagTeam: "RED" | "BLUE"): void {
