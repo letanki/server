@@ -36,6 +36,7 @@ export interface UserAttributes {
     emailConfirmed: boolean;
     crystals: number;
     experience: number;
+    clanId: import("mongoose").Types.ObjectId | null; // the clan this user belongs to (null = no clan)
     isActive: boolean;
     isPunished: boolean;
     punishmentExpiresAt: Date | null;
@@ -85,6 +86,7 @@ const UserSchema = new Schema<UserDocument>({
     emailConfirmed: { type: Boolean, default: false },
     crystals: { type: Number, default: 0, min: 0 },
     experience: { type: Number, default: 0, min: 0 },
+    clanId: { type: Schema.Types.ObjectId, ref: "Clan", default: null },
     isActive: { type: Boolean, default: true },
     isPunished: { type: Boolean, default: false },
     punishmentExpiresAt: { type: Date, default: null },

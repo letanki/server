@@ -11,6 +11,7 @@ import { GarageService } from "@/features/garage/garage.service";
 import { InviteService } from "@/features/invite/invite.service";
 import { LobbyService } from "@/features/lobby/lobby.service";
 import { ProfileService } from "@/features/profile/profile.service";
+import { ClanService } from "@/features/clan/clan.service";
 import { QuestService } from "@/features/quests/quests.service";
 import { ReferralService } from "@/features/referral/referral.service";
 import { SettingsService } from "@/features/settings/settings.service";
@@ -54,6 +55,7 @@ async function bootstrap() {
   const lobbyService = new LobbyService();
   const referralService = new ReferralService();
   const profileService = new ProfileService();
+  const clanService = new ClanService();
   let battleService: BattleService;
 
   await connectToDatabase();
@@ -97,6 +99,7 @@ async function bootstrap() {
       settingsService,
       referralService,
       profileService,
+      clanService,
     }
   );
 

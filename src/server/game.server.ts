@@ -5,6 +5,7 @@ import { IRegistrationForm } from "@/features/authentication/auth.types";
 import { BattleService } from "@/features/battle/battle.service";
 import { ChatService } from "@/features/chat/chat.service";
 import { CommandService } from "@/features/chat/commands/command.service";
+import { ClanService } from "@/features/clan/clan.service";
 import { FriendsService } from "@/features/friends/friends.service";
 import { GarageService } from "@/features/garage/garage.service";
 import { InviteService } from "@/features/invite/invite.service";
@@ -45,6 +46,7 @@ export interface IServerServices {
   settingsService: SettingsService;
   referralService: ReferralService;
   profileService: ProfileService;
+  clanService: ClanService;
 }
 
 export class GameServer {
@@ -79,6 +81,7 @@ export class GameServer {
   public readonly settingsService: SettingsService;
   public readonly referralService: ReferralService;
   public readonly profileService: ProfileService;
+  public readonly clanService: ClanService;
 
   private _getBattleService: () => BattleService;
 
@@ -108,6 +111,7 @@ export class GameServer {
     this.settingsService = services.settingsService;
     this.referralService = services.referralService;
     this.profileService = services.profileService;
+    this.clanService = services.clanService;
 
     this.server = net.createServer(this.handleConnection.bind(this));
     this.clientManager = new ClientManager();

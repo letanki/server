@@ -1,0 +1,371 @@
+import { UpdateCrystals } from "@/features/profile/profile.packets";
+import * as ProfilePackets from "@/features/profile/profile.packets";
+import { GameClient } from "@/server/game.client";
+import { GameServer } from "@/server/game.server";
+import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
+import logger from "@/utils/logger";
+import { LoadDependencies } from "@/features/loader/loader.packets";
+import { ResourceManager } from "@/utils/resource.manager";
+import * as ClanPackets from "./clan.packets";
+import type { ClanDocument } from "./clan.model";
+
+/** The images the not-in-clan window shows (intro illustration + clan card), plus the rankings podium. */
+const CLAN_MODAL_RESOURCES = ["clan/intro", "clan/card", "clan/podium"] as const;
+
+/** Preload the clan-modal images, then run `then` once the client has them (avoids "Resource not found"). */
+function loadClanModalResources(client: GameClient, server: GameServer, then: (c: GameClient) => void): void {
+    const callbackId = server.registerDynamicCallback((c) => {
+        server.removeDynamicCallback(callbackId);
+        then(c);
+    });
+    const resources = ResourceManager.getBulkResources([...CLAN_MODAL_RESOURCES]);
+    client.sendPacket(new LoadDependencies({ resources }, callbackId));
+}
+
+/** If the clan's leader is online, push the real-time "new join request" notify (card add). */
+async function notifyOwnerRequestAdded(server: GameServer, clan: ClanDocument, requesterNick: string): Promise<void> {
+    const owner = await server.clanService.getLeaderUsername(clan);
+    const ownerClient = owner ? server.findClientByUsername(owner) : undefined;
+    if (!ownerClient) return;
+    ownerClient.sendPacket(new ClanPackets.NotifyJoinRequestPacket(requesterNick));
+    ownerClient.sendPacket(new ClanPackets.AddJoinRequestPacket(requesterNick));
+}
+
+/** If the clan's leader is online, push the real-time "request removed" notify (card remove). */
+async function notifyOwnerRequestRemoved(server: GameServer, clan: ClanDocument, requesterNick: string): Promise<void> {
+    const owner = await server.clanService.getLeaderUsername(clan);
+    const ownerClient = owner ? server.findClientByUsername(owner) : undefined;
+    if (!ownerClient) return;
+    ownerClient.sendPacket(new ClanPackets.JoinRequestDeclinedPacket(requesterNick));
+    ownerClient.sendPacket(new ClanPackets.RemoveJoinRequestPacket(requesterNick));
+}
+
+/** If the clan's leader is online, drop the SENT-invite card for `username` from their list. */
+async function notifyOwnerInviteRemoved(server: GameServer, clan: ClanDocument, username: string): Promise<void> {
+    const owner = await server.clanService.getLeaderUsername(clan);
+    const ownerClient = owner ? server.findClientByUsername(owner) : undefined;
+    if (ownerClient) ownerClient.sendPacket(new ClanPackets.ClanInviteCancelledAckPacket(username));
+}
+
+/** Clan view opened: not-in-clan players get the create/join window. (In-clan = "my clan" window — TODO.) */
+export class ShowNotInClanPanelHandler implements IPacketHandler<ClanPackets.ShowNotInClanPanelPacket> {
+    public readonly packetId = ClanPackets.ShowNotInClanPanelPacket.getId();
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
+        if (!client.user) return;
+        if (client.user.clanId) {
+            // Member opening the clan view: show their own clan (the "my clan" window).
+            const clan = await server.clanService.getClanById(client.user.clanId);
+            if (clan) {
+                const view = await server.clanService.buildClanView(clan);
+                client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+            }
+            return;
+        }
+        // Non-member: load the window images first, then show the window (it references them by id).
+        loadClanModalResources(client, server, (c) => c.sendPacket(new ClanPackets.ShowNotInClanWindowPacket()));
+    }
+}
+
+/** Owner edits the clan description → persist and echo it back (the official confirms the description). */
+export class SetClanDescriptionHandler implements IPacketHandler<ClanPackets.SetClanDescriptionPacket> {
+    public readonly packetId = ClanPackets.SetClanDescriptionPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanDescriptionPacket): Promise<void> {
+        if (!client.user) return;
+        const clan = await server.clanService.editClanSettings(client.user, { description: packet.description ?? "" });
+        if (clan) client.sendPacket(new ClanPackets.SetClanDescriptionPacket(clan.description));
+    }
+}
+
+/** Owner edits the minimum rank to request to join → persist. */
+export class SetClanMinRankHandler implements IPacketHandler<ClanPackets.SetClanMinRankPacket> {
+    public readonly packetId = ClanPackets.SetClanMinRankPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanMinRankPacket): Promise<void> {
+        if (!client.user) return;
+        await server.clanService.editClanSettings(client.user, { minRank: packet.minRank });
+    }
+}
+
+/** Owner toggles recruiting (open/closed) → persist. */
+export class SetClanRecruitingHandler implements IPacketHandler<ClanPackets.SetClanRecruitingPacket> {
+    public readonly packetId = ClanPackets.SetClanRecruitingPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanRecruitingPacket): Promise<void> {
+        if (!client.user) return;
+        await server.clanService.editClanSettings(client.user, { recruiting: packet.recruiting });
+    }
+}
+
+/** A member/owner opens their clan window → send the my-clan window (with members + pending requests). */
+export class OpenMyClanWindowHandler implements IPacketHandler<ClanPackets.OpenMyClanWindowPacket> {
+    public readonly packetId = ClanPackets.OpenMyClanWindowPacket.getId();
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
+        if (!client.user || !client.user.clanId) return;
+        const clan = await server.clanService.getClanById(client.user.clanId);
+        if (!clan) return;
+        const view = await server.clanService.buildClanView(clan);
+        client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+    }
+}
+
+/** Owner declines a pending join request → removes it and tells the client to drop the request card. */
+export class DeclineJoinRequestHandler implements IPacketHandler<ClanPackets.DeclineJoinRequestPacket> {
+    public readonly packetId = ClanPackets.DeclineJoinRequestPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.DeclineJoinRequestPacket): Promise<void> {
+        if (!client.user || !packet.username) return;
+        const result = await server.clanService.declineJoinRequest(client.user, packet.username);
+        if (!result) return;
+        // Drop the request card on the owner's own list.
+        client.sendPacket(new ClanPackets.JoinRequestDeclinedPacket(result.nick));
+        client.sendPacket(new ClanPackets.RemoveJoinRequestPacket(result.nick));
+        // And tell the requester (if online) their pending request is gone — otherwise their "sent
+        // requests" card lingers until relogin (same packet as a self-cancel).
+        const requesterClient = server.findClientByUsername(result.nick);
+        if (requesterClient) requesterClient.sendPacket(new ClanPackets.JoinRequestCancelledPacket(result.tag));
+    }
+}
+
+/** Close the clan window: echo the packet back so the client actually closes the view. */
+export class CloseClanWindowHandler implements IPacketHandler<ClanPackets.CloseClanWindowPacket> {
+    public readonly packetId = ClanPackets.CloseClanWindowPacket.getId();
+    public async execute(client: GameClient, _server: GameServer): Promise<void> {
+        client.sendPacket(new ClanPackets.CloseClanWindowPacket());
+    }
+}
+
+export class HideNotInClanPanelHandler implements IPacketHandler<ClanPackets.HideNotInClanPanelPacket> {
+    public readonly packetId = ClanPackets.HideNotInClanPanelPacket.getId();
+    public async execute(_client: GameClient, _server: GameServer): Promise<void> {
+        /* nothing to do server-side */
+    }
+}
+
+/** Clan leaderboard request → reply with the requested page (clans by rating desc) as light models. */
+export class GetClanRatingsDataHandler implements IPacketHandler<ClanPackets.GetClanRatingsDataPacket> {
+    public readonly packetId = ClanPackets.GetClanRatingsDataPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.GetClanRatingsDataPacket): Promise<void> {
+        const clans = await server.clanService.getRatingsPage(packet.startIndex, packet.count);
+        client.sendPacket(new ClanPackets.SetClanRatingsDataPacket(packet.startIndex, clans));
+    }
+}
+
+/** View a clan by tag → send the full clan-details window (byte-perfect ClanModel). */
+export class ShowForeignClanHandler implements IPacketHandler<ClanPackets.ShowForeignClanPacket> {
+    public readonly packetId = ClanPackets.ShowForeignClanPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.ShowForeignClanPacket): Promise<void> {
+        const clan = packet.clanTag ? await server.clanService.getClanByTag(packet.clanTag) : null;
+        if (!clan) {
+            logger.info(`Foreign clan view: "${packet.clanTag}" not found.`);
+            return;
+        }
+        const view = await server.clanService.buildClanView(clan);
+        client.sendPacket(new ClanPackets.ShowForeignClanWindowPacket(view));
+    }
+}
+
+/** Live TAG availability check (create form). Replies with the available/taken empty packet. */
+export class CheckClanTagHandler implements IPacketHandler<ClanPackets.CheckClanTagPacket> {
+    public readonly packetId = ClanPackets.CheckClanTagPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CheckClanTagPacket): Promise<void> {
+        const taken = !!packet.tag && !!(await server.clanService.getClanByTag(packet.tag));
+        client.sendPacket(taken ? new ClanPackets.ClanTagTakenPacket() : new ClanPackets.ClanTagAvailablePacket());
+    }
+}
+
+/** Live NAME availability check (create form). Replies with the available/taken empty packet. */
+export class CheckClanNameHandler implements IPacketHandler<ClanPackets.CheckClanNamePacket> {
+    public readonly packetId = ClanPackets.CheckClanNamePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CheckClanNamePacket): Promise<void> {
+        const taken = !!packet.name && !!(await server.clanService.getClanByName(packet.name));
+        client.sendPacket(taken ? new ClanPackets.ClanNameTakenPacket() : new ClanPackets.ClanNameAvailablePacket());
+    }
+}
+
+/** Search/list panel: clan exists by name? → reply ClanSearchFound when a match exists (enables the button). */
+export class SearchClanByNameHandler implements IPacketHandler<ClanPackets.SearchClanByNamePacket> {
+    public readonly packetId = ClanPackets.SearchClanByNamePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SearchClanByNamePacket): Promise<void> {
+        if (!client.user || !packet.name) return;
+        const clan = await server.clanService.getClanByNameInsensitive(packet.name);
+        // 1726541163 = exists AND recruiting (enable); -866005248 = not found OR not recruiting (disable).
+        const joinable = !!clan && clan.recruiting !== false;
+        client.sendPacket(joinable ? new ClanPackets.ClanSearchFoundPacket() : new ClanPackets.ClanSearchUnavailablePacket());
+    }
+}
+
+/** "Request to join" from the search/list panel (by clan name) → same result as the clan-view request. */
+export class JoinClanByNameHandler implements IPacketHandler<ClanPackets.JoinClanByNamePacket> {
+    public readonly packetId = ClanPackets.JoinClanByNamePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.JoinClanByNamePacket): Promise<void> {
+        if (!client.user || !packet.name) return;
+        const clan = await server.clanService.requestJoinByName(client.user, packet.name);
+        if (!clan) return;
+        const view = await server.clanService.buildClanView(clan);
+        client.sendPacket(new ClanPackets.JoinRequestModelPacket(view));
+        client.sendPacket(new ClanPackets.JoinRequestSentPacket(clan.tag));
+        await notifyOwnerRequestAdded(server, clan, client.user.username);
+    }
+}
+
+/** Cancel a pending join request from the "sent requests" modal → removes it and acks. */
+export class CancelJoinRequestFromModalHandler implements IPacketHandler<ClanPackets.CancelJoinRequestFromModalPacket> {
+    public readonly packetId = ClanPackets.CancelJoinRequestFromModalPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CancelJoinRequestFromModalPacket): Promise<void> {
+        if (!client.user || !packet.tag) return;
+        const clan = await server.clanService.cancelJoinRequest(client.user, packet.tag);
+        if (!clan) return;
+        client.sendPacket(new ClanPackets.JoinRequestCancelledPacket(clan.tag));
+        await notifyOwnerRequestRemoved(server, clan, client.user.username);
+    }
+}
+
+/** "Request to join" a clan → records the pending request and acks the client. */
+export class JoinClanRequestHandler implements IPacketHandler<ClanPackets.JoinClanRequestPacket> {
+    public readonly packetId = ClanPackets.JoinClanRequestPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.JoinClanRequestPacket): Promise<void> {
+        if (!client.user || !packet.tag) return;
+        const clan = await server.clanService.requestJoin(client.user, packet.tag);
+        if (!clan) return;
+        // Official order: the request-card model (325031295), then the simple ack — so the request
+        // shows up in the "sent requests" modal.
+        const view = await server.clanService.buildClanView(clan);
+        client.sendPacket(new ClanPackets.JoinRequestModelPacket(view));
+        client.sendPacket(new ClanPackets.JoinRequestSentPacket(clan.tag));
+        await notifyOwnerRequestAdded(server, clan, client.user.username);
+    }
+}
+
+/** Cancel a pending join request → removes it and acks the client. */
+export class CancelJoinClanRequestHandler implements IPacketHandler<ClanPackets.CancelJoinClanRequestPacket> {
+    public readonly packetId = ClanPackets.CancelJoinClanRequestPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CancelJoinClanRequestPacket): Promise<void> {
+        if (!client.user || !packet.tag) return;
+        const clan = await server.clanService.cancelJoinRequest(client.user, packet.tag);
+        if (!clan) return;
+        client.sendPacket(new ClanPackets.JoinRequestCancelledPacket(clan.tag));
+        await notifyOwnerRequestRemoved(server, clan, client.user.username);
+    }
+}
+
+/** Live validation as the leader types a username in the invite field → toggles the "send invite" button.
+ *  Replies with the valid/invalid empty packet (the id encodes the result). */
+export class CheckInviteUserHandler implements IPacketHandler<ClanPackets.CheckInviteUserPacket> {
+    public readonly packetId = ClanPackets.CheckInviteUserPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CheckInviteUserPacket): Promise<void> {
+        if (!client.user) return;
+        const valid = !!packet.username && (await server.clanService.canInviteUser(client.user, packet.username));
+        client.sendPacket(valid ? new ClanPackets.InviteUserValidPacket() : new ClanPackets.InviteUserInvalidPacket());
+    }
+}
+
+/** Owner sends a clan invite → records it, acks the owner, and pushes the invite to the target if online. */
+export class SendClanInviteHandler implements IPacketHandler<ClanPackets.SendClanInvitePacket> {
+    public readonly packetId = ClanPackets.SendClanInvitePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SendClanInvitePacket): Promise<void> {
+        if (!client.user || !packet.username) return;
+        const result = await server.clanService.inviteUser(client.user, packet.username);
+        if (!result) return;
+        client.sendPacket(new ClanPackets.ClanInviteSentAckPacket(result.target.username));
+        const targetClient = server.findClientByUsername(result.target.username);
+        if (targetClient) {
+            // The invited user gets the clan card (325031295) then the invite notify (134379747).
+            const view = await server.clanService.buildClanView(result.clan);
+            targetClient.sendPacket(new ClanPackets.JoinRequestModelPacket(view));
+            targetClient.sendPacket(new ClanPackets.ClanInviteNotifyPacket(result.clan.tag));
+        }
+    }
+}
+
+/** Owner cancels a pending invite → removes it, acks the owner, and tells the target to drop the invite. */
+export class CancelClanInviteHandler implements IPacketHandler<ClanPackets.CancelClanInvitePacket> {
+    public readonly packetId = ClanPackets.CancelClanInvitePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CancelClanInvitePacket): Promise<void> {
+        if (!client.user || !packet.username) return;
+        const result = await server.clanService.cancelInvite(client.user, packet.username);
+        if (!result) return;
+        client.sendPacket(new ClanPackets.ClanInviteCancelledAckPacket(result.target.username));
+        const targetClient = server.findClientByUsername(result.target.username);
+        if (targetClient) targetClient.sendPacket(new ClanPackets.ClanInviteAckPacket(result.clan.tag));
+    }
+}
+
+/** Invited user opens the clan attached to an invite → echo the tag back. */
+export class ViewInviteClanHandler implements IPacketHandler<ClanPackets.ViewInviteClanPacket> {
+    public readonly packetId = ClanPackets.ViewInviteClanPacket.getId();
+    public async execute(client: GameClient, _server: GameServer, packet: ClanPackets.ViewInviteClanPacket): Promise<void> {
+        if (!packet.tag) return;
+        client.sendPacket(new ClanPackets.ViewInviteClanResponsePacket(packet.tag));
+    }
+}
+
+/** Invited user accepts → joins the clan and is taken to the clan profile. */
+export class AcceptClanInviteHandler implements IPacketHandler<ClanPackets.AcceptClanInvitePacket> {
+    public readonly packetId = ClanPackets.AcceptClanInvitePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.AcceptClanInvitePacket): Promise<void> {
+        if (!client.user || !packet.tag) return;
+        const clan = await server.clanService.acceptInvite(client.user, packet.tag);
+        if (!clan) return;
+        const view = await server.clanService.buildClanView(clan);
+        // Official accept sequence for the new member: hide the not-in-clan panel, drop the invite card,
+        // set the clan tag + name, then show the clan window.
+        client.sendPacket(new ClanPackets.HideNotInClanPanelPacket());
+        client.sendPacket(new ClanPackets.ClanInviteAckPacket(clan.tag));
+        client.sendPacket(new ClanPackets.ClanTagNotifyPacket(clan.tag));
+        client.sendPacket(new ClanPackets.ClanNameNotifyPacket(clan.name));
+        client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+        client.sendPacket(new ProfilePackets.ClanNotifierData(client.user.username, clan.tag));
+        // Notify the online owner: clear the pending invite and add the new member to their window.
+        const owner = await server.clanService.getLeaderUsername(clan);
+        const ownerClient = owner ? server.findClientByUsername(owner) : undefined;
+        const member = view.members.find((m) => m.nick === client.user!.username);
+        if (ownerClient && member) {
+            // Official order: clear invite, add member model, two username notifies, then set the tag.
+            ownerClient.sendPacket(new ClanPackets.ClanInviteCancelledAckPacket(client.user.username));
+            ownerClient.sendPacket(new ClanPackets.AddClanMemberPacket(member));
+            ownerClient.sendPacket(new ClanPackets.MemberAddedNotifyPacket(client.user.username));
+            ownerClient.sendPacket(new ClanPackets.ClanLeaderNotifyPacket(client.user.username));
+            ownerClient.sendPacket(new ProfilePackets.ClanNotifierData(client.user.username, clan.tag));
+        }
+        // She can only be in one clan now: strip her dangling requests/invites elsewhere and clear those
+        // owners' cards (the "convite enviado ou recebido" / pending request must disappear).
+        const cleared = await server.clanService.clearPendingMembership(client.user);
+        for (const { clan: other, removedRequest, removedInvite } of cleared) {
+            if (removedRequest) await notifyOwnerRequestRemoved(server, other, client.user.username);
+            if (removedInvite && String(other._id) !== String(clan._id)) await notifyOwnerInviteRemoved(server, other, client.user.username);
+        }
+    }
+}
+
+/** Invited user declines → removes the invite and acks. */
+export class DeclineClanInviteHandler implements IPacketHandler<ClanPackets.DeclineClanInvitePacket> {
+    public readonly packetId = ClanPackets.DeclineClanInvitePacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.DeclineClanInvitePacket): Promise<void> {
+        if (!client.user || !packet.tag) return;
+        const clan = await server.clanService.declineInvite(client.user, packet.tag);
+        if (!clan) return;
+        client.sendPacket(new ClanPackets.ClanInviteAckPacket(clan.tag)); // remove her received-invite card
+        await notifyOwnerInviteRemoved(server, clan, client.user.username); // remove the owner's sent-invite card
+    }
+}
+
+/** Create-clan form submit. Founds the clan + charges the cost. (Best-guess packet id — verify in-game.) */
+export class CreateClanHandler implements IPacketHandler<ClanPackets.CreateClanPacket> {
+    public readonly packetId = ClanPackets.CreateClanPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.CreateClanPacket): Promise<void> {
+        const user = client.user;
+        if (!user || !packet.name || !packet.tag) return;
+        try {
+            const clan = await server.clanService.createClan(user, packet.name, packet.tag, "");
+            // Send the user straight to the clan profile (the official order: close form, tag, window,
+            // leader, crystals, clan tag).
+            client.sendPacket(new ClanPackets.HideNotInClanPanelPacket());
+            client.sendPacket(new ClanPackets.ClanTagNotifyPacket(clan.tag));
+            const view = await server.clanService.buildClanView(clan);
+            client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+            client.sendPacket(new ClanPackets.ClanLeaderNotifyPacket(user.username));
+            client.sendPacket(new UpdateCrystals(user.crystals)); // cost was deducted
+            client.sendPacket(new ProfilePackets.ClanNotifierData(user.username, clan.tag)); // show the tag
+            logger.info(`${user.username} created clan ${clan.name} [${clan.tag}].`);
+        } catch (error: any) {
+            logger.warn(`Clan creation failed for ${user.username}: ${error.message}`);
+        }
+    }
+}

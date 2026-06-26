@@ -4,6 +4,7 @@ import { HideLoginForm, Punishment } from "@/features/authentication/auth.packet
 import { Battle, BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
 import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import * as ChatPackets from "@/features/chat/chat.packets";
+import * as ClanPackets from "@/features/clan/clan.packets";
 import { PopulatedChatMessage } from "@/features/chat/chat.service";
 import { IChatMessageData } from "@/features/chat/chat.types";
 import { UnloadGaragePacket } from "@/features/garage/garage.packets";
@@ -65,7 +66,19 @@ export class LobbyWorkflow {
         // Clan module must be initialized BEFORE the lobby panel (LobbyData / official "InitPanel",
         // id 907073245) is built, or the panel renders without the clan button — the official sends
         // it as the first post-login init. Send it ahead of sendPlayerVitals (which sends LobbyData).
-        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket());
+        // Repopulate the "sent requests" modal: send the request card (325031295) for each pending join
+        // request BEFORE InitUserClanModels, and feed the same tags into InitUserClanModels (the client
+        // renders the sent-requests list from that vector at init). Without either the request "disappears".
+        let pendingTags: string[] = [];
+        if (!user.clanId) {
+            const pending = await server.clanService.getPendingRequests(user);
+            for (const clan of pending) {
+                const view = await server.clanService.buildClanView(clan);
+                client.sendPacket(new ClanPackets.JoinRequestModelPacket(view));
+            }
+            pendingTags = pending.map((c) => c.tag);
+        }
+        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags));
         this.sendPlayerVitals(user, client, server);
         this.sendInitialSettings(client, server);
         this.sendAchievementTips(user, client);

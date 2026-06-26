@@ -444,9 +444,13 @@ export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetB
 // NOTE: the per-user clan tag is a SEPARATE packet (ClanNotifierData, id -117055417).
 export class InitUserClanModelsPacket extends BasePacket {
     static readonly CREATION_COST = 500000; // crystals to create a clan (0x7A120)
+    // Tags of the clans the user has a PENDING join request to. The client renders the "sent requests"
+    // list from this Vector<String> at init — without it the modal shows 0 even if the request cards
+    // (325031295) were sent. Confirmed by diffing captures: empty (s18) vs 1 request "LGC" (s19).
+    constructor(private readonly requestTags: string[] = []) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
-        return new BufferWriter()
+        const w = new BufferWriter()
             .writeInt8(1).writeInt8(1).writeInt8(1) // module-enabled flags
             .writeInt32BE(0)
             .writeInt8(1).writeInt8(1)
@@ -454,12 +458,14 @@ export class InitUserClanModelsPacket extends BasePacket {
             .writeInt32BE(0)
             .writeInt8(1)
             .writeInt8(8)
-            // empty clan state (sub-model vectors / counters — all zero in the base config)
-            .writeInt32BE(0).writeInt32BE(0).writeInt32BE(0)
-            .writeInt32BE(0).writeInt32BE(0).writeInt32BE(0)
-            .writeInt8(0)
-            .writeResource(ResourceManager.getIdlowById("clan/podium")) // rankings podium image
-            .getBuffer();
+            .writeInt32BE(0).writeInt8(0).writeInt8(0); // 6 pre-vector state bytes (all zero)
+        // pending join-requests Vector<String> (int32 count + each tag as optionalString)
+        w.writeInt32BE(this.requestTags.length);
+        for (const tag of this.requestTags) w.writeOptionalString(tag);
+        // remaining clan state (all zero in the base config) + rankings podium resource
+        w.writeInt32BE(0).writeInt32BE(0).writeInt32BE(0).writeInt8(0).writeInt8(0).writeInt8(0)
+            .writeResource(ResourceManager.getIdlowById("clan/podium"));
+        return w.getBuffer();
     }
     static getId(): number { return -1338449818; }
 }

@@ -36,8 +36,8 @@ export class GetUserInfoHandler implements IPacketHandler<ProfilePackets.GetUser
             client.sendPacket(new UserNotInBattlePacket(user.username));
         }
 
-        // Clans are not implemented yet; send the "no clan" state so the client
-        // can render the user entry (the new client requires this packet).
-        client.sendPacket(new ProfilePackets.ClanNotifierData(user.username));
+        // Per-user clan tag shown next to the nickname (null = no clan).
+        const clanTag = await server.clanService.getTagForUser(user);
+        client.sendPacket(new ProfilePackets.ClanNotifierData(user.username, clanTag));
     }
 }
