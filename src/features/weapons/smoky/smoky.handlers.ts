@@ -28,7 +28,7 @@ export class SmokyStaticShotCommandHandler implements IPacketHandler<SmokyPacket
 
 export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPackets.SmokyTargetShotCommandPacket> {
     public readonly packetId = SmokyPackets.SmokyTargetShotCommandPacket.getId();
-    public execute(client: GameClient, server: GameServer, packet: SmokyPackets.SmokyTargetShotCommandPacket): void {
+    public async execute(client: GameClient, server: GameServer, packet: SmokyPackets.SmokyTargetShotCommandPacket): Promise<void> {
         const { user, currentBattle } = client;
         if (!user || !currentBattle || !packet.targetUserId) {
             logger.warn("SmokyTargetShotCommandHandler received incomplete packet.", { client: client.getRemoteAddress() });
@@ -37,23 +37,26 @@ export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPacket
         const turretMod = ItemUtils.getItemModification(user, "turret");
         const critChance = ItemUtils.getPropertyValue(turretMod, "CRITICAL_HIT_CHANCE") ?? 0;
         const isCritical = Math.random() * 100 < critChance;
-        let impactForceRatio = 1.0;
+
+        // Shooter→impact distance (world units / 100), and the smoky damage-falloff radii from physics.
+        const weaponId = `${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`;
+        const physics = weaponPhysicsData.weapons.find((w) => w.id === weaponId);
+        let distance = 0;
         const shooterPosition = client.battlePosition;
         if (shooterPosition && packet.hitGlobalPosition) {
             const dx = shooterPosition.x - packet.hitGlobalPosition.x;
             const dy = shooterPosition.y - packet.hitGlobalPosition.y;
             const dz = shooterPosition.z - packet.hitGlobalPosition.z;
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) / 100;
-            const weaponId = `${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`;
-            const physics = weaponPhysicsData.weapons.find((w) => w.id === weaponId);
-            const maxRange = physics?.min_damage_radius ?? 100;
-            if (distance > 0 && distance < maxRange) {
-                impactForceRatio = 1.0 - distance / maxRange;
-            } else if (distance >= maxRange) {
-                impactForceRatio = 0;
-            }
+            distance = Math.sqrt(dx * dx + dy * dy + dz * dz) / 100;
         }
-        const finalImpactForce = Math.max(0.01, impactForceRatio);
+        const maxR = physics?.max_damage_radius ?? 40;
+        const minR = physics?.min_damage_radius ?? 120;
+        const minPct = (physics?.min_damage_percent ?? 10) / 100;
+        // Distance factor: 1 within maxR, linearly down to minPct at minR, then minPct beyond.
+        let factor = 1;
+        if (distance > maxR) factor = distance >= minR ? minPct : 1 - (1 - minPct) * ((distance - maxR) / (minR - maxR));
+
+        const finalImpactForce = Math.max(0.01, factor);
         const targetShotPacket = new SmokyPackets.SmokyTargetShotPacket({
             nickname: user.username,
             targetNickname: packet.targetUserId,
@@ -69,6 +72,19 @@ export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPacket
                 otherClient.sendPacket(targetShotPacket);
             }
         }
-        logger.info(`Smoky shot from ${user.username} to ${packet.targetUserId}. Critical: ${isCritical}, Impact: ${finalImpactForce.toFixed(2)}`);
+
+        // Apply the damage. A NORMAL hit = random(DAMAGE_FROM..DAMAGE_TO) × distance factor. A CRITICAL is
+        // the flat CRITICAL_HIT_DAMAGE property (distance- and roll-independent; = DAMAGE_FROM+DAMAGE_TO in
+        // the data — official crits dealt exactly that). damageType 0 = normal, 1 = critical.
+        const targetClient = server.findClientByUsername(packet.targetUserId);
+        if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+            const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
+            const dmgTo = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_TO") ?? dmgFrom;
+            const critDamage = ItemUtils.getPropertyValue(turretMod, "CRITICAL_HIT_DAMAGE") ?? dmgFrom + dmgTo;
+            const damage = isCritical ? critDamage : (dmgFrom + Math.random() * (dmgTo - dmgFrom)) * factor;
+            await server.battleService.applyDamage(currentBattle, client, targetClient, damage, isCritical ? 1 : 0);
+        }
+
+        logger.info(`Smoky from ${user.username} -> ${packet.targetUserId}: dist=${distance.toFixed(1)} factor=${factor.toFixed(2)} crit=${isCritical}`);
     }
 }

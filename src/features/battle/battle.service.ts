@@ -74,8 +74,8 @@ export class BattleService {
      * HP: normalizedDamage = realDamage * 10000 / hullHP. Broadcasts SetHealth + the damage number,
      * and runs the kill flow when health drops to 0. Shared by all weapons (railgun, thunder, ...).
      */
-    public applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
-        return this.combat.applyDamage(battle, shooterClient, targetClient, realDamage);
+    public applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 2): Promise<void> {
+        return this.combat.applyDamage(battle, shooterClient, targetClient, realDamage, damageType);
     }
 
     /**

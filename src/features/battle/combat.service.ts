@@ -26,7 +26,7 @@ export class CombatService {
      * 0-10000 scale (RULE OF 3: normalizedDamage = realDamage * 10000 / hullHP). Broadcasts SetHealth
      * + the damage number, and runs the kill flow at 0. Shared by all weapons (railgun, thunder, ...).
      */
-    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number): Promise<void> {
+    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 2): Promise<void> {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
@@ -39,7 +39,7 @@ export class CombatService {
         targetClient.currentHealth -= (realDamage * 10000) / hullHP;
 
         battle.broadcast(new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }));
-        battle.broadcast(new DamageIndicatorPacket(targetUser.username, Math.round(realDamage), 2));
+        battle.broadcast(new DamageIndicatorPacket(targetUser.username, Math.round(realDamage), damageType));
         logger.info(`${shooterClient.user?.username} hit ${targetUser.username}: ${Math.round(realDamage)} dmg (hull ${hullHP}hp) -> ${Math.round(targetClient.currentHealth)}/10000`);
 
         if (targetClient.currentHealth <= 0) {
