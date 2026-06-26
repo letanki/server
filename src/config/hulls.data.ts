@@ -24,7 +24,7 @@ export const hullsData: HullConfig[] = [
         id: "wasp", name: "Vespa", category: "armor", index: 700, type: 2,
         description: "Leve, econômico, fácil de operar — Vespa é uma carroceria perfeito para iniciantes. Vespa atualizado pode atingir uma alta velocidade, que em combinação com tamanho pequeno dá liberdade de ação no campo de batalha. Devido ao baixo peso, Vespa pode ser facilmente enrolado pelo tiro de um inimigo.",
         mods: [
-            { rank: 2, price: 200, nextPrice: 7650, nextRank: 9, armor: 94, speed: 10.8, turnSpeed: 93.9, acceleration: 9.4, mass: 1376 },
+            { rank: 2, price: 200, nextPrice: 7650, nextRank: 9, armor: 94, speed: 10.8, turnSpeed: 93.9, acceleration: 9.4, mass: 1100, reverseAcceleration: 12, sideAcceleration: 15, turnAcceleration: 2.79, reverseTurnAcceleration: 4.54, dampingCoeff: 900 },
             { rank: 9, price: 7650, nextPrice: 62450, nextRank: 16, armor: 121, speed: 11, turnSpeed: 100.84, acceleration: 9.87, mass: 1483, reverseAcceleration: 13.74, sideAcceleration: 18.12, turnAcceleration: 3.04, reverseTurnAcceleration: 5.21, dampingCoeff: 900 },
             { rank: 16, price: 62450, nextPrice: 172600, nextRank: 24, armor: 149, speed: 12, turnSpeed: 123.76, acceleration: 11.33, mass: 1817, reverseAcceleration: 15.26, sideAcceleration: 20.87, turnAcceleration: 3.25, reverseTurnAcceleration: 5.79, dampingCoeff: 900 },
             { rank: 24, price: 172600, nextPrice: 0, nextRank: 24, armor: 180, speed: 13, turnSpeed: 150, acceleration: 13, mass: 2200, reverseAcceleration: 17, sideAcceleration: 24, turnAcceleration: 3.490658503988659, reverseTurnAcceleration: 6.457718232379019, dampingCoeff: 900 },
