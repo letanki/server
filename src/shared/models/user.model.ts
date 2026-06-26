@@ -37,6 +37,7 @@ export interface UserAttributes {
     crystals: number;
     experience: number;
     clanId: import("mongoose").Types.ObjectId | null; // the clan this user belongs to (null = no clan)
+    clanCooldownUntil: Date | null; // after leaving a clan, can't create/join another until this time
     isActive: boolean;
     isPunished: boolean;
     punishmentExpiresAt: Date | null;
@@ -87,6 +88,7 @@ const UserSchema = new Schema<UserDocument>({
     crystals: { type: Number, default: 0, min: 0 },
     experience: { type: Number, default: 0, min: 0 },
     clanId: { type: Schema.Types.ObjectId, ref: "Clan", default: null },
+    clanCooldownUntil: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
     isPunished: { type: Boolean, default: false },
     punishmentExpiresAt: { type: Date, default: null },

@@ -62,7 +62,12 @@ export class ShowNotInClanPanelHandler implements IPacketHandler<ClanPackets.Sho
             return;
         }
         // Non-member: load the window images first, then show the window (it references them by id).
-        loadClanModalResources(client, server, (c) => c.sendPacket(new ClanPackets.ShowNotInClanWindowPacket()));
+        // If they recently left a clan, also send the remaining cooldown so the modal shows it.
+        const cooldown = server.clanService.clanCooldownSeconds(client.user);
+        loadClanModalResources(client, server, (c) => {
+            c.sendPacket(new ClanPackets.ShowNotInClanWindowPacket());
+            if (cooldown > 0) c.sendPacket(new ClanPackets.ClanCooldownPacket(cooldown));
+        });
     }
 }
 
@@ -91,6 +96,32 @@ export class SetClanRecruitingHandler implements IPacketHandler<ClanPackets.SetC
     public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanRecruitingPacket): Promise<void> {
         if (!client.user) return;
         await server.clanService.editClanSettings(client.user, { recruiting: packet.recruiting });
+    }
+}
+
+/** Member leaves the clan → remove them, start their 24h cooldown, and update both sides. */
+export class LeaveClanHandler implements IPacketHandler<ClanPackets.LeaveClanPacket> {
+    public readonly packetId = ClanPackets.LeaveClanPacket.getId();
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
+        if (!client.user) return;
+        const username = client.user.username;
+        const result = await server.clanService.leaveClan(client.user);
+        if (!result) return;
+        // Leaver: close the window, notify, start the cooldown, clear their clan tag.
+        client.sendPacket(new ClanPackets.CloseClanWindowPacket());
+        client.sendPacket(new ClanPackets.MemberLeftNotifyPacket(username));
+        client.sendPacket(new ClanPackets.ClanCooldownPacket(server.clanService.clanCooldownSeconds(client.user)));
+        client.sendPacket(new ProfilePackets.ClanNotifierData(username, null));
+        // Owner (if a regular member left and they're online): drop the member from the list.
+        if (!result.wasLeader) {
+            const owner = await server.clanService.getLeaderUsername(result.clan);
+            const ownerClient = owner ? server.findClientByUsername(owner) : undefined;
+            if (ownerClient) {
+                ownerClient.sendPacket(new ClanPackets.RemoveClanMemberPacket(username));
+                ownerClient.sendPacket(new ClanPackets.MemberLeftNotifyPacket(username));
+                ownerClient.sendPacket(new ProfilePackets.ClanNotifierData(username, null));
+            }
+        }
     }
 }
 

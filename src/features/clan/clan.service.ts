@@ -22,6 +22,7 @@ export class ClanService {
     /** Founds a new clan led by `user`, charging the creation cost. Throws on validation failure. */
     public async createClan(user: UserDocument, name: string, tag: string, description: string): Promise<ClanDocument> {
         if (user.clanId) throw new Error("Você já está em um clã.");
+        if (this.clanCooldownSeconds(user) > 0) throw new Error("Você precisa esperar antes de entrar em outro clã.");
         const cleanName = name.trim();
         const cleanTag = tag.trim();
         if (cleanName.length < 3) throw new Error("Nome do clã muito curto.");
@@ -69,6 +70,7 @@ export class ClanService {
     /** Records a pending join request from `user` to the given clan. Returns the clan (or null). */
     public async requestJoinToClan(user: UserDocument, clan: ClanDocument | null): Promise<ClanDocument | null> {
         if (user.clanId || !clan) return null; // already in a clan / no clan
+        if (this.clanCooldownSeconds(user) > 0) return null; // still on post-leave cooldown
         if (clan.recruiting === false) return null; // clan closed to requests
         if (!clan.joinRequests.some((id) => String(id) === String(user._id))) {
             clan.joinRequests.push(user._id as any);
@@ -212,6 +214,41 @@ export class ClanService {
         if (patch.recruiting !== undefined) clan.recruiting = patch.recruiting;
         await clan.save();
         return clan;
+    }
+
+    public static readonly LEAVE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h before you can create/join again
+
+    /** Seconds left on a user's post-leave clan cooldown (0 if none). */
+    public clanCooldownSeconds(user: UserDocument): number {
+        const until = user.clanCooldownUntil ? user.clanCooldownUntil.getTime() : 0;
+        return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    }
+
+    /** `user` leaves their clan. A non-leader is just removed; a leader hands off to another member, or
+     *  the clan is deleted if they were the last one. Sets the 24h cooldown. Returns details or null. */
+    public async leaveClan(user: UserDocument): Promise<{ clan: ClanDocument; wasLeader: boolean; disbanded: boolean } | null> {
+        if (!user.clanId) return null;
+        const clan = await this.getClanById(user.clanId);
+        if (!clan) return null;
+        const wasLeader = String(clan.leaderId) === String(user._id);
+        clan.members = clan.members.filter((id) => String(id) !== String(user._id)) as any;
+        let disbanded = false;
+        if (wasLeader) {
+            if (clan.members.length > 0) {
+                clan.leaderId = clan.members[0] as any; // promote the next member
+                await clan.save();
+            } else {
+                await Clan.deleteOne({ _id: clan._id }).exec();
+                disbanded = true;
+            }
+        } else {
+            await clan.save();
+        }
+        user.clanId = null;
+        user.clanCooldownUntil = new Date(Date.now() + ClanService.LEAVE_COOLDOWN_MS);
+        await user.save();
+        logger.info(`${user.username} left clan [${clan.tag}]${disbanded ? " (disbanded)" : wasLeader ? " (leadership transferred)" : ""}.`);
+        return { clan, wasLeader, disbanded };
     }
 
     /** The clan tag to show next to a user's nickname, or null if they're not in a clan. */

@@ -5,6 +5,37 @@ import { ResourceManager } from "@/utils/resource.manager";
 
 // ---- C->S (incoming) ----
 
+/** Member leaves the clan. Empty body. */
+export class LeaveClanPacket extends BasePacket {
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -1298483664; }
+}
+
+/** Post-leave cooldown shown in the not-in-clan modal. Body = int(seconds remaining, e.g. 86400 = 24h). */
+export class ClanCooldownPacket extends BasePacket {
+    constructor(private readonly seconds: number) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().writeInt32BE(this.seconds).getBuffer(); }
+    static getId(): number { return -745085341; }
+}
+
+/** Real-time removal of a member from the owner's clan window. Body = optionalString(username). */
+export class RemoveClanMemberPacket extends BasePacket {
+    constructor(private readonly username: string) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
+    static getId(): number { return 1039356886; }
+}
+
+/** Aux notify accompanying a member leave (sent to both sides). Body = optionalString(username). */
+export class MemberLeftNotifyPacket extends BasePacket {
+    constructor(private readonly username: string) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
+    static getId(): number { return 1059383280; }
+}
+
 /** A clan MEMBER/owner opens their clan window → server replies MyClanWindow (-8296541). Empty body. */
 export class OpenMyClanWindowPacket extends BasePacket {
     read(_buffer: Buffer): void {}
