@@ -94,6 +94,13 @@ export class SelectJoinRequestPacket extends BasePacket {
     static getId(): number { return -344258352; }
 }
 
+/** Owner DECLINES ALL pending join requests for the clan. Empty body. */
+export class DeclineAllJoinRequestsPacket extends BasePacket {
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -304905793; }
+}
+
 /** Owner DECLINES a pending join request. Body = optionalString(requester username). */
 export class DeclineJoinRequestPacket extends BasePacket {
     username: string | null = null;
@@ -443,13 +450,11 @@ export class MyClanWindowPacket extends BasePacket {
         vec(v.members, (m) => writeMemberModel(w, m));
         // 2) Vector<perm ordinal> (no presence)
         vec([0, 1, 2, 3, 4, 5, 6, 7], (x) => w.writeInt32BE(x));
-        // 3,4,5) member lists (presence): #3 = ALL members (the rendered member list), #4 = pending join
-        // requests, #5 = non-leader members. (Decoded from a 2-member window: list3=[leader,member],
-        // list5=[member].)
-        const memberNicks = v.members.map((m) => m.nick);
-        presVec(memberNicks, (s) => w.writeOptionalString(s));
+        // 3,4,5) #3 = ALL members (the rendered member list), #4 = received join requests, #5 = SENT
+        // invites (the client labels list5 "Convites enviados"; putting members there showed them as invites).
+        presVec(v.members.map((m) => m.nick), (s) => w.writeOptionalString(s));
         presVec(v.joinRequests, (s) => w.writeOptionalString(s));
-        presVec(memberNicks.filter((n) => n !== v.leader), (s) => w.writeOptionalString(s));
+        presVec(v.sentInvites, (s) => w.writeOptionalString(s));
         return w.getBuffer();
     }
     static getId(): number { return -8296541; }
@@ -601,7 +606,8 @@ export interface ClanView {
     logo: string | null;
     recruiting: boolean; // f5: true => the client shows "Request to join" instead of "not recruiting"
     minRank: number; // f8 byte: minimum rank to join (1-30, or -1 = no minimum)
-    joinRequests: string[]; // usernames with a pending join request (my-clan window list #4)
+    joinRequests: string[]; // usernames with a pending join request — received (my-clan window list #4)
+    sentInvites: string[]; // usernames the clan invited — sent invites (my-clan window list #5)
     members: ClanMemberView[];
 }
 

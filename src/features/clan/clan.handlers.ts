@@ -215,6 +215,24 @@ export class MarkMemberSeenHandler implements IPacketHandler<ClanPackets.MarkMem
     }
 }
 
+/** Owner declines ALL pending join requests → clears them and drops every card (both sides). */
+export class DeclineAllJoinRequestsHandler implements IPacketHandler<ClanPackets.DeclineAllJoinRequestsPacket> {
+    public readonly packetId = ClanPackets.DeclineAllJoinRequestsPacket.getId();
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
+        if (!client.user) return;
+        const result = await server.clanService.declineAllJoinRequests(client.user);
+        if (!result) return;
+        for (const nick of result.nicks) {
+            // Owner: drop each request card.
+            client.sendPacket(new ClanPackets.JoinRequestDeclinedPacket(nick));
+            client.sendPacket(new ClanPackets.RemoveJoinRequestPacket(nick));
+            // Requester (if online): remove their sent-request card.
+            const reqClient = server.findClientByUsername(nick);
+            if (reqClient) reqClient.sendPacket(new ClanPackets.JoinRequestCancelledPacket(result.tag));
+        }
+    }
+}
+
 /** Owner declines a pending join request → removes it and tells the client to drop the request card. */
 export class DeclineJoinRequestHandler implements IPacketHandler<ClanPackets.DeclineJoinRequestPacket> {
     public readonly packetId = ClanPackets.DeclineJoinRequestPacket.getId();

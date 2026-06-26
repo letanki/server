@@ -296,6 +296,13 @@ export class ClanService {
         return users.map((u) => u.username);
     }
 
+    /** Usernames the clan has a pending INVITE out to (shown as "sent invites" in the my-clan window). */
+    public async getInviteNicks(clan: ClanDocument): Promise<string[]> {
+        if (!clan.invites.length) return [];
+        const users = await User.find({ _id: { $in: clan.invites } }, "username").exec();
+        return users.map((u) => u.username);
+    }
+
     /** Owner accepts a pending join request → the requester joins the clan. Leader-only. Returns
      *  { clan, requester } or null (requester gone / already in a clan / never requested). */
     public async acceptJoinRequest(leader: UserDocument, username: string): Promise<{ clan: ClanDocument; requester: UserDocument } | null> {
@@ -312,6 +319,20 @@ export class ClanService {
         await requester.save();
         logger.info(`${leader.username} accepted ${requester.username} into clan [${clan.tag}].`);
         return { clan, requester };
+    }
+
+    /** Owner declines ALL pending join requests. Leader-only. Returns { tag, nicks of removed requesters }. */
+    public async declineAllJoinRequests(leader: UserDocument): Promise<{ tag: string; nicks: string[] } | null> {
+        if (!leader.clanId) return null;
+        const clan = await this.getClanById(leader.clanId);
+        if (!clan || String(clan.leaderId) !== String(leader._id)) return null;
+        const nicks = await this.getJoinRequestNicks(clan);
+        if (clan.joinRequests.length) {
+            clan.joinRequests = [] as any;
+            await clan.save();
+            logger.info(`${leader.username} declined all ${nicks.length} join requests for clan [${clan.tag}].`);
+        }
+        return { tag: clan.tag, nicks };
     }
 
     /** Owner declines a pending join request (by requester username). Returns { nick, tag } or null. */
@@ -348,6 +369,7 @@ export class ClanService {
             recruiting: clan.recruiting ?? true,
             minRank: clan.minRank ?? -1,
             joinRequests: await this.getJoinRequestNicks(clan),
+            sentInvites: await this.getInviteNicks(clan),
             members: members.map((m) => ({
                 userId: objectIdToLong(m._id),
                 nick: m.username,
