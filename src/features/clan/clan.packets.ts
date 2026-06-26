@@ -5,6 +5,14 @@ import { ResourceManager } from "@/utils/resource.manager";
 
 // ---- C->S (incoming) ----
 
+/** Leader kicks a member out of the clan. Body = optionalString(username). */
+export class KickClanMemberPacket extends BasePacket {
+    username: string | null = null;
+    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return 459991202; }
+}
+
 /** Member leaves the clan. Empty body. */
 export class LeaveClanPacket extends BasePacket {
     read(_buffer: Buffer): void {}

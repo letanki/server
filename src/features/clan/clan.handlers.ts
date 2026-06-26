@@ -47,27 +47,34 @@ async function notifyOwnerInviteRemoved(server: GameServer, clan: ClanDocument, 
     if (ownerClient) ownerClient.sendPacket(new ClanPackets.ClanInviteCancelledAckPacket(username));
 }
 
-/** Clan view opened: not-in-clan players get the create/join window. (In-clan = "my clan" window — TODO.) */
+/** Open the right clan window based on the SERVER's truth, regardless of which open-packet the client
+ *  sent. A kicked/left member's client may still think it's in a clan (its login state is stale) and send
+ *  the member open-packet — but if our user.clanId is null we must show the not-in-clan modal, not the
+ *  my-clan window. (Otherwise it only corrects on relogin.) */
+async function openClanWindowForState(client: GameClient, server: GameServer): Promise<void> {
+    if (!client.user) return;
+    if (client.user.clanId) {
+        const clan = await server.clanService.getClanById(client.user.clanId);
+        if (clan) {
+            const view = await server.clanService.buildClanView(clan);
+            client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+            return;
+        }
+        client.user.clanId = null; // clan no longer exists (disbanded) → fall through to not-in-clan
+    }
+    // Not in a clan: load the window images first, then show it (+ the leave cooldown if still active).
+    const cooldown = server.clanService.clanCooldownSeconds(client.user);
+    loadClanModalResources(client, server, (c) => {
+        c.sendPacket(new ClanPackets.ShowNotInClanWindowPacket());
+        if (cooldown > 0) c.sendPacket(new ClanPackets.ClanCooldownPacket(cooldown));
+    });
+}
+
+/** Clan view opened (non-member open-packet). Routes by the server's membership truth. */
 export class ShowNotInClanPanelHandler implements IPacketHandler<ClanPackets.ShowNotInClanPanelPacket> {
     public readonly packetId = ClanPackets.ShowNotInClanPanelPacket.getId();
     public async execute(client: GameClient, server: GameServer): Promise<void> {
-        if (!client.user) return;
-        if (client.user.clanId) {
-            // Member opening the clan view: show their own clan (the "my clan" window).
-            const clan = await server.clanService.getClanById(client.user.clanId);
-            if (clan) {
-                const view = await server.clanService.buildClanView(clan);
-                client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
-            }
-            return;
-        }
-        // Non-member: load the window images first, then show the window (it references them by id).
-        // If they recently left a clan, also send the remaining cooldown so the modal shows it.
-        const cooldown = server.clanService.clanCooldownSeconds(client.user);
-        loadClanModalResources(client, server, (c) => {
-            c.sendPacket(new ClanPackets.ShowNotInClanWindowPacket());
-            if (cooldown > 0) c.sendPacket(new ClanPackets.ClanCooldownPacket(cooldown));
-        });
+        await openClanWindowForState(client, server);
     }
 }
 
@@ -99,6 +106,29 @@ export class SetClanRecruitingHandler implements IPacketHandler<ClanPackets.SetC
     }
 }
 
+/** Leader kicks a member → remove them, drop from the owner's list, and clear the kicked member's clan.
+ *  (Official response packets weren't captured; mirrors the leave flow.) */
+export class KickClanMemberHandler implements IPacketHandler<ClanPackets.KickClanMemberPacket> {
+    public readonly packetId = ClanPackets.KickClanMemberPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.KickClanMemberPacket): Promise<void> {
+        if (!client.user || !packet.username) return;
+        const kicked = await server.clanService.kickMember(client.user, packet.username);
+        if (!kicked) return;
+        // Owner: drop the member from the open window + clear their tag display.
+        client.sendPacket(new ClanPackets.RemoveClanMemberPacket(kicked.username));
+        client.sendPacket(new ClanPackets.MemberLeftNotifyPacket(kicked.username));
+        client.sendPacket(new ProfilePackets.ClanNotifierData(kicked.username, null));
+        // Kicked member (if online): sync their live session (the DB write above hit a different document
+        // instance) so reopening the modal shows NotInClan, then close the window and clear their tag.
+        const kickedClient = server.findClientByUsername(kicked.username);
+        if (kickedClient) {
+            if (kickedClient.user) kickedClient.user.clanId = null;
+            kickedClient.sendPacket(new ClanPackets.CloseClanWindowPacket());
+            kickedClient.sendPacket(new ProfilePackets.ClanNotifierData(kicked.username, null));
+        }
+    }
+}
+
 /** Member leaves the clan → remove them, start their 24h cooldown, and update both sides. */
 export class LeaveClanHandler implements IPacketHandler<ClanPackets.LeaveClanPacket> {
     public readonly packetId = ClanPackets.LeaveClanPacket.getId();
@@ -125,15 +155,12 @@ export class LeaveClanHandler implements IPacketHandler<ClanPackets.LeaveClanPac
     }
 }
 
-/** A member/owner opens their clan window → send the my-clan window (with members + pending requests). */
+/** A member/owner opens their clan window (member open-packet). Routes by the server's membership truth,
+ *  so a stale client that was kicked still gets the not-in-clan modal instead of the my-clan window. */
 export class OpenMyClanWindowHandler implements IPacketHandler<ClanPackets.OpenMyClanWindowPacket> {
     public readonly packetId = ClanPackets.OpenMyClanWindowPacket.getId();
     public async execute(client: GameClient, server: GameServer): Promise<void> {
-        if (!client.user || !client.user.clanId) return;
-        const clan = await server.clanService.getClanById(client.user.clanId);
-        if (!clan) return;
-        const view = await server.clanService.buildClanView(clan);
-        client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+        await openClanWindowForState(client, server);
     }
 }
 

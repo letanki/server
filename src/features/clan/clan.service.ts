@@ -224,6 +224,23 @@ export class ClanService {
         return Math.max(0, Math.ceil((until - Date.now()) / 1000));
     }
 
+    /** Leader kicks `username` out of the clan. Leader-only, can't kick self / non-members. Returns the
+     *  kicked user (clanId cleared) or null. */
+    public async kickMember(leader: UserDocument, username: string): Promise<UserDocument | null> {
+        if (!leader.clanId) return null;
+        const clan = await this.getClanById(leader.clanId);
+        if (!clan || String(clan.leaderId) !== String(leader._id)) return null; // leader only
+        const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
+        if (!target || String(target._id) === String(leader._id)) return null; // not self
+        if (!clan.members.some((id) => String(id) === String(target._id))) return null; // must be a member
+        clan.members = clan.members.filter((id) => String(id) !== String(target._id)) as any;
+        await clan.save();
+        target.clanId = null;
+        await target.save();
+        logger.info(`${leader.username} kicked ${target.username} from clan [${clan.tag}].`);
+        return target;
+    }
+
     /** `user` leaves their clan. A non-leader is just removed; a leader hands off to another member, or
      *  the clan is deleted if they were the last one. Sets the 24h cooldown. Returns details or null. */
     public async leaveClan(user: UserDocument): Promise<{ clan: ClanDocument; wasLeader: boolean; disbanded: boolean } | null> {
