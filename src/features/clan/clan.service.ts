@@ -296,6 +296,24 @@ export class ClanService {
         return users.map((u) => u.username);
     }
 
+    /** Owner accepts a pending join request → the requester joins the clan. Leader-only. Returns
+     *  { clan, requester } or null (requester gone / already in a clan / never requested). */
+    public async acceptJoinRequest(leader: UserDocument, username: string): Promise<{ clan: ClanDocument; requester: UserDocument } | null> {
+        if (!leader.clanId) return null;
+        const clan = await this.getClanById(leader.clanId);
+        if (!clan || String(clan.leaderId) !== String(leader._id)) return null; // leader only
+        const requester = await User.findOne({ login: username.trim().toLowerCase() }).exec();
+        if (!requester || requester.clanId) return null;
+        if (!clan.joinRequests.some((id) => String(id) === String(requester._id))) return null; // must have requested
+        clan.joinRequests = clan.joinRequests.filter((id) => String(id) !== String(requester._id)) as any;
+        if (!clan.members.some((id) => String(id) === String(requester._id))) clan.members.push(requester._id as any);
+        await clan.save();
+        requester.clanId = clan._id as any;
+        await requester.save();
+        logger.info(`${leader.username} accepted ${requester.username} into clan [${clan.tag}].`);
+        return { clan, requester };
+    }
+
     /** Owner declines a pending join request (by requester username). Returns { nick, tag } or null. */
     public async declineJoinRequest(owner: UserDocument, username: string): Promise<{ nick: string; tag: string } | null> {
         if (!owner.clanId) return null;

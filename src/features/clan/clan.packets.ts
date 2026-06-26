@@ -36,12 +36,22 @@ export class RemoveClanMemberPacket extends BasePacket {
     static getId(): number { return 1039356886; }
 }
 
-/** Aux notify accompanying a member leave (sent to both sides). Body = optionalString(username). */
-export class MemberLeftNotifyPacket extends BasePacket {
+/** Generic member status notify (clears the "new" badge): sent on member add/leave and as the reply to
+ *  MarkMemberSeen. Body = optionalString(username). */
+export class MemberStatusNotifyPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
     static getId(): number { return 1059383280; }
+}
+
+/** Owner viewed a member/notification → clear its "new" badge. Body = optionalString(username). Server
+ *  replies MemberStatusNotify(username). */
+export class MarkMemberSeenPacket extends BasePacket {
+    username: string | null = null;
+    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -1922978824; }
 }
 
 /** A clan MEMBER/owner opens their clan window → server replies MyClanWindow (-8296541). Empty body. */
@@ -65,6 +75,23 @@ export class AddJoinRequestPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
     static getId(): number { return 273571175; }
+}
+
+/** Owner ACCEPTS a pending join request → the requester becomes a member. Body = optionalString(username). */
+export class AcceptJoinRequestPacket extends BasePacket {
+    username: string | null = null;
+    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -2875943; }
+}
+
+/** Owner selected/opened a pending request (sent before accept AND decline). Body = optionalString(username).
+ *  No state change — handled as a no-op so it doesn't log as an unknown packet. */
+export class SelectJoinRequestPacket extends BasePacket {
+    username: string | null = null;
+    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -344258352; }
 }
 
 /** Owner DECLINES a pending join request. Body = optionalString(requester username). */
