@@ -50,7 +50,8 @@ export class RankService {
         if (nextRankInfo) {
             user.nextRankScore = nextRankInfo.minScore;
         } else {
-            user.nextRankScore = user.experience;
+            // Max rank: there is no next threshold, so the client shows score/0 (not score/score).
+            user.nextRankScore = 0;
         }
 
         return originalRankId !== newRank.id;
