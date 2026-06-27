@@ -122,6 +122,9 @@ export class GameClient {
   public lastMachinegunShot: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
+  // Active medkit/repair-kit regeneration timer (gradual heal). Cleared on death/respawn/disconnect
+  // and whenever a new kit is activated. See SupplyService.startHealing.
+  public healTimer: NodeJS.Timeout | null = null;
   public equipmentChangedInGarage: boolean = false;
   public pendingEquipmentRespawn: boolean = false;
   public pendingSpawnPoint: ISpawnPoint | null = null;

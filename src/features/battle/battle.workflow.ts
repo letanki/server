@@ -20,6 +20,7 @@ import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import { Battle, BattleMode, IDomPointState, MapTheme } from "./battle.model";
+import { SupplyService } from "./supply.service";
 import * as BattlePackets from "./battle.packets";
 import { BonusType, IBattleUser, IBattleUserInfo } from "./battle.types";
 
@@ -276,6 +277,8 @@ export class BattleWorkflow {
             client.battleState = "newcome";
             // A fresh life starts with no supply effects (they don't survive death/respawn).
             client.activeEffects = [];
+            // Cancel any in-progress repair-kit regen so it can't overwrite the full-health reset below.
+            SupplyService.stopHealing(client);
 
             // Health is tracked on the client's normalized 0-10000 scale (full on (re)spawn).
             const clientHealth = 10000;

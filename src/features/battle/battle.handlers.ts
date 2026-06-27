@@ -1,5 +1,6 @@
 import { battleDataObject } from "@/config/battle.data";
 import { suppliesData } from "@/config/supplies.data";
+import { HEAL_MAX_GIVEN } from "./supply.service";
 import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { AddUserToBattleDmPacket, AddUserTeamPacket, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
@@ -550,11 +551,14 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         const supply = suppliesData.find((s) => s.id === supplyId);
         if (!supply) return;
 
-        // Implemented: n2o/double_damage/armor (buffs) + mine. health (repair) not yet.
-        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor" && supplyId !== "mine") {
+        // Implemented: n2o/double_damage/armor (buffs) + mine + health (repair kit).
+        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor" && supplyId !== "mine" && supplyId !== "health") {
             logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
             return;
         }
+
+        // Health kits do nothing on a full tank — don't waste the supply.
+        if (supplyId === "health" && client.currentHealth >= 10000) return;
 
         const count = user.supplies.get(supplyId) ?? 0;
         if (count <= 0) return;
@@ -563,6 +567,15 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         // concurrent activations (e.g. rapid parkour mine drops) throws ParallelSaveError.
         user.supplies.set(supplyId, count - 1);
         await User.updateOne({ _id: user._id }, { $inc: { [`supplies.${supplyId}`]: -1 } });
+
+        if (supplyId === "health") {
+            // Inventory repair kit: gradual regen up to a full repair. itemEffectTime is 0, so cooldown
+            // is just itemRestSec (30s) — the same as the official reactivation delay.
+            server.battleService.supply.startHealing(client, battle, HEAL_MAX_GIVEN.INVENTORY);
+            const cooldownMs = supply.itemRestSec * 1000;
+            client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
+            return;
+        }
 
         if (supplyId === "mine") {
             server.battleService.mine.placeMine(client, battle);

@@ -10,6 +10,7 @@ import { BattleEvents, BattleEventMap } from "./battle-events";
 import { BonusService } from "./bonus.service";
 import { CtfService } from "./ctf.service";
 import { SpawnService } from "./spawn.service";
+import { SupplyService } from "./supply.service";
 import { ChangeFundPacket, EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
 
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
@@ -76,6 +77,7 @@ export class RoundService {
             if (!c.user) continue;
             for (const e of c.activeEffects) battle.broadcast(new EffectStoppedPacket(c.user.username, e.itemIndex));
             c.activeEffects = [];
+            SupplyService.stopHealing(c);
         }
 
         logger.info(`Round finished in battle ${battle.battleId}.`);

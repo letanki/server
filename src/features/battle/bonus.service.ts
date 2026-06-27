@@ -6,8 +6,8 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { getMapBonusRegions, IBonusRegion } from "@/maps/mapData";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
-import { SupplyService } from "./supply.service";
-import { RemoveBonusPacket, SetHealthPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
+import { HEAL_DROP_EFFECT_MS, HEAL_MAX_GIVEN, SupplyService } from "./supply.service";
+import { RemoveBonusPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
 
 const BONUS_FALLBACK_LIFETIME_MS = 30000; // used if a type has no lifeTimeMs in getBonusData
 // Extra time the server keeps the box AFTER its disappear time, so the client's final fade-out blink
@@ -178,8 +178,10 @@ export class BonusService {
         }
 
         if (type === "health") {
-            client.currentHealth = 10000;
-            battle.broadcast(new SetHealthPacket({ nickname: user.username, health: 10000 }));
+            // Field-drop medkit: gradual regen like the inventory kit, but its HP budget only refills
+            // half the tank (the official drop heals ~5000 normalized, stopping short of full). It
+            // announces the official fixed 15s effect time; the effect ends early when regen finishes.
+            this.supply.startHealing(client, battle, HEAL_MAX_GIVEN.DROP, HEAL_DROP_EFFECT_MS);
             return;
         }
 
