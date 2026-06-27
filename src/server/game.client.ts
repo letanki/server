@@ -115,6 +115,11 @@ export class GameClient {
   // warm-up recovery so the tank only thaws once the freeze beam stops touching it.
   public freezeTemperature: number = 0;
   public lastFreezeHit: number = 0;
+  // Vulcan (machinegun) overheat: after firing past the grace period the barrel heats up (0..~0.22 red tint)
+  // and burns the shooter. machinegunHeatTime = accumulated continuous-fire ms; lastMachinegunShot gates it.
+  public machinegunHeat: number = 0;
+  public machinegunHeatTime: number = 0;
+  public lastMachinegunShot: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
