@@ -4,8 +4,8 @@
 
 O LeTanki Server é uma aplicação de servidor robusta, escrita em TypeScript, para alimentar as funcionalidades multiplayer do jogo LeTanki. Projetado com escalabilidade, modularidade e segurança de tipos em mente, este projeto fornece uma infraestrutura flexível e de fácil manutenção para lidar com o ciclo de jogo completo, incluindo autenticação, garagem, lobby e batalhas em tempo real.
 
-> **Fase Atual: Ciclo de Jogo Completo**
-> Atualmente, o servidor suporta um fluxo de jogo completo: autenticação de usuários, gerenciamento de garagem com compra e equipamento de itens, um lobby com lista de batalhas em tempo real, e a entrada em partidas com sincronização de estado e física básica.
+> **Fase Atual: Batalhas em Tempo Real com Combate Completo**
+> O servidor suporta o ciclo de jogo completo — autenticação, garagem (compra/aprimoramento/equipamento), lobby com lista de batalhas em tempo real — e partidas totalmente jogáveis: combate com todas as armas, todos os modos de batalha, sistema de dano/abate/placar, respawn, bônus, suprimentos e minas. O sistema de clãs já está praticamente completo (criação, convites, pedidos de entrada, gerenciamento de membros e ranking), faltando apenas alguns detalhes. O foco atual é refinar a paridade com o cliente oficial (física, fluxos de reconexão e troca de equipamento em batalha) e os sistemas de progressão.
 
 ## ✨ Funcionalidades
 
@@ -14,9 +14,13 @@ O LeTanki Server é uma aplicação de servidor robusta, escrita em TypeScript, 
 - **Design Modular**: Código organizado com serviços, modelos e manipuladores de pacotes para fácil extensão e manutenção.
 - **Banco de Dados NoSQL**: Utiliza MongoDB com Mongoose para um gerenciamento de dados robusto e escalável.
 - **Configuração Dinâmica**: Suporta um sistema de configuração genérico chave-valor armazenado no banco de dados, carregado na inicialização do servidor.
-- **Garagem e Inventário**: Sistema completo de garagem que permite aos jogadores comprar, aprimorar e equipar torretas, carrocerias e pinturas.
-- **Lobby e Batalhas**: Gerenciamento de lobby com lista de batalhas, criação de partidas (DM, TDM, CTF) e entrada de jogadores.
+- **Garagem e Inventário**: Sistema completo de garagem que permite aos jogadores comprar, aprimorar e equipar torretas, carrocerias e pinturas, com troca de equipamento durante a batalha.
+- **Lobby e Batalhas**: Gerenciamento de lobby com lista de batalhas em tempo real, criação de partidas e entrada de jogadores nos modos DM, TDM, CTF e Domínio (CP), com modo espectador e reconexão à batalha em andamento.
+- **Combate Completo**: Todas as armas implementadas com seus próprios modelos de dano (Metralha, Trovão, Fumaça, Gêmea, Ricochete, Haste, Lança-chamas, Espingarda, Lança-gelo e Metralhadora), incluindo dano em área, fogo amigo configurável, sistema de abate, placar e respawn.
+- **Sistemas de Batalha**: Bônus e caixas douradas, suprimentos consumíveis (kit médico, mina, dano duplo, etc.), minas, zonas de morte do mapa e fundo (fund) da partida.
+- **Sincronização e Física**: Relay de movimento entre jogadores e física dos tanques calibrada para paridade com o cliente oficial, a partir de capturas de tráfego de referência.
 - **Sistema Social**: Funcionalidades de amigos, incluindo adicionar, remover, aceitar/recusar pedidos e notificações de status online.
+- **Sistema de Clãs**: Criação de clãs, convites e pedidos de entrada (com validação de tag/nome e busca), gerenciamento de membros (expulsar/sair com cooldown), edição de configurações (descrição, rank mínimo, recrutamento) e ranking de clãs.
 - **Missões Diárias**: Sistema que gera missões diárias para os jogadores com recompensas.
 - **Autenticação Segura**: Implementa registro de usuário, login, recuperação de senha com hash bcrypt e verificação por CAPTCHA.
 - **Gerenciamento de Recursos Automatizado**: Um sistema de build inteligente descobre, versiona e processa automaticamente todos os recursos do jogo a partir de uma estrutura de pastas amigável (`resources/`).
