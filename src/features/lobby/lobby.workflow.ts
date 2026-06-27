@@ -10,6 +10,7 @@ import { IChatMessageData } from "@/features/chat/chat.types";
 import { UnloadGaragePacket } from "@/features/garage/garage.packets";
 import { LoadDependencies } from "@/features/loader/loader.packets";
 import { AchievementTips, EmailInfo, PremiumInfo } from "@/features/profile/profile.packets";
+import * as ProfilePackets from "@/features/profile/profile.packets";
 import { ReferralInfo } from "@/features/referral/referral.packets";
 import { LocalizationInfo } from "@/features/shop/shop.packets";
 import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets";
@@ -80,6 +81,10 @@ export class LobbyWorkflow {
         }
         client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags));
         this.sendPlayerVitals(user, client, server);
+        // Clan tag for the player's OWN top panel (the official sends SetClan for self after the panel).
+        // Without it the panel renders the nickname with no clan tag even when the player is in a clan.
+        const selfClanTag = await server.clanService.getTagForUser(user);
+        client.sendPacket(new ProfilePackets.ClanNotifierData(user.username, selfClanTag));
         this.sendInitialSettings(client, server);
         this.sendAchievementTips(user, client);
 

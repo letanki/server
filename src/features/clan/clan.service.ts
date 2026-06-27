@@ -38,6 +38,7 @@ export class ClanService {
             description: description ?? "",
             leaderId: user._id,
             members: [user._id],
+            memberSince: new Map([[String(user._id), new Date()]]),
             rating: 0,
         });
 
@@ -168,6 +169,7 @@ export class ClanService {
         if (!clan || !clan.invites.some((id) => String(id) === String(user._id))) return null;
         clan.invites = clan.invites.filter((id) => String(id) !== String(user._id)) as any;
         if (!clan.members.some((id) => String(id) === String(user._id))) clan.members.push(user._id as any);
+        clan.memberSince.set(String(user._id), new Date());
         await clan.save();
         user.clanId = clan._id as any;
         await user.save();
@@ -234,6 +236,7 @@ export class ClanService {
         if (!target || String(target._id) === String(leader._id)) return null; // not self
         if (!clan.members.some((id) => String(id) === String(target._id))) return null; // must be a member
         clan.members = clan.members.filter((id) => String(id) !== String(target._id)) as any;
+        clan.memberSince.delete(String(target._id));
         await clan.save();
         target.clanId = null;
         await target.save();
@@ -249,6 +252,7 @@ export class ClanService {
         if (!clan) return null;
         const wasLeader = String(clan.leaderId) === String(user._id);
         clan.members = clan.members.filter((id) => String(id) !== String(user._id)) as any;
+        clan.memberSince.delete(String(user._id));
         let disbanded = false;
         if (wasLeader) {
             if (clan.members.length > 0) {
@@ -266,6 +270,13 @@ export class ClanService {
         await user.save();
         logger.info(`${user.username} left clan [${clan.tag}]${disbanded ? " (disbanded)" : wasLeader ? " (leadership transferred)" : ""}.`);
         return { clan, wasLeader, disbanded };
+    }
+
+    /** Seconds a member has been in the clan (since their join, or the clan's creation for legacy members
+     *  that predate per-member join tracking). Drives the member-list "time in clan" display. */
+    private secondsInClan(clan: ClanDocument, memberId: unknown): number {
+        const joined = clan.memberSince?.get(String(memberId)) ?? clan.createdAt ?? new Date();
+        return Math.max(0, Math.floor((Date.now() - new Date(joined).getTime()) / 1000));
     }
 
     /** The clan tag to show next to a user's nickname, or null if they're not in a clan. */
@@ -314,6 +325,7 @@ export class ClanService {
         if (!clan.joinRequests.some((id) => String(id) === String(requester._id))) return null; // must have requested
         clan.joinRequests = clan.joinRequests.filter((id) => String(id) !== String(requester._id)) as any;
         if (!clan.members.some((id) => String(id) === String(requester._id))) clan.members.push(requester._id as any);
+        clan.memberSince.set(String(requester._id), new Date());
         await clan.save();
         requester.clanId = clan._id as any;
         await requester.save();
@@ -375,7 +387,10 @@ export class ClanService {
                 nick: m.username,
                 deaths: 0, kills: 0, score: 0, clanScore: 0, weeklyClanScore: 0,
                 permission: String(m._id) === String(clan.leaderId) ? 0 : 6, // 0 = leader, 6 = recruit (official default)
-                field1: 0, field8: 0,
+                // field1 = seconds since this member joined (the client renders it as the "time in clan",
+                // e.g. "1d 6h"). Falls back to the clan's creation date for members predating memberSince.
+                field1: this.secondsInClan(clan, m._id),
+                field8: 0,
             })),
         };
     }
