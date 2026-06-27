@@ -275,9 +275,33 @@ export class BattleService {
             logger.info(`Player ${user.username} reconnected in time.`);
             clearTimeout(disconnectedInfo.timeoutId);
             this.disconnectedPlayers.delete(user.id);
+
+            // The roster still holds the UserDocument from the player's ORIGINAL join; relogin loaded a
+            // fresh document (client.user) from the DB. They diverge after a mid-battle equipment change
+            // (equipItem mutates the live client.user, not the stale roster doc). loadPlayerEquipment
+            // reads equipment off the roster while getTankModelDataJson builds the InitTank off
+            // client.user — a divergence means the client loads the OLD hull/turret/paint resources but
+            // receives an InitTank referencing the NEW ones → null resource → TypeError #1009. Swap the
+            // stale roster reference for the live one so both read the same (current) equipment.
+            const battle = this.lobbyService.getBattleById(disconnectedInfo.battleId);
+            if (battle) this._refreshRosterUser(battle, user);
+
             return { battleId: disconnectedInfo.battleId };
         }
         return null;
+    }
+
+    /** Replaces the stale UserDocument reference (matched by id) in every roster array with the live
+     *  one. Called on reconnect so the roster stays in sync with the reconnecting client's client.user. */
+    private _refreshRosterUser(battle: Battle, user: UserDocument): void {
+        const swap = (arr: UserDocument[]) => {
+            const i = arr.findIndex((u) => u.id === user.id);
+            if (i !== -1) arr[i] = user;
+        };
+        swap(battle.users);
+        swap(battle.usersBlue);
+        swap(battle.usersRed);
+        swap(battle.spectators);
     }
 
     private async finalizeDisconnection(user: UserDocument, battle: Battle, isSpectator: boolean): Promise<void> {
