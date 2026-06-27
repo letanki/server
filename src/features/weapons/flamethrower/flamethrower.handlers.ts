@@ -4,6 +4,7 @@ import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
+import { TankTemperaturePacket } from "@/features/battle/battle.packets";
 import * as FlamethrowerPackets from "./flamethrower.packets";
 
 // Firebird residual burn: ignited to ~FLAME_TEMPERATURE_LIMIT dmg/sec, decaying linearly to 0 over BURN_SECONDS
@@ -39,7 +40,7 @@ function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], t
                 tc.flameTemperature = 0;
                 tc.visualTemperature = 0;
                 tc.flameSource = null;
-                if (tc.currentBattle === battle) battle.broadcast(new FlamethrowerPackets.TankTemperaturePacket(targetName, 0));
+                if (tc.currentBattle === battle) battle.broadcast(new TankTemperaturePacket(targetName, 0));
             }
             return;
         }
@@ -48,13 +49,13 @@ function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], t
         tc.flameTemperature = Math.max(0, tc.flameTemperature - decayPerTick);
         if (tc.flameTemperature > 0) {
             tc.visualTemperature = Math.max(0, tc.visualTemperature - FIRE_TEMP_DECAY);
-            battle.broadcast(new FlamethrowerPackets.TankTemperaturePacket(targetName, tc.visualTemperature));
+            battle.broadcast(new TankTemperaturePacket(targetName, tc.visualTemperature));
             scheduleBurn(server, battle, targetName, decayPerTick);
         } else {
             // Burn finished — always force the glow fully off (don't rely on the decay rate landing on 0).
             tc.visualTemperature = 0;
             tc.flameSource = null;
-            battle.broadcast(new FlamethrowerPackets.TankTemperaturePacket(targetName, 0));
+            battle.broadcast(new TankTemperaturePacket(targetName, 0));
         }
     });
 }
@@ -88,7 +89,7 @@ export class FirebirdHitCommandHandler implements IPacketHandler<FlamethrowerPac
             targetClient.flameTemperature = tempLimit;
             targetClient.flameSource = user.username;
             targetClient.visualTemperature = Math.min(FIRE_TEMP_CAP, targetClient.visualTemperature + FIRE_TEMP_STEP);
-            currentBattle.broadcast(new FlamethrowerPackets.TankTemperaturePacket(targetName, targetClient.visualTemperature));
+            currentBattle.broadcast(new TankTemperaturePacket(targetName, targetClient.visualTemperature));
             // Arm the decay timer only if one isn't already running (re-arming each ~2/s hit would reset the
             // 1s countdown so the tick never fires). Keying off the live timer, not flameTemperature, means a
             // tank left burning at death no longer blocks its next ignite.

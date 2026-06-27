@@ -3,6 +3,24 @@ import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as FreezeTypes from "./freeze.types";
 
+/**
+ * C→S: a Freeze beam tick. Same shape as the Firebird hit packet (the beam cone can touch several tanks at
+ * once): clientTime(i32), targets(Vector<String>), then a Vector<short> + two Vector<Vector3> we don't need.
+ * Sent ~2/s while the beam touches anyone.
+ */
+export class FreezeHitCommandPacket extends BasePacket {
+    public targets: string[] = [];
+    public read(buffer: Buffer): void {
+        const r = new BufferReader(buffer);
+        try {
+            r.readInt32BE();                 // clientTime
+            this.targets = r.readStringArray();
+        } catch { this.targets = []; }
+    }
+    public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
+    public static getId(): number { return -2123941185; }
+}
+
 export class StartShootingFreezeCommandPacket extends BasePacket implements FreezeTypes.IStartShootingFreezeCommand {
     public clientTime: number = 0;
     public read(buffer: Buffer): void {

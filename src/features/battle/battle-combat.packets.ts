@@ -321,6 +321,20 @@ export class SetHealthPacket extends BasePacket implements BattleTypes.ISetHealt
     static getId(): number { return -611961116; }
 }
 
+/**
+ * S->C (broadcast): a tank's "temperature" — drives the client's heat/cold tint AND its frozen slowdown.
+ * Positive = heat (Firebird's red burning glow), negative = cold (Freeze's blue tint), 0 = normal. Body =
+ * nickname(optString) + temperature(f32). Generic tank state shared by the fire/ice weapons.
+ */
+export class TankTemperaturePacket extends BasePacket {
+    constructor(private readonly nickname: string | null = null, private readonly temperature: number = 0) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        return new BufferWriter().writeOptionalString(this.nickname).writeFloatBE(this.temperature).getBuffer();
+    }
+    static getId(): number { return 581377054; }
+}
+
 export class SpawnPacket extends BasePacket implements BattleTypes.ISpawn {
     static readonly schema: PacketSchema = [
         { name: "nickname", type: "string" },

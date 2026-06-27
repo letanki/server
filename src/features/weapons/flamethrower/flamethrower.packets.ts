@@ -22,20 +22,6 @@ export class FirebirdHitCommandPacket extends BasePacket {
     public static getId(): number { return 1395251766; }
 }
 
-/**
- * S→C (broadcast): a tank's "temperature" — drives the client's heat/cold tint. Positive = heat (Firebird's
- * red burning glow), 0 = normal. Body = nickname(optString) + temperature(f32). The official ramps to ~0.2
- * while a Firebird flames a tank and decays ~0.032/s back to 0 over ~7s after the flame leaves.
- */
-export class TankTemperaturePacket extends BasePacket {
-    constructor(private readonly nickname: string | null = null, private readonly temperature: number = 0) { super(); }
-    public read(_buffer: Buffer): void {}
-    public write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).writeFloatBE(this.temperature).getBuffer();
-    }
-    public static getId(): number { return 581377054; }
-}
-
 export class StartShootingFlamethrowerCommandPacket extends BasePacket implements FlamethrowerTypes.IStartShootingFlamethrowerCommand {
     public clientTime: number = 0;
     public read(buffer: Buffer): void {

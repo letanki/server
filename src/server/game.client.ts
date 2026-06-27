@@ -111,6 +111,10 @@ export class GameClient {
   public flameSource: string | null = null;
   // Visual heat (0..~0.2) driving the client's red "burning" glow — broadcast via the Temperature packet.
   public visualTemperature: number = 0;
+  // Freeze cold (0..~-0.5): negative temperature → blue tint + movement slowdown. lastFreezeHit gates the
+  // warm-up recovery so the tank only thaws once the freeze beam stops touching it.
+  public freezeTemperature: number = 0;
+  public lastFreezeHit: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;
