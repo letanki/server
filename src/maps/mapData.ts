@@ -49,3 +49,35 @@ export const getMapGeometries = (id: string): ISpecialBox[] => getMapData(id).ge
 export const getMapCtfFlags = (id: string): ICtfFlags | null => getMapData(id).ctfFlags;
 export const getMapDomKeypoints = (id: string): IDomKeypoint[] => getMapData(id).domKeypoints;
 export const getMapBonusRegions = (id: string): IBonusRegion[] => getMapData(id).bonusRegions;
+
+// Identified once per loaded map; keyed by the geometries array so it follows getMapData's cache/eviction.
+const ceilingCache = new WeakMap<ISpecialBox[], ISpecialBox | null>();
+
+/**
+ * The map's "ceiling" kill/kick box — the topmost horizontal slab spanning the play area (a tank that climbs
+ * too high lands in it and dies/gets kicked). Found by shape: a thin-in-Z box that covers most of the map's
+ * X and Y extent and sits in the upper half of its Z range. Returns null for maps with no such slab (open /
+ * space maps). Parkour mode skips this box so there's no upper limit — only the side and floor zones remain.
+ */
+export function getMapCeilingBox(id: string): ISpecialBox | null {
+    const boxes = getMapGeometries(id);
+    const cached = ceilingCache.get(boxes);
+    if (cached !== undefined) return cached;
+
+    let ceiling: ISpecialBox | null = null;
+    if (boxes.length > 0) {
+        let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (const b of boxes) {
+            minX = Math.min(minX, b.minX); minY = Math.min(minY, b.minY); minZ = Math.min(minZ, b.minZ);
+            maxX = Math.max(maxX, b.maxX); maxY = Math.max(maxY, b.maxY); maxZ = Math.max(maxZ, b.maxZ);
+        }
+        const spanX = maxX - minX, spanY = maxY - minY, midZ = (minZ + maxZ) / 2;
+        for (const b of boxes) {
+            const bx = b.maxX - b.minX, by = b.maxY - b.minY, bz = b.maxZ - b.minZ;
+            const isSlab = bx >= 0.6 * spanX && by >= 0.6 * spanY && bz <= bx && bz <= by;
+            if (isSlab && b.minZ >= midZ && (ceiling === null || b.minZ > ceiling.minZ)) ceiling = b;
+        }
+    }
+    ceilingCache.set(boxes, ceiling);
+    return ceiling;
+}

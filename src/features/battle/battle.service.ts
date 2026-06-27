@@ -15,7 +15,7 @@ import { BonusService } from "./bonus.service";
 import { SupplyService } from "./supply.service";
 import { MineService } from "./mine.service";
 import { DominationService } from "./domination.service";
-import { evictMapData, getMapGeometries } from "@/maps/mapData";
+import { evictMapData, getMapCeilingBox, getMapGeometries } from "@/maps/mapData";
 import { evictMapCollision } from "@/maps/mapCollision";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
@@ -118,7 +118,13 @@ export class BattleService {
         const geometries = getMapGeometries(currentBattle.mapResourceId);
         if (geometries.length === 0) return;
 
+        // Parkour mode has no upper limit — climbing high is the point. Skip the ceiling kill/kick box so only
+        // the side and floor zones still destroy the tank.
+        const ceiling = currentBattle.settings.parkourMode ? getMapCeilingBox(currentBattle.mapResourceId) : null;
+
         for (const box of geometries) {
+            if (box === ceiling) continue;
+
             const isInside =
                 battlePosition.x >= box.minX &&
                 battlePosition.x <= box.maxX &&
