@@ -31,6 +31,14 @@ export class CombatService {
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
 
+        // Friendly fire: in team modes with friendlyFire disabled, teammates can't damage each other.
+        // Self-damage always lands (ricochet bounce-back, splash on yourself, self-destruct), and DM has
+        // no teams (teamOf === 2 for everyone) so this never gates it.
+        const shooterUser = shooterClient.user;
+        if (shooterUser && shooterUser.id !== targetUser.id && battle.isTeamMode() && !battle.settings.friendlyFire && battle.teamOf(shooterUser) === battle.teamOf(targetUser)) {
+            return;
+        }
+
         // Supply/bonus multipliers: shooter's Double Damage doubles output, target's Double Armor halves it.
         if (SupplyService.hasEffect(shooterClient, SUPPLY_SLOT.DOUBLE_DAMAGE)) realDamage *= 2;
         if (SupplyService.hasEffect(targetClient, SUPPLY_SLOT.ARMOR)) realDamage *= 0.5;
