@@ -249,6 +249,72 @@ export class BattleWorkflow {
         return JSON.stringify(data);
     }
 
+    /** Completes a spawn after the client's ReadyToPlace: applies a pending equipment change
+     *  (RemoveTank + new InitTank + EquipmentChanged), resets health/effects, and broadcasts the
+     *  SpawnPacket. Extracted from ReadyToPlaceHandler so the garage equipment-change flow can DEFER it
+     *  until the other clients have loaded the new equipment resources — broadcasting the InitTank/Spawn
+     *  before they do leaves the tank invisible / crashes them (#1009). */
+    public static placeTank(client: GameClient): void {
+        const user = client.user;
+        const battle = client.currentBattle;
+        if (!user || !battle || client.isSpectator) return;
+
+        try {
+            const broadcastToBattle = (packetToBroadcast: IPacket) => battle.broadcast(packetToBroadcast);
+
+            if (client.pendingEquipmentRespawn) {
+                client.pendingEquipmentRespawn = false;
+
+                broadcastToBattle(new BattlePackets.RemoveTankPacket(user.username));
+
+                const tankModelJson = this.getTankModelDataJson(client, battle);
+                broadcastToBattle(new BattlePackets.TankModelDataPacket(tankModelJson));
+
+                broadcastToBattle(new BattlePackets.EquipmentChangedPacket(user.username));
+            }
+
+            client.battleState = "newcome";
+            // A fresh life starts with no supply effects (they don't survive death/respawn).
+            client.activeEffects = [];
+
+            // Health is tracked on the client's normalized 0-10000 scale (full on (re)spawn).
+            const clientHealth = 10000;
+            client.currentHealth = clientHealth;
+
+            client.sendPacket(new BattlePackets.SetHealthPacket({ nickname: user.username, health: clientHealth }));
+
+            const spawnPoint = client.pendingSpawnPoint;
+            if (!spawnPoint) {
+                logger.error(`No pending spawn point for ${user.username}. This should not happen.`);
+                client.closeConnection();
+                return;
+            }
+            client.pendingSpawnPoint = null;
+
+            client.battlePosition = spawnPoint.position;
+            client.battleOrientation = spawnPoint.rotation;
+
+            let teamId = 2;
+            if (battle.isTeamMode()) {
+                if (battle.usersBlue.some((u: UserDocument) => u.id === user.id)) teamId = 1;
+                if (battle.usersRed.some((u: UserDocument) => u.id === user.id)) teamId = 0;
+            }
+
+            const spawnPacket = new BattlePackets.SpawnPacket({
+                nickname: user.username,
+                team: teamId,
+                position: spawnPoint.position,
+                orientation: spawnPoint.rotation,
+                health: clientHealth,
+                incarnation: client.battleIncarnation,
+            });
+
+            broadcastToBattle(spawnPacket);
+        } catch (error: any) {
+            logger.error(`Failed to execute spawn logic for user ${user.username}`, { error });
+        }
+    }
+
     public static initializeBattle(client: GameClient, server: GameServer, battle: Battle): void {
         if (client.isSpectator) {
             this._initializeSpectatorBattleView(client, server, battle);

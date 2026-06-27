@@ -7,7 +7,6 @@ import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
-import { IPacket } from "@/packets/packet.interfaces";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
@@ -228,70 +227,18 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             return;
         }
 
-        logger.info(`Placing user ${client.user.username} on the battlefield ${client.currentBattle.battleId}.`);
-
-        try {
-            const battle = client.currentBattle;
-            const user = client.user;
-
-            const broadcastToBattle = (packetToBroadcast: IPacket) => {
-                battle.broadcast(packetToBroadcast);
-            };
-
-            if (client.pendingEquipmentRespawn) {
-                client.pendingEquipmentRespawn = false;
-
-                broadcastToBattle(new BattlePackets.RemoveTankPacket(user.username));
-
-                const tankModelJson = BattleWorkflow.getTankModelDataJson(client, battle);
-                broadcastToBattle(new BattlePackets.TankModelDataPacket(tankModelJson));
-
-                broadcastToBattle(new BattlePackets.EquipmentChangedPacket(user.username));
-            }
-
-            client.battleState = "newcome";
-            // A fresh life starts with no supply effects (they don't survive death/respawn).
-            client.activeEffects = [];
-
-            // Health is tracked on the client's normalized 0-10000 scale (full on (re)spawn).
-            const clientHealth = 10000;
-            client.currentHealth = clientHealth;
-
-            client.sendPacket(new BattlePackets.SetHealthPacket({ nickname: user.username, health: clientHealth }));
-
-            const spawnPoint = client.pendingSpawnPoint;
-            if (!spawnPoint) {
-                logger.error(`No pending spawn point for ${client.user.username}. This should not happen.`);
-                client.closeConnection();
-                return;
-            }
-            client.pendingSpawnPoint = null;
-
-            const spawnPosition = spawnPoint.position;
-            const spawnRotation = spawnPoint.rotation;
-
-            client.battlePosition = spawnPosition;
-            client.battleOrientation = spawnRotation;
-
-            let teamId = 2;
-            if (battle.isTeamMode()) {
-                if (battle.usersBlue.some((u: UserDocument) => u.id === user.id)) teamId = 1;
-                if (battle.usersRed.some((u: UserDocument) => u.id === user.id)) teamId = 0;
-            }
-
-            const spawnPacket = new BattlePackets.SpawnPacket({
-                nickname: user.username,
-                team: teamId,
-                position: spawnPosition,
-                orientation: spawnRotation,
-                health: clientHealth,
-                incarnation: client.battleIncarnation,
-            });
-
-            broadcastToBattle(spawnPacket);
-        } catch (error: any) {
-            logger.error(`Failed to execute spawn logic for user ${client.user.username}`, { error });
+        // Equipment was changed while the player was dead/waiting to spawn, and the other clients are
+        // still loading the new equipment resources. Spawning now would broadcast the new InitTank/Spawn
+        // before they have the resources → invisible tank / #1009 on them. Hold the placement; the
+        // resource-load acks (garage.workflow) will perform it once everyone is ready.
+        if (client.equipmentResourcesLoading) {
+            client.deferredPlacement = true;
+            logger.info(`Holding placement for ${client.user.username} until other clients load the new equipment.`);
+            return;
         }
+
+        logger.info(`Placing user ${client.user.username} on the battlefield ${client.currentBattle.battleId}.`);
+        BattleWorkflow.placeTank(client);
     }
 }
 

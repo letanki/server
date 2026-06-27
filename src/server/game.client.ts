@@ -125,6 +125,13 @@ export class GameClient {
   public equipmentChangedInGarage: boolean = false;
   public pendingEquipmentRespawn: boolean = false;
   public pendingSpawnPoint: ISpawnPoint | null = null;
+  // Set while OTHER clients are still loading this player's new equipment resources after a mid-battle
+  // equipment change. While true the player's spawn (ReadyToPlace) is held back — broadcasting the
+  // InitTank/Spawn before others have the resources makes the tank invisible / crashes them (#1009).
+  public equipmentResourcesLoading: boolean = false;
+  // The player sent ReadyToPlace while equipmentResourcesLoading was still true; the placement is
+  // performed once the resource-load acks complete (garage.workflow).
+  public deferredPlacement: boolean = false;
 
   constructor({ socket, server }: IClientOptions) {
     this.socket = socket;

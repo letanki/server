@@ -1,5 +1,6 @@
 import { CALLBACK } from "@/config/constants";
 import { ConfirmDestructionPacket, SelfDestructScheduledPacket } from "@/features/battle/battle.packets";
+import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import { LoadDependencies } from "@/features/loader/loader.packets";
 import { UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
@@ -136,12 +137,39 @@ export class GarageWorkflow {
 
                 const acknowledgements = new Set(otherClientsInBattle.map((c) => c.user!.username));
 
-                const onResourcesLoadedCallback = (acknowledgingClient: GameClient) => {
-                    acknowledgements.delete(acknowledgingClient.user!.username);
-                    if (acknowledgements.size === 0) {
-                        server.removeDynamicCallback(callbackId);
+                // Hold this player's spawn until every other client has loaded the new equipment — see
+                // GameClient.equipmentResourcesLoading. A player who is ALREADY dead would otherwise
+                // respawn instantly (before the others load), making the new tank invisible / crashing
+                // them (#1009).
+                client.equipmentResourcesLoading = true;
+
+                let completed = false;
+                const finish = () => {
+                    if (completed) return;
+                    completed = true;
+                    clearTimeout(timeoutId);
+                    server.removeDynamicCallback(callbackId);
+                    client.equipmentResourcesLoading = false;
+
+                    if (client.deferredPlacement) {
+                        // Player changed equipment while dead: the spawn was held back. Now that the
+                        // others have the resources, place the tank with the new equipment in one shot
+                        // (no spurious self-destruct, no double spawn).
+                        client.deferredPlacement = false;
+                        BattleWorkflow.placeTank(client);
+                    } else {
+                        // Player was alive: blow up the current tank so it respawns with the new
+                        // equipment (no-op if they died in the meantime).
                         this._triggerSelfDestructForRespawn(client, server);
                     }
+                };
+
+                // Fallback so a client that disconnects mid-load can't leave this player stuck.
+                const timeoutId = setTimeout(finish, 10000);
+
+                const onResourcesLoadedCallback = (acknowledgingClient: GameClient) => {
+                    acknowledgements.delete(acknowledgingClient.user!.username);
+                    if (acknowledgements.size === 0) finish();
                 };
 
                 const callbackId = server.registerDynamicCallback(onResourcesLoadedCallback);
@@ -151,6 +179,8 @@ export class GarageWorkflow {
                     otherClient.sendPacket(depsPacket);
                 });
             } else {
+                // No other clients to load resources for — if alive, self-destruct to respawn; if dead,
+                // this no-ops and the pending respawn (pendingEquipmentRespawn) carries the new equipment.
                 this._triggerSelfDestructForRespawn(client, server);
             }
         }
