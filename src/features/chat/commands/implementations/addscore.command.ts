@@ -1,3 +1,4 @@
+import { MAX_COMMAND_SCORE } from "@/config/rank.data";
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
 import { UpdateRankPacket, UpdateScorePacket } from "@/features/profile/profile.packets";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
@@ -31,8 +32,7 @@ export default class AddScoreCommand implements ICommand {
         let newScore = currentScore + amount;
 
         const MIN_SCORE = 0;
-        const MAX_SCORE = 2147483647;
-        newScore = Math.max(MIN_SCORE, Math.min(newScore, MAX_SCORE));
+        newScore = Math.max(MIN_SCORE, Math.min(newScore, MAX_COMMAND_SCORE));
 
         try {
             const updatedUser = await context.server.userService.updateResources(user.id, {

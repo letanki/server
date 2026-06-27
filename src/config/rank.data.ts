@@ -37,3 +37,10 @@ export const Ranks: Rank[] = [
   { id: 29, name: "Commander", minScore: 1255000, experienceToNextRank: 145000 },
   { id: 30, name: "Generalissimo", minScore: 1400000, experienceToNextRank: 0 },
 ];
+
+// Hard accumulation ceiling = the client's score field max (signed i32). Experience is clamped here
+// so a kill (or any XP gain) can't overflow the field on an already-huge account.
+export const MAX_EXPERIENCE: number = 2147483647;
+// The most the /addscore command is allowed to set — the top rank's minScore, so you can reach the
+// last rank but not pile on absurd score beyond it.
+export const MAX_COMMAND_SCORE: number = Math.max(...Ranks.map((r) => r.minScore));

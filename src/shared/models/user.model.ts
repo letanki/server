@@ -1,3 +1,4 @@
+import { MAX_EXPERIENCE } from "@/config/rank.data";
 import { QuestDifficulty, QuestType } from "@/features/quests/quests.data";
 import bcrypt from "bcrypt";
 import mongoose, { Document, Schema, model } from "mongoose";
@@ -144,6 +145,9 @@ UserSchema.index({ loginToken: 1 }, { unique: true, partialFilterExpression: { l
 // required `login` is always set, including on the first save.
 UserSchema.pre<UserDocument>("validate", function (next: (error?: Error) => void) {
     if (this.username) this.login = this.username.toLowerCase();
+    // Hard cap experience at the top rank's threshold so a kill / XP item can't overflow the client's
+    // score field on a maxed-out account (the `min: 0` schema rule guards the bottom).
+    if (this.experience > MAX_EXPERIENCE) this.experience = MAX_EXPERIENCE;
     next();
 });
 
