@@ -20,12 +20,14 @@ export class ShotgunShotCommandHandler implements IPacketHandler<ShotgunPackets.
         const { user, currentBattle } = client;
         if (!user || !currentBattle || client.battleState !== "active") return;
 
-        // Relay the blast (cone + pellet impacts) to the others — every shot, hit or miss.
+        // Relay the blast (cone + pellet impacts) to EVERYONE, including the shooter — every shot, hit or
+        // miss. The official echoes 471157826 back to the firer so the shooter also sees the impact spark on
+        // the tank they hit; excluding self left the shooter seeing no impact at all.
         const relay = new ShotgunPackets.ShotgunShotPacket(
             user.username, packet.direction,
             [...packet.hitsByTarget].map(([nick, t]) => ({ hit: t.hit, pellets: t.pellets, nick })),
         );
-        currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
+        currentBattle.broadcast(relay);
 
         if (packet.hitsByTarget.size === 0) return;
         const turretMod = ItemUtils.getItemModification(user, "turret");
