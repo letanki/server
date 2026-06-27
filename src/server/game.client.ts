@@ -109,6 +109,8 @@ export class GameClient {
   // Flamethrower residual burn: current burn damage/sec on this tank, and who lit it (for kill credit).
   public flameTemperature: number = 0;
   public flameSource: string | null = null;
+  // Visual heat (0..~0.2) driving the client's red "burning" glow — broadcast via the Temperature packet.
+  public visualTemperature: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   public equipmentChangedInGarage: boolean = false;

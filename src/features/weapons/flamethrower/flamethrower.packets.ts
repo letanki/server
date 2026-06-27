@@ -4,20 +4,36 @@ import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as FlamethrowerTypes from "./flamethrower.types";
 
 /**
- * C→S: a Firebird flame tick hit a tank. Body = clientTime, int, byte, target nick (+ trailing hit vecs).
- * Sent repeatedly (~2/s) while the flame touches a target. We only need the target nickname.
+ * C→S: a Firebird flame tick. The flame cone can touch SEVERAL tanks at once, so the body carries parallel
+ * arrays: clientTime(i32), targets(Vector<String>), then Vector<short> (per-target incarnation) and two
+ * Vector<Vector3> (origin + hit position) we don't need. Sent ~2/s while the flame touches anyone. We pull
+ * the full target list — the old single-target read only ever saw the first nick, so only one tank burned.
  */
 export class FirebirdHitCommandPacket extends BasePacket {
-    public target: string | null = null;
+    public targets: string[] = [];
     public read(buffer: Buffer): void {
         const r = new BufferReader(buffer);
-        r.readInt32BE();   // clientTime
-        r.readInt32BE();   // unknown
-        r.readInt8();      // unknown
-        try { this.target = r.readOptionalString(); } catch { this.target = null; }
+        try {
+            r.readInt32BE();                 // clientTime
+            this.targets = r.readStringArray();
+        } catch { this.targets = []; }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
     public static getId(): number { return 1395251766; }
+}
+
+/**
+ * S→C (broadcast): a tank's "temperature" — drives the client's heat/cold tint. Positive = heat (Firebird's
+ * red burning glow), 0 = normal. Body = nickname(optString) + temperature(f32). The official ramps to ~0.2
+ * while a Firebird flames a tank and decays ~0.032/s back to 0 over ~7s after the flame leaves.
+ */
+export class TankTemperaturePacket extends BasePacket {
+    constructor(private readonly nickname: string | null = null, private readonly temperature: number = 0) { super(); }
+    public read(_buffer: Buffer): void {}
+    public write(): Buffer {
+        return new BufferWriter().writeOptionalString(this.nickname).writeFloatBE(this.temperature).getBuffer();
+    }
+    public static getId(): number { return 581377054; }
 }
 
 export class StartShootingFlamethrowerCommandPacket extends BasePacket implements FlamethrowerTypes.IStartShootingFlamethrowerCommand {
