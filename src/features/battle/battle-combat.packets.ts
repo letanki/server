@@ -93,7 +93,9 @@ export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.
     static getId(): number { return -173682854; }
 }
 
-// S->C (broadcast): floating damage number on a tank. count is always 1 here; type 2 = normal hit.
+// S->C (broadcast): floating damage number on a tank. count is always 1 here. damageType drives the
+// number's colour in the client: 0 = normal (white), 1 = critical (yellow), 2 = fatal/kill (red),
+// 3 = heal (green).
 export class DamageIndicatorPacket extends BasePacket {
     static readonly schema: PacketSchema = [
         { name: "count", type: "i32" },
@@ -102,7 +104,7 @@ export class DamageIndicatorPacket extends BasePacket {
         { name: "target", type: "string" },
     ];
     count: number; damage: number; damageType: number; target: string | null;
-    constructor(target: string | null = null, damage: number = 0, damageType: number = 2) { super(); this.count = 1; this.damage = damage; this.damageType = damageType; this.target = target; }
+    constructor(target: string | null = null, damage: number = 0, damageType: number = 0) { super(); this.count = 1; this.damage = damage; this.damageType = damageType; this.target = target; }
     read(buffer: Buffer): void { readSchema(this, DamageIndicatorPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, DamageIndicatorPacket.schema); }
     static getId(): number { return -1165230470; }

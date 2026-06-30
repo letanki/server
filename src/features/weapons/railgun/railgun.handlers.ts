@@ -7,21 +7,16 @@ import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import * as RailgunPackets from "./railgun.packets";
 
-// Damage depends ONLY on where the beam hits the tank (no distance/charge): a dead-center hit does
-// DAMAGE_TO, the edge does DAMAGE_FROM. RAILGUN_TANK_RADIUS is the horizontal offset (from the
-// tank's central axis) at which damage reaches the minimum — tune to taste.
-const RAILGUN_TANK_RADIUS = 250;
 const RAILGUN_CHARGE_TOLERANCE_MS = 250; // network jitter allowance for the charge gate
 
-// Per-mod railgun config lives in physics.data (id `${turret}_m{0..3}`, e.g. `railgun_m2`;
-// note `railgun_xt_*` is a DIFFERENT special weapon): `chargingTimeMsec` is the fixed charge time
-// (anti fire-rate hack) and `weakeningCoeff` is the pierce retention (each next tank in the beam
-// keeps this fraction; m0=0.3536 .. m3=1.0 = no weakening).
-function getRailgunPhysics(user: UserDocument): { chargeMs: number; weakeningCoeff: number } {
+// Fixed per-mod charge time (anti fire-rate hack) from physics.data (id `${turret}_m{0..3}`, e.g.
+// `railgun_m2`; note `railgun_xt_*` is a DIFFERENT special weapon). It only gates the fire rate and
+// never affects damage.
+function getRailgunChargeMs(user: UserDocument): number {
     const mod = user.turrets.get(user.equippedTurret) ?? 0;
     const weapon = weaponPhysicsData.weapons.find((w) => w.id === `${user.equippedTurret}_m${mod}`);
-    const se = (weapon?.special_entity ?? {}) as { chargingTimeMsec?: number; weakeningCoeff?: number };
-    return { chargeMs: se.chargingTimeMsec ?? 1100, weakeningCoeff: se.weakeningCoeff ?? 1 };
+    const se = (weapon?.special_entity ?? {}) as { chargingTimeMsec?: number };
+    return se.chargingTimeMsec ?? 1100;
 }
 
 export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.RailgunShotCommandPacket> {
@@ -32,7 +27,7 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
             return;
         }
 
-        const { chargeMs, weakeningCoeff } = getRailgunPhysics(user);
+        const chargeMs = getRailgunChargeMs(user);
 
         // Anti fire-rate hack: the shot must come after the (per-mod) fixed charge time elapsed
         // since the player started charging. A shot with no/too-little charge is dropped entirely.
@@ -51,28 +46,28 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         });
         currentBattle.broadcastRaw(shotPacket.write(), shotPacket.getId(), user.id);
 
-        // Damage range from the shooter's turret (DAMAGE_FROM..DAMAGE_TO).
+        // Damage is a single uniform random roll in [DAMAGE_FROM, DAMAGE_TO]. Verified against official
+        // captures it depends on NEITHER distance NOR where the beam hits the tank — the old centrality
+        // model was wrong. The beam pierces aligned tanks: each next tank in the line takes
+        // WEAPON_WEAKENING_COEFF% of the previous tank's damage (m0=18, m1=45, m2=73, m3=100), i.e.
+        // damage_i = base * coeff^i.
         const turretMod = ItemUtils.getItemModification(user, "turret");
         const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
         const dmgTo = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_TO") ?? dmgFrom;
+        const weakeningCoeff = (ItemUtils.getPropertyValue(turretMod, "WEAPON_WEAKENING_COEFF") ?? 100) / 100;
+        const baseDamage = dmgFrom + Math.random() * (dmgTo - dmgFrom);
 
-        logger.info(`User ${user.username} fired railgun (dmg ${dmgFrom}-${dmgTo}) at [${packet.targets.map((t) => t.nickname).join(", ")}]`);
+        logger.info(`User ${user.username} fired railgun (base ${baseDamage.toFixed(1)} of ${dmgFrom}-${dmgTo}) at [${packet.targets.map((t) => t.nickname).join(", ")}]`);
 
-        // The beam pierces aligned tanks: each next one keeps `weakeningCoeff` of the damage (per-mod).
         let pierceIndex = 0;
         for (const target of packet.targets) {
             const targetClient = server.findClientByUsername(target.nickname);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
 
-            // Centrality: target.position is the local hit point; the closer the HORIZONTAL offset
-            // is to the tank's central axis, the more damage (DAMAGE_TO at center, DAMAGE_FROM at edge).
-            const hit = target.position;
-            const offset = hit ? Math.hypot(hit.x, hit.y) : RAILGUN_TANK_RADIUS;
-            const centrality = Math.max(0, Math.min(1, 1 - offset / RAILGUN_TANK_RADIUS));
-            const damage = (dmgFrom + (dmgTo - dmgFrom) * centrality) * Math.pow(weakeningCoeff, pierceIndex);
+            const damage = baseDamage * Math.pow(weakeningCoeff, pierceIndex);
             pierceIndex++;
 
-            await server.battleService.applyDamage(currentBattle, client, targetClient, damage);
+            await server.battleService.applyDamage(currentBattle, client, targetClient, damage, 0);
         }
     }
 }

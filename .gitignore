@@ -156,3 +156,6 @@ src/generated/
 client-decompiled
 *.ndjson
 PHYSICS-CAPTURE-STATUS.md
+
+# Autoplay bot (local-only, not part of the server) — kept out of version control.
+bot-autoplay/
