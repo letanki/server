@@ -18,12 +18,15 @@ import { DominationService } from "./domination.service";
 import { evictMapData, getMapCeilingBox, getMapGeometries } from "@/maps/mapData";
 import { evictMapCollision } from "@/maps/mapCollision";
 import logger from "@/utils/logger";
-import { Battle, BattleMode, BattleRoundState } from "./battle.model";
+import { Battle, BattleMode, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
 import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 import { UnloadSpaceBattlePacket } from "./battle-init.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 
 const EMPTY_BATTLE_REMOVAL_MS = 60000; // a player-created battle left empty this long is removed
+
+/** A join rejected because the player's gear doesn't satisfy the battle's XP/BP equipment constraint. */
+export class EquipmentConstraintError extends Error {}
 
 interface IDisconnectedPlayerInfo {
     battleId: string;
@@ -37,6 +40,29 @@ export class BattleService {
      * for everyone. We cap below any battle's configured maxPeopleCount so no config can exceed it.
      */
     public static readonly MAX_TANKS_PER_BATTLE = 60;
+
+    /** XP/BP modes require the railgun at "at least m2" (turret modification index >= 2). */
+    private static readonly RAILGUN_MIN_MOD = 2;
+
+    /**
+     * Enforces an equipment-constraint mode's required hull + turret on join: XP = hornet+railgun,
+     * BP = wasp+railgun, XP/BP = either hull, all with the railgun at >= m2. NONE allows anything.
+     * Throws a join-rejection error (shown to the player) when the equipped gear doesn't comply.
+     */
+    private static _enforceEquipmentConstraint(mode: EquipmentConstraintsMode, user: UserDocument): void {
+        if (mode === EquipmentConstraintsMode.NONE) return;
+
+        const allowedHulls =
+            mode === EquipmentConstraintsMode.HORNET_RAILGUN ? ["hornet"] :
+            mode === EquipmentConstraintsMode.WASP_RAILGUN ? ["wasp"] :
+            ["hornet", "wasp"]; // HORNET_WASP_RAILGUN
+
+        const railgunMod = user.equippedTurret === "railgun" ? (user.turrets.get("railgun") ?? 0) : -1;
+        if (!allowedHulls.includes(user.equippedHull) || railgunMod < BattleService.RAILGUN_MIN_MOD) {
+            const hullLabel = allowedHulls.map((h) => (h === "hornet" ? "Zangão" : "Vespa")).join(" ou ");
+            throw new EquipmentConstraintError(`Esta batalha exige ${hullLabel} + Canhão-elétrico (no mínimo M2).`);
+        }
+    }
 
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
     private readonly collision = new CollisionService();
@@ -354,6 +380,9 @@ export class BattleService {
         if (user.rank < settings.minRank || user.rank > settings.maxRank) {
             throw new Error("Seu rank não é compatível com esta batalha.");
         }
+
+        // XP/BP modes only admit a specific hull + railgun (>= m2).
+        BattleService._enforceEquipmentConstraint(settings.equipmentConstraintsMode, user);
 
         const allParticipants = battle.getAllParticipants();
         const isAlreadyInBattle = allParticipants.some((p) => p.id === user.id);

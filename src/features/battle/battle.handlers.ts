@@ -12,6 +12,7 @@ import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
+import { EquipmentConstraintError } from "./battle.service";
 import * as BattlePackets from "./battle.packets";
 import { BattleWorkflow } from "./battle.workflow";
 
@@ -101,6 +102,11 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
                 }
             }
         } catch (error: any) {
+            // Equipment-constraint rejection (XP/BP): tell the client so it shows "equipment not
+            // allowed" and keeps the player in the lobby, echoing the battleId they tried to enter.
+            if (error instanceof EquipmentConstraintError) {
+                client.sendPacket(new BattlePackets.EquipmentNotAllowedPacket(client.lastViewedBattleId));
+            }
             logger.warn(`Usuário ${client.user.username} falhou ao entrar na batalha ${client.lastViewedBattleId}`, {
                 error: error.message,
                 client: client.getRemoteAddress(),

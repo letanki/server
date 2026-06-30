@@ -41,6 +41,19 @@ export class EnterBattlePacket extends BasePacket implements BattleTypes.IEnterB
     static getId(): number { return -1284211503; }
 }
 
+/**
+ * Server→client: refuses a battle join because the player's equipment doesn't satisfy the battle's
+ * equipment-constraint mode (XP/BP — hornet/wasp + railgun >= m2). Body = optionalString(battleId) of
+ * the battle the player tried to enter; the client keeps the player in the lobby and shows the
+ * "equipment not allowed" message. Captured from the official server (id -10847382).
+ */
+export class EquipmentNotAllowedPacket extends BasePacket {
+    constructor(private readonly battleId: string | null = null) { super(); }
+    read(): void {}
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
+    static getId(): number { return -10847382; }
+}
+
 export class EnterBattleAsSpectatorPacket extends BasePacket implements BattleTypes.IEnterBattleAsSpectator {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }

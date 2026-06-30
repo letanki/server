@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { EquipmentConstraintsMode } from "@/features/battle/battle.model";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
@@ -8,6 +9,13 @@ import logger from "@/utils/logger";
 import * as RailgunPackets from "./railgun.packets";
 
 const RAILGUN_CHARGE_TOLERANCE_MS = 250; // network jitter allowance for the charge gate
+
+// XP/BP modes: the railgun deals a FIXED fraction of the TARGET's max HP instead of its random roll,
+// so kills take a deterministic number of shots regardless of the rolled damage or the hull (m2 and m3
+// behave identically). The fraction must be in [2/3, 1) for the supply matrix to hold — a base hit (no
+// supplies) takes 2 shots; the shooter's Double Damage (x2) makes it a 1-shot hitkill, the target's
+// Double Armor (x0.5) pushes it to 3 shots, and both together back to 2.
+const XP_BP_DAMAGE_FRACTION = 0.75;
 
 // Fixed per-mod charge time (anti fire-rate hack) from physics.data (id `${turret}_m{0..3}`, e.g.
 // `railgun_m2`; note `railgun_xt_*` is a DIFFERENT special weapon). It only gates the fire rate and
@@ -57,14 +65,20 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         const weakeningCoeff = (ItemUtils.getPropertyValue(turretMod, "WEAPON_WEAKENING_COEFF") ?? 100) / 100;
         const baseDamage = dmgFrom + Math.random() * (dmgTo - dmgFrom);
 
+        // XP/BP modes normalize damage to a fixed fraction of each target's HP (see XP_BP_DAMAGE_FRACTION);
+        // the random roll is used only in normal battles. Supply multipliers (Double Damage/Armor) are
+        // applied later in applyDamage.
+        const twoShotMode = currentBattle.settings.equipmentConstraintsMode !== EquipmentConstraintsMode.NONE;
+
         logger.info(`User ${user.username} fired railgun (base ${baseDamage.toFixed(1)} of ${dmgFrom}-${dmgTo}) at [${packet.targets.map((t) => t.nickname).join(", ")}]`);
 
         let pierceIndex = 0;
         for (const target of packet.targets) {
             const targetClient = server.findClientByUsername(target.nickname);
-            if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
+            if (!targetClient || !targetClient.user || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
 
-            const damage = baseDamage * Math.pow(weakeningCoeff, pierceIndex);
+            const rawDamage = twoShotMode ? XP_BP_DAMAGE_FRACTION * ItemUtils.getHullArmor(targetClient.user) : baseDamage;
+            const damage = rawDamage * Math.pow(weakeningCoeff, pierceIndex);
             pierceIndex++;
 
             await server.battleService.applyDamage(currentBattle, client, targetClient, damage, 0);
