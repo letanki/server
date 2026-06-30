@@ -453,19 +453,41 @@ export class BattleService {
         }
 
         if ([...battle.users, ...battle.usersBlue, ...battle.usersRed].length === 0) {
-            battle.roundState = BattleRoundState.WAITING;
-            battle.roundStartTime = null;
-            this.bonus.stopAutoSpawn(battle);
-            this.domination.stopLoop(battle);
-            this.ctf.clearReturnTimers(battle);
-            battle.timers.clear("round");
-            battle.timers.clear("finish");
-            logger.info(`Battle ${battle.battleId} is now empty. Round stopped and timer reset.`);
-
+            this._resetEmptiedBattle(battle);
             this.scheduleEmptyRemoval(battle);
         }
 
         logger.info(`User ${user.username} removed from battle ${battle.battleId}`);
+    }
+
+    /** The battle just lost its last participant. A disconnected player stays in the roster until
+     *  their reconnect grace expires, so this only runs when there's truly NObody left (not even a
+     *  reconnecting one). Wipe ALL match state so whoever joins next starts a clean match: round +
+     *  timers, team scores, the crystal fund, dropped/carried flags (back to base), domination points
+     *  (back to neutral) and any leftover drops & mines. */
+    private _resetEmptiedBattle(battle: Battle): void {
+        battle.roundState = BattleRoundState.WAITING;
+        battle.roundStartTime = null;
+        battle.timers.clear("round");
+        battle.timers.clear("finish");
+
+        // Stop the live loops and remove transient field objects.
+        this.bonus.stopAutoSpawn(battle); // clears the spawn timer + any leftover drops
+        this.domination.stopLoop(battle);
+        this.ctf.clearReturnTimers(battle);
+        this.mine.clearAll(battle);
+
+        // Zero the persistent match stats so the next joiner starts fresh.
+        battle.scoreRed = 0;
+        battle.scoreBlue = 0;
+        battle.fund = 0;
+        if (battle.settings.battleMode === BattleMode.CTF) {
+            this.ctf.returnFlagToBase(battle, "RED");
+            this.ctf.returnFlagToBase(battle, "BLUE");
+        }
+        this.domination.resetRound(battle); // points back to neutral + team scores 0 (CP only)
+
+        logger.info(`Battle ${battle.battleId} is now empty. Match state fully reset.`);
     }
 
     /** Delegates to SpawnService — kept on BattleService so existing callers (the spawn handler and
