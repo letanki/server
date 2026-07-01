@@ -6,6 +6,7 @@ import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
 import { SUPPLY_SLOT, SupplyService } from "./supply.service";
+import { CollisionService } from "./collision.service";
 import { BattleEvents } from "./battle-events";
 import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
 
@@ -37,7 +38,7 @@ const WEAPON_RESISTANCE: Record<string, string> = {
  * combat doesn't call CTF/round directly. Extracted from BattleService.
  */
 export class CombatService {
-    constructor(private readonly events: BattleEvents) {}
+    constructor(private readonly events: BattleEvents, private readonly collision: CollisionService) {}
 
     /**
      * Applies `realDamage` (garage HP units) to a target. Health is on the client's normalized
@@ -113,6 +114,12 @@ export class CombatService {
             if (distance <= maxRadius) factor = 1;
             else if (distance <= minRadius) factor = 1 - (1 - minPercent / 100) * ((distance - maxRadius) / (minRadius - maxRadius));
             else continue;
+
+            // Line of sight: a wall/structure between the explosion and the tank blocks the splash — no
+            // damage through walls. (Checked only for tanks already in range, so it's cheap. The trim in
+            // isBlockedBetween means the surface at the impact / floor under the tank don't count; a tank
+            // AT the impact centre — the direct hit — has a zero-length line and is never blocked.)
+            if (this.collision.isBlockedBetween(battle.mapResourceId, center, targetClient.battlePosition)) continue;
 
             await this.applyDamage(battle, shooterClient, targetClient, baseDamage * factor);
         }

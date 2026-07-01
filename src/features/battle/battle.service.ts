@@ -67,7 +67,7 @@ export class BattleService {
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
     private readonly collision = new CollisionService();
     private readonly events = new BattleEvents();
-    private readonly combat = new CombatService(this.events);
+    private readonly combat = new CombatService(this.events, this.collision);
     private readonly ctf = new CtfService(this.events, this.collision);
     private readonly spawn: SpawnService;
     private readonly round: RoundService;
