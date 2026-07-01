@@ -68,34 +68,46 @@ function arg(name: string): string | undefined {
     return a ? a.split("=").slice(1).join("=") : undefined;
 }
 
-async function main(): Promise<void> {
-    const idLow = Number(arg("idlow"));
-    const idHigh = Number(arg("idhigh") ?? 0);
-    const vHigh = Number(arg("vhigh") ?? 0);
-    const vLow = Number(arg("vlow") ?? 0);
-    const type = Number(arg("type"));
-    const base = (arg("base") ?? DEFAULT_BASE).replace(/\/$/, "");
-    const filesArg = arg("files");
-    const alpha = arg("alpha") === "true";
-    const dest = arg("dest");
-    const localVersion = Number(arg("localversion") ?? 1);
+export interface DownloadResourceOptions {
+    dest: string;
+    idLow: number;
+    idHigh?: number;
+    vHigh?: number;
+    vLow?: number;
+    type: number;
+    /** Explicit file list; overrides the type-default (TYPE_FILES). */
+    files?: string[];
+    /** Append alpha.jpg to the type-default list (alpha textures). Ignored when `files` is given. */
+    alpha?: boolean;
+    localVersion?: number;
+    base?: string;
+    /** Write id.json to pin the idLow (only when something out of our control references the official id). */
+    pinId?: boolean;
+    /** Set false to silence per-file logging (batch use). */
+    log?: boolean;
+}
 
-    if (!dest || !Number.isFinite(idLow) || !Number.isFinite(type)) {
-        console.error("Required: --dest, --idlow and --type (see usage at top of file).");
-        process.exit(1);
-    }
+/**
+ * Downloads one resource's files into resources/<dest>/v<localVersion>/. Returns how many files were
+ * saved. The CDN path is derived from the id + version; the file list is the type-default (TYPE_FILES)
+ * unless `files` is given. Reused by both the CLI (main) and batch scripts (e.g. downloadPaints.ts).
+ */
+export async function downloadResource(opts: DownloadResourceOptions): Promise<number> {
+    const { dest, idLow, type } = opts;
+    const idHigh = opts.idHigh ?? 0;
+    const vHigh = opts.vHigh ?? 0;
+    const vLow = opts.vLow ?? 0;
+    const base = (opts.base ?? DEFAULT_BASE).replace(/\/$/, "");
+    const localVersion = opts.localVersion ?? 1;
+    const log = opts.log ?? true;
 
     const rel = resourcePath(idHigh, idLow, vHigh, vLow); // CDN path (official version)
-    let files = filesArg ? filesArg.split(",").map((f) => f.trim()) : TYPE_FILES[type];
-    if (!files) {
-        console.error(`No default file list for type ${type}; pass --files=a,b,c.`);
-        process.exit(1);
-    }
-    if (!filesArg && alpha && ALPHA_TYPES.has(type)) files = [...files, "alpha.jpg"];
+    let files = opts.files && opts.files.length ? opts.files : TYPE_FILES[type];
+    if (!files) throw new Error(`No default file list for type ${type}; pass files=[...].`);
+    if (!opts.files && opts.alpha && ALPHA_TYPES.has(type)) files = [...files, "alpha.jpg"];
 
     const destDir = path.join(RESOURCES_DIR, dest, `v${localVersion}`);
-    console.log(`Resource idLow=${idLow} type=${type} CDN version=${vHigh}:${vLow}`);
-    console.log(`CDN path: ${rel}  ->  resources/${dest}/v${localVersion}/`);
+    if (log) console.log(`Resource idLow=${idLow} type=${type} CDN ${vHigh}:${vLow}  ${rel} -> resources/${dest}/v${localVersion}/`);
     fs.mkdirSync(destDir, { recursive: true });
 
     let ok = 0;
@@ -104,19 +116,45 @@ async function main(): Promise<void> {
         try {
             const res = await axios.get(url, { responseType: "arraybuffer", validateStatus: () => true, proxy: false });
             if (res.status !== 200) {
-                console.warn(`  ${file}: HTTP ${res.status} (skipped)`);
+                if (log) console.warn(`  ${file}: HTTP ${res.status} (skipped)`);
                 continue;
             }
             fs.writeFileSync(path.join(destDir, file), Buffer.from(res.data));
-            console.log(`  ${file}: ${(res.data as ArrayBuffer).byteLength} bytes`);
+            if (log) console.log(`  ${file}: ${(res.data as ArrayBuffer).byteLength} bytes`);
             ok++;
         } catch (e: any) {
-            console.warn(`  ${file}: ${e.message}`);
+            if (log) console.warn(`  ${file}: ${e.message}`);
         }
     }
-    // Only pin the idLow (id.json) when requested; otherwise the build crc-derives it from the path.
-    if (arg("pinid") === "true") fs.writeFileSync(path.join(destDir, "id.json"), JSON.stringify({ idlow: idLow }));
-    console.log(ok ? `Done (${ok}/${files.length} files). Run 'npm run build:resources'.` : "No files downloaded — check id/version/type or --files.");
+    if (opts.pinId) fs.writeFileSync(path.join(destDir, "id.json"), JSON.stringify({ idlow: idLow }));
+    return ok;
 }
 
-main();
+async function main(): Promise<void> {
+    const idLow = Number(arg("idlow"));
+    const type = Number(arg("type"));
+    const dest = arg("dest");
+    const filesArg = arg("files");
+
+    if (!dest || !Number.isFinite(idLow) || !Number.isFinite(type)) {
+        console.error("Required: --dest, --idlow and --type (see usage at top of file).");
+        process.exit(1);
+    }
+
+    const files = filesArg ? filesArg.split(",").map((f) => f.trim()) : undefined;
+    const ok = await downloadResource({
+        dest, idLow, type,
+        idHigh: Number(arg("idhigh") ?? 0),
+        vHigh: Number(arg("vhigh") ?? 0),
+        vLow: Number(arg("vlow") ?? 0),
+        files,
+        alpha: arg("alpha") === "true",
+        localVersion: Number(arg("localversion") ?? 1),
+        base: arg("base"),
+        pinId: arg("pinid") === "true",
+    });
+    const total = files ? files.length : "the";
+    console.log(ok ? `Done (${ok}/${total} files). Run 'npm run build:resources'.` : "No files downloaded — check id/version/type or --files.");
+}
+
+if (require.main === module) main();
