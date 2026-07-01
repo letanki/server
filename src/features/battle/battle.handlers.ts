@@ -136,9 +136,6 @@ export class ExitFromBattleHandler implements IPacketHandler<BattlePackets.ExitF
         if (!isSpectator) {
             server.battleService.announceTankRemoval(user, battle, client.battlePosition);
         }
-        // Explicitly LEAVING the match resets the equip-change cooldowns (a disconnect/reconnect does NOT
-        // — that path never reaches this handler, so "close & reopen the game" keeps them).
-        server.garageService.clearEquipCooldowns(user.id);
         await server.battleService.finalizeBattleExit(user, battle, client.friendsCache, isSpectator);
 
         client.sendPacket(new BattlePackets.UnloadSpaceBattlePacket());

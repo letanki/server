@@ -441,6 +441,12 @@ export class BattleService {
     public removeUserFromBattle(user: UserDocument, battle: Battle): void {
         const userId = user.id;
 
+        // Being REMOVED from the match (explicit leave OR kick after the reconnect grace expires) resets
+        // the equip-change cooldowns. A reconnect keeps the user in the roster and never calls this, so a
+        // "close & reopen → sent back to the match" reconnect keeps the cooldowns; a kick + fresh re-join
+        // resets them.
+        this.server.garageService.clearEquipCooldowns(userId);
+
         const wasSpectator = battle.spectators.some((s) => s.id === userId);
 
         battle.users = battle.users.filter((u) => u.id !== userId);
