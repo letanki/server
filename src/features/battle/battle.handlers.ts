@@ -16,6 +16,12 @@ import { EquipmentConstraintError } from "./battle.service";
 import * as BattlePackets from "./battle.packets";
 import { BattleWorkflow } from "./battle.workflow";
 
+// The official server holds a delay between receiving ReadyToPlace and broadcasting the Spawn — the
+// tank materialises rather than popping in instantly. Measured from the 2026-07-01 capture:
+// ReadyToPlace → Spawn was ~2280ms including ~280ms client↔server RTT, i.e. a ~2000ms server-side wait
+// (very consistent across respawns: 2278/2285/2280/2280). Replicated here (tunable).
+const SPAWN_DELAY_MS = 2000;
+
 export class EnterBattleAsSpectatorHandler implements IPacketHandler<BattlePackets.EnterBattleAsSpectatorPacket> {
     public readonly packetId = BattlePackets.EnterBattleAsSpectatorPacket.getId();
 
@@ -244,8 +250,16 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
             return;
         }
 
-        logger.info(`Placing user ${client.user.username} on the battlefield ${client.currentBattle.battleId}.`);
-        BattleWorkflow.placeTank(client);
+        // Replicate the official ~2s hold between ReadyToPlace and Spawn (the tank materialises). Keyed
+        // per user so a repeated ReadyToPlace just re-arms it, and cleared on battle teardown (clearAll).
+        const battle = client.currentBattle;
+        const user = client.user;
+        logger.info(`Placing user ${user.username} on battlefield ${battle.battleId} in ${SPAWN_DELAY_MS}ms.`);
+        battle.timers.set(`spawn:${user.id}`, SPAWN_DELAY_MS, () => {
+            // Re-validate at fire time: the player may have left, disconnected or gone spectator meanwhile.
+            if (client.isDestroyed || client.currentBattle !== battle || client.isSpectator) return;
+            BattleWorkflow.placeTank(client);
+        });
     }
 }
 
