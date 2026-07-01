@@ -80,6 +80,9 @@ export class FreezeHitCommandHandler implements IPacketHandler<FreezePackets.Fre
         for (const targetName of packet.targets) {
             const targetClient = server.findClientByUsername(targetName);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
+            // Friendly fire: skip teammates entirely (no damage AND no chill/slow) — applyDamage would drop
+            // the damage but the freeze effect below runs separately, so allies were being frozen anyway.
+            if (targetClient.user && currentBattle.isFriendlyBlocked(user, targetClient.user)) continue;
             const factor = distanceFactor(client, targetClient, physics?.max_damage_radius ?? 5, physics?.min_damage_radius ?? 18.39, (physics?.min_damage_percent ?? 30) / 100);
 
             await server.battleService.applyDamage(currentBattle, client, targetClient, (perPeriod / FREEZE_DIRECT_DIVISOR) * factor, 0);

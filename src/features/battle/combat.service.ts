@@ -53,7 +53,7 @@ export class CombatService {
         // Self-damage always lands (ricochet bounce-back, splash on yourself, self-destruct), and DM has
         // no teams (teamOf === 2 for everyone) so this never gates it.
         const shooterUser = shooterClient.user;
-        if (shooterUser && shooterUser.id !== targetUser.id && battle.isTeamMode() && !battle.settings.friendlyFire && battle.teamOf(shooterUser) === battle.teamOf(targetUser)) {
+        if (shooterUser && battle.isFriendlyBlocked(shooterUser, targetUser)) {
             return;
         }
 
@@ -132,6 +132,12 @@ export class CombatService {
         if (!killer || !victim) return;
 
         victimClient.battleState = "suicide";
+        // A combat death ends the life → bump the incarnation, exactly like the void/garage/self-destruct
+        // death paths do. Without this, a combat death (which never touched the incarnation) left a pending
+        // self-destruct's `selfDestructIncarnation` still equal to `battleIncarnation` on the NEXT life, so
+        // the SuicidePacketHandler's "already counting down this incarnation" guard silently swallowed the
+        // new self-destruct press — the reported "self-destruct sometimes doesn't fire after 10s".
+        victimClient.battleIncarnation++;
         SupplyService.stopHealing(victimClient); // a death cancels any in-progress repair-kit regen
 
         // Kill notice (victim, killer, respawn delay) — drives the death on every client.

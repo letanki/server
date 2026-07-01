@@ -173,6 +173,13 @@ export class Battle {
         return 2;
     }
 
+    /** Friendly fire: true when a shot from `shooter` must NOT affect `target` — a DIFFERENT tank on the
+     *  same team, in a team battle with friendlyFire off. Self-hits and DM always return false. Applies to
+     *  BOTH damage and status effects (freeze slow, burn) so allies aren't affected either. */
+    public isFriendlyBlocked(shooter: UserDocument, target: UserDocument): boolean {
+        return shooter.id !== target.id && this.isTeamMode() && !this.settings.friendlyFire && this.teamOf(shooter) === this.teamOf(target);
+    }
+
     public getAllParticipants(): UserDocument[] {
         return [...this.users, ...this.usersBlue, ...this.usersRed, ...this.spectators];
     }

@@ -79,6 +79,9 @@ export class FirebirdHitCommandHandler implements IPacketHandler<FlamethrowerPac
         for (const targetName of packet.targets) {
             const targetClient = server.findClientByUsername(targetName);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
+            // Friendly fire: skip teammates entirely (no damage AND no burn/glow) — applyDamage drops the
+            // damage, but the ignite + visual glow below run separately, so allies were catching fire anyway.
+            if (targetClient.user && currentBattle.isFriendlyBlocked(user, targetClient.user)) continue;
             const factor = distanceFactor(client, targetClient, physics?.max_damage_radius ?? 5, physics?.min_damage_radius ?? 17, (physics?.min_damage_percent ?? 50) / 100);
 
             // Direct flame contact.
