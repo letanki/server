@@ -33,17 +33,29 @@ export class GarageItemsPacket extends BasePacket implements GarageTypes.IGarage
     static getId(): number { return -255516505; }
 }
 
+// S->C: mount an item on the garage tank (also called InitMounted). itemId is "<base>_m<mod>" (e.g.
+// "wasp_m2", "africa_m0"). `owned` = the player owns it (drives the equip-vs-buy UI): true when equipping,
+// and on a Fit-preview it reflects whether the previewed item is owned.
 export class MountItemPacket extends BasePacket implements GarageTypes.IMountItem {
     static readonly schema: PacketSchema = [
         { name: "itemId", type: "string" },
-        { name: "unknown", type: "bool" },
+        { name: "owned", type: "bool" },
     ];
     itemId: string | null;
-    unknown: boolean;
-    constructor(itemId: string | null = null, unknown: boolean = false) { super(); this.itemId = itemId; this.unknown = unknown; }
+    owned: boolean;
+    constructor(itemId: string | null = null, owned: boolean = false) { super(); this.itemId = itemId; this.owned = owned; }
     read(buffer: Buffer): void { readSchema(this, MountItemPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, MountItemPacket.schema); }
     static getId(): number { return 2062201643; }
+}
+
+// C->S: the player is PREVIEWING (fitting) an item on the garage tank without equipping/buying it.
+// Body = optString itemId ("<base>_m<mod>"). The server replies with MountItemPacket(itemId, owned).
+export class FitItemPacket extends BasePacket implements GarageTypes.IFitItem {
+    itemId: string | null = null;
+    read(buffer: Buffer): void { this.itemId = new BufferReader(buffer).readOptionalString(); }
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.itemId).getBuffer(); }
+    static getId(): number { return 1091756732; }
 }
 
 export class RequestGaragePacket extends BasePacket implements GarageTypes.IRequestGarage {

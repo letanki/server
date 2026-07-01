@@ -91,3 +91,28 @@ export class EquipItemRequestHandler implements IPacketHandler<GaragePackets.Equ
         }
     }
 }
+
+// PREVIEW ("fit"): the player clicked an item to try it on the garage tank without equipping/buying it.
+// We reply with MountItemPacket so the client shows it on the model; `owned` drives the equip-vs-buy UI.
+export class FitItemHandler implements IPacketHandler<GaragePackets.FitItemPacket> {
+    public readonly packetId = GaragePackets.FitItemPacket.getId();
+
+    public execute(client: GameClient, server: GameServer, packet: GaragePackets.FitItemPacket): void {
+        const user = client.user;
+        if (!user || !packet.itemId) {
+            return;
+        }
+
+        // itemId is "<base>_m<mod>" (e.g. "africa_m0", "wasp_m2"). Owned = the player has the paint, or
+        // owns the hull/turret at >= the previewed mod.
+        const itemId = packet.itemId;
+        const base = itemId.replace(/_m\d+$/, "");
+        const mod = Number(itemId.match(/_m(\d+)$/)?.[1] ?? 0);
+        const owned =
+            user.paints.includes(base) ||
+            (user.hulls.has(base) && (user.hulls.get(base) ?? -1) >= mod) ||
+            (user.turrets.has(base) && (user.turrets.get(base) ?? -1) >= mod);
+
+        client.sendPacket(new GaragePackets.MountItemPacket(itemId, owned));
+    }
+}
