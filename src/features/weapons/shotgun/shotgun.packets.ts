@@ -3,13 +3,15 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 
-interface ShotgunTargetHit { pellets: number; hit: IVector3 | null; }
+interface ShotgunTargetHit { pellets: number; worldHit: IVector3 | null; center: IVector3 | null; }
 
 /**
  * C→S: a Hammer (shotgun) blast. Body = clientTime, direction(vec), count(int), then `count` pellet hit
  * records of [3 vecs, target nick, int] (58B each) — one record per pellet that LANDED on a tank (missed
- * pellets aren't reported, so the count encodes spread/accuracy). We keep the blast direction, the per-
- * target pellet count (for damage), and one hit position per target (for the visual relay).
+ * pellets aren't reported, so the count encodes spread/accuracy). The 3 vecs per pellet are: v1 = the
+ * WORLD impact point, v2 = the surface normal (unused), v3 = the target tank's WORLD centre. We keep the
+ * blast direction, the per-target pellet count (for damage), and — from the first pellet on each target —
+ * the world impact point + tank centre, which the handler turns into the LOCAL hit for the relay.
  */
 export class ShotgunShotCommandPacket extends BasePacket {
     public direction: IVector3 | null = null;
@@ -21,15 +23,15 @@ export class ShotgunShotCommandPacket extends BasePacket {
         const count = r.readInt32BE();
         for (let i = 0; i < count; i++) {
             try {
-                const hit = r.readOptionalVector3(); // first vec = the impact position
-                r.readOptionalVector3();
-                r.readOptionalVector3();
+                const worldHit = r.readOptionalVector3(); // v1: world-space impact point
+                r.readOptionalVector3();                  // v2: surface normal (unused)
+                const center = r.readOptionalVector3();   // v3: the target tank's world centre
                 const target = r.readOptionalString();
                 r.readInt32BE();
                 if (!target) continue;
                 const entry = this.hitsByTarget.get(target);
                 if (entry) entry.pellets++;
-                else this.hitsByTarget.set(target, { pellets: 1, hit });
+                else this.hitsByTarget.set(target, { pellets: 1, worldHit, center });
             } catch { break; }
         }
     }
