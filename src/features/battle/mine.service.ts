@@ -99,7 +99,9 @@ export class MineService {
         // the victim as shooter if the owner is gone, so the death still registers).
         battle.broadcast(new DetonateMinePacket(id, victimClient.user.username));
         const shooter = this.server.findClientByUsername(mine.owner) ?? victimClient;
-        void this.combat.applyDamage(battle, shooter, victimClient, MINE_DAMAGE);
+        // sourceWeapon=null: mine damage isn't a turret hit, so no paint resistance applies (there's no
+        // MINE_RESISTANCE). Without this it would wrongly use the owner's currently-equipped turret.
+        void this.combat.applyDamage(battle, shooter, victimClient, MINE_DAMAGE, 0, null);
         logger.info(`Mine ${id} (${mine.owner}) detonated on ${victimClient.user.username} in battle ${battle.battleId}`);
     }
 

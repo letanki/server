@@ -35,6 +35,15 @@ export class ItemUtils {
         return valueSource.value ? parseFloat(valueSource.value) : null;
     }
 
+    /** The % damage reduction the user's EQUIPPED paint gives against a weapon's resistance property
+     *  (e.g. "RAILGUN_RESISTANCE"). 0 if the paint has no such protection. Values are the garage properts. */
+    public static getPaintResistancePercent(user: UserDocument, resistanceProperty: string): number {
+        const paint = itemBlueprints.paints.find((p) => p.id === user.equippedPaint);
+        if (!paint) return 0;
+        const prop = (paint.properts as any[]).find((pr) => pr.property === resistanceProperty);
+        return prop && prop.value != null ? parseFloat(prop.value) : 0;
+    }
+
     public static getHullArmor(user: UserDocument): number {
         const hullMod = this.getItemModification(user, "hull");
         const armor = this.getPropertyValue(hullMod, "HULL_ARMOR");

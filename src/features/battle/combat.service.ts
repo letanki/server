@@ -4,7 +4,7 @@ import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
-import { Battle, BattleRoundState } from "./battle.model";
+import { Battle, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
 import { SUPPLY_SLOT, SupplyService } from "./supply.service";
 import { BattleEvents } from "./battle-events";
 import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
@@ -12,6 +12,24 @@ import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMP
 const KILL_RESPAWN_MS = 3000;
 const KILL_SCORE = 10; // in-battle scoreboard points per kill
 const KILL_XP = 10; // rank experience per kill
+
+// Each weapon (turret id) → the paint-resistance property that protects against it. The victim's
+// equipped paint reduces incoming damage from this weapon by its RESISTANCE percent (garage `properts`).
+// Covers every turret, including isida — so the moment isida (or any not-yet-wired weapon) starts
+// calling applyDamage, its resistance works automatically with no further changes.
+const WEAPON_RESISTANCE: Record<string, string> = {
+    railgun: "RAILGUN_RESISTANCE",
+    smoky: "SMOKY_RESISTANCE",
+    twins: "TWINS_RESISTANCE",
+    thunder: "THUNDER_RESISTANCE",
+    shotgun: "SHOTGUN_RESISTANCE",
+    freeze: "FREEZE_RESISTANCE",
+    ricochet: "RICOCHET_RESISTANCE",
+    machinegun: "MACHINE_GUN_RESISTANCE",
+    shaft: "SHAFT_RESISTANCE",
+    flamethrower: "FIREBIRD_RESISTANCE",
+    isida: "ISIS_RESISTANCE",
+};
 
 /**
  * Damage, health and the kill scoreboard. On a killing blow it emits the `kill` event; the cross-
@@ -26,7 +44,7 @@ export class CombatService {
      * 0-10000 scale (RULE OF 3: normalizedDamage = realDamage * 10000 / hullHP). Broadcasts SetHealth
      * + the damage number, and runs the kill flow at 0. Shared by all weapons (railgun, thunder, ...).
      */
-    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 0): Promise<void> {
+    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 0, sourceWeapon?: string | null): Promise<void> {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
@@ -42,6 +60,18 @@ export class CombatService {
         // Supply/bonus multipliers: shooter's Double Damage doubles output, target's Double Armor halves it.
         if (SupplyService.hasEffect(shooterClient, SUPPLY_SLOT.DOUBLE_DAMAGE)) realDamage *= 2;
         if (SupplyService.hasEffect(targetClient, SUPPLY_SLOT.ARMOR)) realDamage *= 0.5;
+
+        // Paint resistance: the victim's equipped paint reduces damage from the SHOOTER's weapon by its
+        // RESISTANCE % (garage `properts`). The weapon defaults to the shooter's equipped turret; callers
+        // can override (a weapon id) or pass null to disable it (e.g. mines have no paint resistance).
+        // Disabled entirely in XP/BP (equipment-constraint) modes so the deterministic 2-shot matrix stays
+        // pure — a resisting paint must not change the shot count there.
+        const weaponId = sourceWeapon === undefined ? shooterUser?.equippedTurret : sourceWeapon;
+        const resistProp = weaponId ? WEAPON_RESISTANCE[weaponId] : undefined;
+        if (resistProp && battle.settings.equipmentConstraintsMode === EquipmentConstraintsMode.NONE) {
+            const resistPct = ItemUtils.getPaintResistancePercent(targetUser, resistProp);
+            if (resistPct > 0) realDamage *= 1 - resistPct / 100;
+        }
 
         const hullHP = ItemUtils.getHullArmor(targetUser);
 
