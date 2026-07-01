@@ -14,7 +14,7 @@ import { CaptureFlagPacket, DropFlagPacket, ReturnFlagPacket, SetCtfScorePacket,
 const FLAG_PICKUP_MARGIN = 100; // slack beyond the hull edge — flag has its own footprint
 // Vertical reach, asymmetric: the flag can be well BELOW the tank (you ramp/jump over it and still
 // touch it), only a little ABOVE. Cross-level grabs are stopped by occlusion, not by a tight bound.
-const FLAG_PICKUP_DOWN = 300;
+const FLAG_PICKUP_DOWN = 600;
 const FLAG_PICKUP_UP = 160;
 // Tweak if testing shows the box is rotated 90° (depends on the tank yaw convention vs the model's
 // forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
