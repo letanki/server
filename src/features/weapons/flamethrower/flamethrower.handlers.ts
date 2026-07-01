@@ -13,11 +13,14 @@ const BURN_TICK_MS = 1000;
 const BURN_SECONDS = 7;
 const FLAME_DIRECT_DIVISOR = 2; // direct hit per tick = DAMAGE_PER_PERIOD/2 (~16 for m0=32, ticks ~2/s)
 
-// Visual "burning" glow (Temperature packet). Calibrated from the m0 capture: each flame contact bumps the
-// heat by ~0.1 up to a ~0.2 cap, then it cools ~0.032/s back to 0 over ~7s once the flame leaves.
-const FIRE_TEMP_CAP = 0.2;
-const FIRE_TEMP_STEP = 0.1;
-const FIRE_TEMP_DECAY = 0.032;
+// Visual "burning" glow (Temperature packet). Each flame contact bumps the heat toward a 1.0 cap (the red
+// tint fills to 100%), then it cools back to 0 over ~BURN_SECONDS (1.0/0.143 ≈ 7s) once the flame leaves.
+const FIRE_TEMP_CAP = 1.0;
+const FIRE_TEMP_STEP = 0.2;
+const FIRE_TEMP_DECAY = 0.143;
+// Repair-kit relief applied per heal tick (see relieveBurn): using a med-kit puts the fire out fast.
+const BURN_RELIEF_DOT = 4; // cut off the residual-burn DoT (dmg/sec) this much each heal tick
+const BURN_RELIEF_GLOW = 0.5; // cool the red glow this much each heal tick
 
 function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number, minPct: number): number {
     if (!a.battlePosition || !b.battlePosition) return 1;
@@ -58,6 +61,21 @@ function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], t
             battle.broadcast(new TankTemperaturePacket(targetName, 0));
         }
     });
+}
+
+/** Repair-kit relief: cuts the residual-burn DoT and the red glow sharply and rebroadcasts the fainter tint.
+ *  Called each heal tick (from SupplyService.startHealing), so using a med-kit puts a fire out fast. Once the
+ *  DoT is spent the glow snaps off and the source clears (the scheduleBurn timer then finishes idle). No-op
+ *  when the tank isn't burning. */
+export function relieveBurn(battle: NonNullable<GameClient["currentBattle"]>, client: GameClient): void {
+    if (!client.user || (client.flameTemperature <= 0 && client.visualTemperature <= 0)) return;
+    client.flameTemperature = Math.max(0, client.flameTemperature - BURN_RELIEF_DOT);
+    client.visualTemperature = Math.max(0, client.visualTemperature - BURN_RELIEF_GLOW);
+    if (client.flameTemperature <= 0) {
+        client.visualTemperature = 0;
+        client.flameSource = null;
+    }
+    battle.broadcast(new TankTemperaturePacket(client.user.username, client.visualTemperature));
 }
 
 /**

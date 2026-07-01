@@ -1,6 +1,8 @@
 import { suppliesData } from "@/config/supplies.data";
 import { GameClient } from "@/server/game.client";
 import { ItemUtils } from "@/utils/item.utils";
+import { relieveBurn } from "@/features/weapons/flamethrower/flamethrower.handlers";
+import { relieveFreeze } from "@/features/weapons/freeze/freeze.handlers";
 import { Battle } from "./battle.model";
 import { EffectStartedPacket, EffectStoppedPacket, SetHealthPacket, TankSpecificationPacket } from "./battle.packets";
 
@@ -109,6 +111,11 @@ export class SupplyService {
                 SupplyService.stopHealing(client);
                 return;
             }
+            // Using health also thaws a freeze and puts out a fire fast — each tick shaves the freeze/burn
+            // temperatures hard, out-pacing the beam/flame even while still under fire.
+            relieveFreeze(battle, client);
+            relieveBurn(battle, client);
+
             // This tick gives a normal step, but never overheals past full and never exceeds the
             // kit's remaining budget (so the last tick before the budget runs out is partial).
             const step = Math.min(stepNormalized, 10000 - client.currentHealth, budgetNormalized - delivered);

@@ -8,17 +8,20 @@ import { TankSpecificationPacket, TankTemperaturePacket } from "@/features/battl
 import * as FreezePackets from "./freeze.packets";
 
 // Freeze cooling/thaw model, calibrated from the m0 capture (FuscaVerde under Danlino's freeze):
-// each beam tick chills the target by ~0.1 down to a ~-0.5 floor (blue tint); once the beam stops it warms
-// back to 0 at ~0.4/s. Movement (speed + turn rates, NOT acceleration) scales by e^(2.9·temp) — at the -0.5
-// floor the tank crawls at ~24% speed. Damage per tick = DAMAGE_PER_PERIOD/2 × distance falloff (capture:
-// ~20.7 dmg/tick at point-blank for m0=39, ticks ~2/s, matching the Firebird's per-tick divisor).
+// each beam tick chills the target down to a -1 floor (the blue tint fills to 100%); once the beam stops it
+// warms back to 0. Movement (speed + turn rates, NOT acceleration) scales by e^(FREEZE_SLOW_K·temp) — at the
+// -1 floor the tank crawls at ~24% speed. The temperature axis is DOUBLED vs the old -0.5 tuning so the tint
+// reaches full blue; STEP/RECOVERY are doubled and K is halved (2.9→1.45) in lockstep, so the actual slowdown
+// per beam tick is mathematically identical to before — only the visual now fills 100%. Damage per tick =
+// DAMAGE_PER_PERIOD/2 × distance falloff (capture: ~20.7 dmg/tick point-blank for m0=39, ~2 ticks/s).
 const FREEZE_DIRECT_DIVISOR = 2;
-const FREEZE_STEP = 0.1;
-const FREEZE_TEMP_CAP = -0.5;
-const FREEZE_SLOW_K = 2.9;
+const FREEZE_STEP = 0.2;
+const FREEZE_TEMP_CAP = -1;
+const FREEZE_SLOW_K = 1.45;
 const FREEZE_RECOVERY_TICK_MS = 250;
-const FREEZE_RECOVERY_STEP = 0.1;
+const FREEZE_RECOVERY_STEP = 0.2;
 const FREEZE_IDLE_MS = 700; // no beam contact for this long → start thawing
+const FREEZE_RELIEF_STEP = 0.5; // repair-kit relief: warm-up applied per heal tick (see relieveFreeze)
 
 const slowFactor = (temp: number): number => Math.min(1, Math.exp(FREEZE_SLOW_K * temp));
 
@@ -62,9 +65,19 @@ function scheduleThaw(server: GameServer, battle: NonNullable<GameClient["curren
     });
 }
 
+/** Repair-kit relief: warms a frozen tank toward 0 by FREEZE_RELIEF_STEP and re-broadcasts the lighter tint
+ *  + un-slowed spec. Called each heal tick (from SupplyService.startHealing), so using a med-kit thaws the
+ *  freeze fast — it out-paces the beam even while still under fire. No-op when the tank isn't cold. */
+export function relieveFreeze(battle: NonNullable<GameClient["currentBattle"]>, client: GameClient): void {
+    if (!client.user || client.freezeTemperature >= 0) return;
+    client.freezeTemperature = Math.min(0, client.freezeTemperature + FREEZE_RELIEF_STEP);
+    battle.broadcast(new TankTemperaturePacket(client.user.username, client.freezeTemperature));
+    broadcastFreezeSpec(battle, client, slowFactor(client.freezeTemperature));
+}
+
 /**
  * Freeze beam tick: the cone can chill SEVERAL tanks at once. Per target — damage (DAMAGE_PER_PERIOD ×
- * distance falloff), chill the temperature toward the -0.5 floor (blue tint), and slow its movement by
+ * distance falloff), chill the temperature toward the -1 floor (blue tint), and slow its movement by
  * re-sending the spec. A thaw timer warms it back up once the beam stops.
  */
 export class FreezeHitCommandHandler implements IPacketHandler<FreezePackets.FreezeHitCommandPacket> {
