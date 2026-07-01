@@ -101,7 +101,7 @@ export class CombatService {
      * `minRadius`. World distance is scaled by SPLASH_WORLD_SCALE.
      */
     public async applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
-        const SPLASH_WORLD_SCALE = 10;
+        const SPLASH_WORLD_SCALE = 100; // world units per "metre" — radii are in metres (thunder splash 0..12m)
         for (const targetClient of [...battle.clients]) {
             if (targetClient.isDestroyed || targetClient.battleState !== "active" || !targetClient.battlePosition) continue;
             const dx = targetClient.battlePosition.x - center.x;
