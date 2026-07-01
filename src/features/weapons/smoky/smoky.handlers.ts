@@ -6,6 +6,13 @@ import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import * as SmokyPackets from "./smoky.packets";
 
+// Impact (knockback) multiplier the relay carries: distance-LINEAR, ~1.45 at point-blank falling ~0.0075
+// per metre — it PEAKS ABOVE 1 up close (unlike the damage falloff, which caps at 1). Reverse-engineered
+// from official smoky captures (2026-06-23 / 06-25: impactForce 1.40@6m → 0.92@70m → 0.59@99m, one clean
+// line across mods). The client multiplies the tank's base impact_force (spec) by this value.
+const SMOKY_IMPACT_AT_ZERO = 1.45;
+const SMOKY_IMPACT_FALLOFF_PER_M = 0.0075;
+
 export class SmokyStaticShotCommandHandler implements IPacketHandler<SmokyPackets.SmokyStaticShotCommandPacket> {
     public readonly packetId = SmokyPackets.SmokyStaticShotCommandPacket.getId();
     public execute(client: GameClient, server: GameServer, packet: SmokyPackets.SmokyStaticShotCommandPacket): void {
@@ -56,7 +63,9 @@ export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPacket
         let factor = 1;
         if (distance > maxR) factor = distance >= minR ? minPct : 1 - (1 - minPct) * ((distance - maxR) / (minR - maxR));
 
-        const finalImpactForce = Math.max(0.01, factor);
+        // Knockback multiplier: its OWN distance-linear curve (peaks ~1.45 at point-blank), NOT the damage
+        // factor (which caps at 1). `distance` is the shooter→impact distance in metres computed above.
+        const finalImpactForce = Math.max(0.01, SMOKY_IMPACT_AT_ZERO - SMOKY_IMPACT_FALLOFF_PER_M * distance);
         const targetShotPacket = new SmokyPackets.SmokyTargetShotPacket({
             nickname: user.username,
             targetNickname: packet.targetUserId,
