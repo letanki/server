@@ -106,12 +106,12 @@ export class GameClient {
   public railgunChargeStart: number = 0;
   // When the shaft entered aiming mode (the sniper damage scales with how long it has charged).
   public shaftAimStart: number = 0;
-  // Flamethrower residual burn: current burn damage/sec on this tank, and who lit it (for kill credit).
-  public flameTemperature: number = 0;
-  public flameSource: string | null = null;
-  // Visual heat (0..~0.2) driving the client's red "burning" glow — broadcast via the Temperature packet.
+  // Flamethrower burn: single heat value (0..1) driving both the red "burning" glow (broadcast via the
+  // Temperature packet) and the residual burn DoT (FLAME_TEMPERATURE_LIMIT × heat). flameSource = who lit it
+  // (for kill credit).
   public visualTemperature: number = 0;
-  // Freeze cold (0..~-0.5): negative temperature → blue tint + movement slowdown. lastFreezeHit gates the
+  public flameSource: string | null = null;
+  // Freeze cold (0..-1): negative temperature → blue tint + movement slowdown. lastFreezeHit gates the
   // warm-up recovery so the tank only thaws once the freeze beam stops touching it.
   public freezeTemperature: number = 0;
   public lastFreezeHit: number = 0;

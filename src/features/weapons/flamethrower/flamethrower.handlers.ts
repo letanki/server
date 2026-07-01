@@ -7,20 +7,24 @@ import logger from "@/utils/logger";
 import { TankTemperaturePacket } from "@/features/battle/battle.packets";
 import * as FlamethrowerPackets from "./flamethrower.packets";
 
-// Firebird residual burn: ignited to ~FLAME_TEMPERATURE_LIMIT dmg/sec, decaying linearly to 0 over BURN_SECONDS
-// (capture: 6.8 → 1.23 at ~0.93/s ≈ over ~7s), ticking once per second.
+// Firebird burn = a single "heat" value (visualTemperature 0..1) that drives BOTH the red glow AND the residual
+// burn damage. Each flame contact heats +FIRE_TEMP_STEP toward 1.0; once the flame leaves it cools at
+// FIRE_TEMP_DECAY/sec down to 0. The burn DoT each 1s tick = FLAME_TEMPERATURE_LIMIT × heat (min BURN_MIN_DAMAGE),
+// so it ramps up WITH the heat while flaming and fades WITH it afterward. Calibrated from the 2026-07-01 captures
+// (s1/s2, Temperature packet 581377054 + DamageIndicator -1165230470 on "Desert"): heat climbs +0.1 per contact
+// (10 hits → full), then cools 0.032/tick so a full-heat tank burns for ~31s, the burn dmg tracking the heat
+// (7.5 → … → 1.0 floor over that time). Direct contact is separate (DAMAGE_PER_PERIOD/2 × falloff, ~2 ticks/s).
 const BURN_TICK_MS = 1000;
-const BURN_SECONDS = 7;
 const FLAME_DIRECT_DIVISOR = 2; // direct hit per tick = DAMAGE_PER_PERIOD/2 (~16 for m0=32, ticks ~2/s)
+const BURN_MIN_DAMAGE = 1; // burn DoT floor: while any heat remains it deals at least this per tick (capture floor)
 
-// Visual "burning" glow (Temperature packet). Each flame contact bumps the heat toward a 1.0 cap (the red
-// tint fills to 100%), then it cools back to 0 over ~BURN_SECONDS (1.0/0.143 ≈ 7s) once the flame leaves.
+// Heat axis (Temperature packet): +FIRE_TEMP_STEP per flame contact toward a 1.0 cap (red tint fills to 100%),
+// cooling FIRE_TEMP_DECAY per 1s tick back to 0 (1.0/0.032 ≈ 31s) once the flame leaves.
 const FIRE_TEMP_CAP = 1.0;
-const FIRE_TEMP_STEP = 0.2;
-const FIRE_TEMP_DECAY = 0.143;
-// Repair-kit relief applied per heal tick (see relieveBurn): using a med-kit puts the fire out fast.
-const BURN_RELIEF_DOT = 4; // cut off the residual-burn DoT (dmg/sec) this much each heal tick
-const BURN_RELIEF_GLOW = 0.5; // cool the red glow this much each heal tick
+const FIRE_TEMP_STEP = 0.1;
+const FIRE_TEMP_DECAY = 0.032;
+// Repair-kit relief applied per heal tick (see relieveBurn): cooling the heat cuts glow AND burn together.
+const BURN_RELIEF_GLOW = 0.5; // cool the heat this much each heal tick
 
 function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number, minPct: number): number {
     if (!a.battlePosition || !b.battlePosition) return 1;
@@ -30,17 +34,18 @@ function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number
     return dist >= minR ? minPct : 1 - (1 - minPct) * ((dist - maxR) / (minR - maxR));
 }
 
-/** Schedules/continues the residual-burn DoT on a target until its temperature decays to 0. Each tick also
- *  cools the visual glow and rebroadcasts it, so the red tint fades in step with the burn after the flame leaves. */
-function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], targetName: string, decayPerTick: number): void {
+/** Schedules/continues the residual-burn DoT on a target until its heat decays to 0. Each 1s tick deals
+ *  FLAME_TEMPERATURE_LIMIT × heat (min BURN_MIN_DAMAGE), then cools the heat and rebroadcasts it — so both the
+ *  burn damage and the red tint fade together in step with the heat after the flame leaves. tempLimit is fixed
+ *  from the igniting hit. */
+function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], targetName: string, tempLimit: number): void {
     if (!battle) return;
     battle.timers.set(`burn:${targetName}`, BURN_TICK_MS, async () => {
         const tc = server.findClientByUsername(targetName);
-        // Target died/left while burning. Clear its state and snap the glow off — without this the stale
-        // flameTemperature would block the next ignite (no burn) and the red tint would never reset.
-        if (!tc || tc.currentBattle !== battle || tc.battleState !== "active" || tc.flameTemperature <= 0) {
+        // Target died/left / fully cooled. Clear its state and snap the glow off — without this the stale heat
+        // would block the next ignite and the red tint would never reset.
+        if (!tc || tc.currentBattle !== battle || tc.battleState !== "active" || tc.visualTemperature <= 0) {
             if (tc) {
-                tc.flameTemperature = 0;
                 tc.visualTemperature = 0;
                 tc.flameSource = null;
                 if (tc.currentBattle === battle) battle.broadcast(new TankTemperaturePacket(targetName, 0));
@@ -48,15 +53,13 @@ function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], t
             return;
         }
         const src = (tc.flameSource ? server.findClientByUsername(tc.flameSource) : null) ?? tc;
-        await server.battleService.applyDamage(battle, src, tc, tc.flameTemperature, 0);
-        tc.flameTemperature = Math.max(0, tc.flameTemperature - decayPerTick);
-        if (tc.flameTemperature > 0) {
-            tc.visualTemperature = Math.max(0, tc.visualTemperature - FIRE_TEMP_DECAY);
+        await server.battleService.applyDamage(battle, src, tc, Math.max(BURN_MIN_DAMAGE, tempLimit * tc.visualTemperature), 0);
+        tc.visualTemperature = Math.max(0, tc.visualTemperature - FIRE_TEMP_DECAY);
+        if (tc.visualTemperature > 0) {
             battle.broadcast(new TankTemperaturePacket(targetName, tc.visualTemperature));
-            scheduleBurn(server, battle, targetName, decayPerTick);
+            scheduleBurn(server, battle, targetName, tempLimit);
         } else {
             // Burn finished — always force the glow fully off (don't rely on the decay rate landing on 0).
-            tc.visualTemperature = 0;
             tc.flameSource = null;
             battle.broadcast(new TankTemperaturePacket(targetName, 0));
         }
@@ -68,13 +71,9 @@ function scheduleBurn(server: GameServer, battle: GameClient["currentBattle"], t
  *  DoT is spent the glow snaps off and the source clears (the scheduleBurn timer then finishes idle). No-op
  *  when the tank isn't burning. */
 export function relieveBurn(battle: NonNullable<GameClient["currentBattle"]>, client: GameClient): void {
-    if (!client.user || (client.flameTemperature <= 0 && client.visualTemperature <= 0)) return;
-    client.flameTemperature = Math.max(0, client.flameTemperature - BURN_RELIEF_DOT);
+    if (!client.user || client.visualTemperature <= 0) return;
     client.visualTemperature = Math.max(0, client.visualTemperature - BURN_RELIEF_GLOW);
-    if (client.flameTemperature <= 0) {
-        client.visualTemperature = 0;
-        client.flameSource = null;
-    }
+    if (client.visualTemperature <= 0) client.flameSource = null;
     battle.broadcast(new TankTemperaturePacket(client.user.username, client.visualTemperature));
 }
 
@@ -106,15 +105,14 @@ export class FirebirdHitCommandHandler implements IPacketHandler<FlamethrowerPac
             await server.battleService.applyDamage(currentBattle, client, targetClient, (perPeriod / FLAME_DIRECT_DIVISOR) * factor, 0);
             if (targetClient.battleState !== "active") continue; // the direct hit killed it — don't ignite a corpse
 
-            // (Re)ignite the residual burn and heat the visual glow, then refresh it on every client.
-            targetClient.flameTemperature = tempLimit;
+            // Heat the tank toward full: this single value drives both the red glow and the residual burn.
             targetClient.flameSource = user.username;
             targetClient.visualTemperature = Math.min(FIRE_TEMP_CAP, targetClient.visualTemperature + FIRE_TEMP_STEP);
             currentBattle.broadcast(new TankTemperaturePacket(targetName, targetClient.visualTemperature));
-            // Arm the decay timer only if one isn't already running (re-arming each ~2/s hit would reset the
-            // 1s countdown so the tick never fires). Keying off the live timer, not flameTemperature, means a
-            // tank left burning at death no longer blocks its next ignite.
-            if (!currentBattle.timers.has(`burn:${targetName}`)) scheduleBurn(server, currentBattle, targetName, tempLimit / BURN_SECONDS);
+            // Arm the burn timer only if one isn't already running (re-arming each ~2/s hit would reset the
+            // 1s countdown so the tick never fires). Keying off the live timer, not the heat, means a tank left
+            // burning at death no longer blocks its next ignite.
+            if (!currentBattle.timers.has(`burn:${targetName}`)) scheduleBurn(server, currentBattle, targetName, tempLimit);
         }
     }
 }

@@ -7,19 +7,20 @@ import logger from "@/utils/logger";
 import { TankSpecificationPacket, TankTemperaturePacket } from "@/features/battle/battle.packets";
 import * as FreezePackets from "./freeze.packets";
 
-// Freeze cooling/thaw model, calibrated from the m0 capture (FuscaVerde under Danlino's freeze):
-// each beam tick chills the target down to a -1 floor (the blue tint fills to 100%); once the beam stops it
-// warms back to 0. Movement (speed + turn rates, NOT acceleration) scales by e^(FREEZE_SLOW_K·temp) — at the
-// -1 floor the tank crawls at ~24% speed. The temperature axis is DOUBLED vs the old -0.5 tuning so the tint
-// reaches full blue; STEP/RECOVERY are doubled and K is halved (2.9→1.45) in lockstep, so the actual slowdown
-// per beam tick is mathematically identical to before — only the visual now fills 100%. Damage per tick =
-// DAMAGE_PER_PERIOD/2 × distance falloff (capture: ~20.7 dmg/tick point-blank for m0=39, ~2 ticks/s).
+// Freeze cooling/thaw model, calibrated from the 2026-07-01 captures (s4/s5/s6, Temperature packet 581377054 +
+// DamageIndicator -1165230470 on "Desert"): each beam tick chills the target toward a -1 floor (the blue tint
+// fills to 100%); once the beam stops it warms back to 0. The per-tick chill AND the damage both scale by the
+// same distance falloff (capture: point-blank tick chilled -0.1425 / dealt 19; a distant session chilled
+// -0.0675 / dealt 9 — same 0.474 factor on both), so FREEZE_STEP is the point-blank chill. Recovery warms
+// +0.3 per ~0.5s (capture: -1 → 0 in ~1.7s of ticks). Movement (speed + turn rates, NOT acceleration) scales
+// by e^(FREEZE_SLOW_K·temp) — at the -1 floor the tank crawls at ~24% speed. Damage per tick =
+// DAMAGE_PER_PERIOD/2 × distance falloff (~19 dmg/tick point-blank for m0=39, ~2 ticks/s).
 const FREEZE_DIRECT_DIVISOR = 2;
-const FREEZE_STEP = 0.2;
+const FREEZE_STEP = 0.1425; // point-blank chill per beam tick; scaled by the distance falloff (see handler)
 const FREEZE_TEMP_CAP = -1;
 const FREEZE_SLOW_K = 1.45;
-const FREEZE_RECOVERY_TICK_MS = 250;
-const FREEZE_RECOVERY_STEP = 0.2;
+const FREEZE_RECOVERY_TICK_MS = 500;
+const FREEZE_RECOVERY_STEP = 0.3;
 const FREEZE_IDLE_MS = 700; // no beam contact for this long → start thawing
 const FREEZE_RELIEF_STEP = 0.5; // repair-kit relief: warm-up applied per heal tick (see relieveFreeze)
 
@@ -101,8 +102,8 @@ export class FreezeHitCommandHandler implements IPacketHandler<FreezePackets.Fre
             await server.battleService.applyDamage(currentBattle, client, targetClient, (perPeriod / FREEZE_DIRECT_DIVISOR) * factor, 0);
             if (targetClient.battleState !== "active") continue; // the hit killed it — don't freeze a corpse
 
-            // Chill toward the floor, blue tint, and slow its movement.
-            targetClient.freezeTemperature = Math.max(FREEZE_TEMP_CAP, targetClient.freezeTemperature - FREEZE_STEP);
+            // Chill toward the floor (scaled by the same distance falloff as the damage), blue tint, and slow movement.
+            targetClient.freezeTemperature = Math.max(FREEZE_TEMP_CAP, targetClient.freezeTemperature - FREEZE_STEP * factor);
             targetClient.lastFreezeHit = Date.now();
             currentBattle.broadcast(new TankTemperaturePacket(targetName, targetClient.freezeTemperature));
             broadcastFreezeSpec(currentBattle, targetClient, slowFactor(targetClient.freezeTemperature));
