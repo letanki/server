@@ -4,6 +4,37 @@ import { ResourceManager } from "@/utils/resource.manager";
 import { itemBlueprints, supplyPreviewResources } from "./garage.data";
 
 export class GarageService {
+    private static readonly EQUIP_COOLDOWN_MS = 15 * 60 * 1000; // 15 min per equipment category (re-arm battles)
+    // userId -> per-category cooldown-end epoch ms (armor=hull, weapon=turret, color=paint). Kept in
+    // server memory so it SURVIVES a client disconnect/reconnect ("close & reopen the game" keeps the
+    // cooldown); cleared only when the player EXPLICITLY leaves a battle ("leave & return" resets it).
+    private readonly equipCooldowns = new Map<string, { armor?: number; weapon?: number; color?: number }>();
+
+    /** The re-arm cooldown key for an item id: "armor" (hull) / "weapon" (turret) / "color" (paint), or null. */
+    public equipCooldownKey(fullItemId: string): "armor" | "weapon" | "color" | null {
+        const { baseId } = this._parseItemId(fullItemId);
+        const cat = this._findItemBlueprint(baseId)?.category;
+        return cat === "armor" ? "armor" : cat === "weapon" ? "weapon" : cat === "paint" ? "color" : null;
+    }
+
+    /** Remaining equip cooldown for a category, in whole seconds (0 = ready). */
+    public getEquipCooldownSec(userId: string, key: "armor" | "weapon" | "color"): number {
+        const end = this.equipCooldowns.get(userId)?.[key];
+        return end ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : 0;
+    }
+
+    /** Arms the 15-min cooldown for a category after an equip change (re-arm battles only). */
+    public startEquipCooldown(userId: string, key: "armor" | "weapon" | "color"): void {
+        const entry = this.equipCooldowns.get(userId) ?? {};
+        entry[key] = Date.now() + GarageService.EQUIP_COOLDOWN_MS;
+        this.equipCooldowns.set(userId, entry);
+    }
+
+    /** Clears every equip cooldown for a user — called ONLY on an explicit battle leave (not on disconnect). */
+    public clearEquipCooldowns(userId: string): void {
+        this.equipCooldowns.delete(userId);
+    }
+
     public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | { supplyId: string; newCount: number; hadSuppliesBefore: boolean } | void> {
         const { baseId, modification: clientRefMod } = this._parseItemId(fullItemId);
         const itemBlueprint = this._findItemBlueprint(baseId);

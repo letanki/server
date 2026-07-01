@@ -78,9 +78,25 @@ export class EquipItemRequestHandler implements IPacketHandler<GaragePackets.Equ
         }
 
         try {
+            // Re-arm battles: each equipment category (armor/weapon/color) has a 15-min change cooldown.
+            const battle = client.currentBattle;
+            const cooldownKey = battle?.settings.reArmorEnabled ? server.garageService.equipCooldownKey(packet.itemId) : null;
+            if (cooldownKey && server.garageService.getEquipCooldownSec(client.user.id, cooldownKey) > 0) {
+                // On cooldown — reject and revert the client's optimistic mount to the item still equipped.
+                const u = client.user;
+                const current =
+                    cooldownKey === "armor" ? `${u.equippedHull}_m${u.hulls.get(u.equippedHull) ?? 0}` :
+                    cooldownKey === "weapon" ? `${u.equippedTurret}_m${u.turrets.get(u.equippedTurret) ?? 0}` :
+                    `${u.equippedPaint}_m0`;
+                client.sendPacket(new GaragePackets.MountItemPacket(current, true));
+                logger.info(`Equip of ${packet.itemId} by ${u.username} blocked: ${cooldownKey} on cooldown (${server.garageService.getEquipCooldownSec(u.id, cooldownKey)}s left).`);
+                return;
+            }
+
             await server.garageService.equipItem(client.user, packet.itemId);
-            if (client.currentBattle) {
+            if (battle) {
                 client.equipmentChangedInGarage = true;
+                if (cooldownKey) server.garageService.startEquipCooldown(client.user.id, cooldownKey);
             }
             client.sendPacket(new GaragePackets.MountItemPacket(packet.itemId, true));
         } catch (error: any) {

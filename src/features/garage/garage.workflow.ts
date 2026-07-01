@@ -211,11 +211,14 @@ export class GarageWorkflow {
         };
         client.sendPacket(new GaragePackets.GarageItemsPacket(JSON.stringify(garageData)));
 
+        // Equipment-change cooldowns (per category) only apply inside a re-arm battle; 0 elsewhere.
+        const inReArm = client.currentBattle?.settings.reArmorEnabled ?? false;
+        const uid = client.user.id;
         const shopData = {
             items: shopItems,
-            delayMountArmorInSec: 0,
-            delayMountWeaponInSec: 0,
-            delayMountColorInSec: 0,
+            delayMountArmorInSec: inReArm ? server.garageService.getEquipCooldownSec(uid, "armor") : 0,
+            delayMountWeaponInSec: inReArm ? server.garageService.getEquipCooldownSec(uid, "weapon") : 0,
+            delayMountColorInSec: inReArm ? server.garageService.getEquipCooldownSec(uid, "color") : 0,
         };
         client.sendPacket(new GaragePackets.ShopItemsPacket(JSON.stringify(shopData)));
 
