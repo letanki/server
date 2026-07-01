@@ -116,6 +116,12 @@ export class RoundService {
         const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
         for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
 
+        // A new round wipes the equipment-change cooldown (re-arm battles) for EVERY participant — the
+        // whole roster, so someone in the reconnect grace window resets too. They may re-arm freely again.
+        for (const u of [...battle.users, ...battle.usersRed, ...battle.usersBlue]) {
+            this.server.garageService.clearEquipCooldowns(u.id);
+        }
+
         if (battle.settings.battleMode === BattleMode.CTF) {
             this.ctf.returnFlagToBase(battle, "RED");
             this.ctf.returnFlagToBase(battle, "BLUE");
