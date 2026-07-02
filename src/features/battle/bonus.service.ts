@@ -1,5 +1,6 @@
 import { getBonusData } from "@/config/bonus.data";
 import { UpdateCrystals } from "@/features/profile/profile.packets";
+import * as QuestPackets from "@/features/quests/quests.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
@@ -148,6 +149,11 @@ export class BonusService {
         // Metrics: a field drop was picked up (all types — supplies, crystal/gold/special boxes, medkit).
         client.roundStats.suppliesPicked++;
         client.roundStats.suppliesPickedByType[bonus.type] = (client.roundStats.suppliesPickedByType[bonus.type] ?? 0) + 1;
+
+        // Daily-quest progress for the pickup (gold-box + its crystals) is applied inside _applyEffect, on the
+        // same user doc that the crystal grant refreshes — doing it here on a different instance would get
+        // clobbered by the crystal grant's dailyQuests $set (a gold box advances BOTH the gold-box and the
+        // "earn crystals" quests).
         void this._applyEffect(client, battle, bonus.type);
     }
 
@@ -175,6 +181,10 @@ export class BonusService {
                 client.user = updated;
                 client.roundStats.crystalsEarned += crystals; // metrics: crystals earned from field drops
                 client.sendPacket(new UpdateCrystals(updated.crystals));
+                // Crystal drops count toward the "earn crystals" quest; a gold box ALSO counts toward the
+                // "catch a gold box" quest — both applied in ONE call so neither dailyQuests $set clobbers the other.
+                const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals, goldBox: type === "gold" ? 1 : 0 });
+                if (questCompleted && !client.isDestroyed) client.sendPacket(new QuestPackets.QuestCompletedNotification());
             } catch (error: any) {
                 logger.error(`Failed to grant ${crystals} crystals from bonus to ${user.username}`, { error: error.message });
             }

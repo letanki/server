@@ -18,7 +18,7 @@ export interface IUserQuest {
 const UserQuestSchema = new Schema<IUserQuest>(
     {
         questId: { type: Number, required: true },
-        questType: { type: String, required: true, enum: ["KILLS", "SCORE", "CRYSTALS"] },
+        questType: { type: String, required: true, enum: ["KILLS", "SCORE", "CRYSTALS", "GOLDBOX"] },
         difficulty: { type: String, required: true, enum: ["easy", "medium", "hard"] },
         progress: { type: Number, default: 0 },
         finishCriteria: { type: Number, required: true },
@@ -100,6 +100,8 @@ export interface UserAttributes {
     questStreak: number;
     lastQuestCompletedDate: Date | null;
     lastQuestGeneratedDate: Date | null;
+    freeQuestSkipUsedDate: Date | null; // when the day's ONE free mission change was used (null = still available today)
+    questCompletionUnviewed: boolean; // a mission reached its target and the player hasn't opened the window since (auto-opens it on login)
     loginToken: string | null;
     hulls: Map<string, number>;
     turrets: Map<string, number>;
@@ -152,6 +154,8 @@ const UserSchema = new Schema<UserDocument>({
     questStreak: { type: Number, default: 0 },
     lastQuestCompletedDate: { type: Date, default: null },
     lastQuestGeneratedDate: { type: Date, default: null },
+    freeQuestSkipUsedDate: { type: Date, default: null },
+    questCompletionUnviewed: { type: Boolean, default: false },
     loginToken: { type: String, default: null },
     hulls: { type: Map, of: Number, default: () => new Map([["wasp", 0]]) },
     turrets: { type: Map, of: Number, default: () => new Map([["smoky", 0]]) },

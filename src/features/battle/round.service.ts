@@ -1,4 +1,5 @@
 import * as LobbyPackets from "@/features/lobby/lobby.packets";
+import * as QuestPackets from "@/features/quests/quests.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { UpdateCrystals } from "@/features/profile/profile.packets";
 import { IPacket } from "@/packets/packet.interfaces";
@@ -326,6 +327,9 @@ export class RoundService {
                 const updated = await this.server.userService.updateResources(client.user.id, { crystals: newTotal });
                 client.user = updated;
                 client.sendPacket(new UpdateCrystals(updated.crystals));
+                // Fund crystals count toward the "earn crystals in battles" daily quest.
+                const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals: reward });
+                if (questCompleted && !client.isDestroyed) client.sendPacket(new QuestPackets.QuestCompletedNotification());
             } catch (error: any) {
                 logger.error(`Failed to award ${reward} crystals to ${client.user?.username}`, { error: error.message });
             }

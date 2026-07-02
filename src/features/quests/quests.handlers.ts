@@ -3,10 +3,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
-import { ResourceManager } from "@/utils/resource.manager";
-import { QuestDefinitions } from "./quests.data";
 import * as QuestPackets from "./quests.packets";
-import { IQuest } from "./quests.types";
 
 export class RequestQuestsWindowHandler implements IPacketHandler<QuestPackets.RequestQuestsWindow> {
     public readonly packetId = QuestPackets.RequestQuestsWindow.getId();
@@ -18,7 +15,25 @@ export class RequestQuestsWindowHandler implements IPacketHandler<QuestPackets.R
         }
 
         const questData = await server.questService.getQuestsForUser(client.user);
-        client.sendPacket(new QuestPackets.ShowQuestsWindow(questData));
+        // No active missions (all completed & collected) → the official sends the summary packet, NOT a
+        // ShowQuestsWindow with an empty list (which the client renders wrong).
+        client.sendPacket(
+            questData.quests.length === 0
+                ? new QuestPackets.QuestSummaryWindow(questData)
+                : new QuestPackets.ShowQuestsWindow(questData)
+        );
+    }
+}
+
+export class CollectQuestRewardHandler implements IPacketHandler<QuestPackets.CollectQuestReward> {
+    public readonly packetId = QuestPackets.CollectQuestReward.getId();
+
+    public async execute(client: GameClient, server: GameServer, packet: QuestPackets.CollectQuestReward): Promise<void> {
+        if (!client.user) return;
+        const result = await server.questService.collectReward(client.user, packet.questId);
+        if (!result) return; // not collectable (not complete, or already claimed)
+        client.sendPacket(new QuestPackets.QuestRewardCollected(packet.questId));
+        if (result.crystalsGranted > 0) client.sendPacket(new UpdateCrystals(client.user.crystals));
     }
 }
 
@@ -33,27 +48,8 @@ export class SkipQuestFreeHandler implements IPacketHandler<QuestPackets.SkipQue
 
         try {
             const result = await server.questService.rerollQuest(currentUser, packet.missionId, false);
-
-            const definition = QuestDefinitions.find((def) => def.type === result.newQuest.questType);
-            if (!definition) throw new Error("New quest definition not found after reroll.");
-
-            const newQuestPacketData: IQuest = {
-                canSkipForFree: result.newQuest.canSkipForFree,
-                description: definition.description.replace("%n", result.newQuest.finishCriteria.toString()),
-                finishCriteria: result.newQuest.finishCriteria,
-                image: ResourceManager.getIdlowById(definition.imageResource),
-                progress: result.newQuest.progress,
-                questId: result.newQuest.questId,
-                skipCost: definition.skipCost,
-                prizes: result.newQuest.prizes,
-            };
-
+            const newQuestPacketData = server.questService.buildQuestView(currentUser, result.newQuest);
             client.sendPacket(new QuestPackets.ReplaceQuest(result.oldQuestId, newQuestPacketData));
-
-            const updatedUser = await server.userService.findUserByUsername(currentUser.username);
-            if (updatedUser) {
-                client.user = updatedUser;
-            }
         } catch (error: any) {
             logger.warn(`Failed to skip quest for free for user ${currentUser.username}`, { error: error.message });
         }
@@ -71,31 +67,9 @@ export class SkipQuestPaidHandler implements IPacketHandler<QuestPackets.SkipQue
 
         try {
             const result = await server.questService.rerollQuest(currentUser, packet.missionId, true);
-
-            const definition = QuestDefinitions.find((def) => def.type === result.newQuest.questType);
-            if (!definition) throw new Error("New quest definition not found after reroll.");
-
-            const newQuestPacketData: IQuest = {
-                canSkipForFree: result.newQuest.canSkipForFree,
-                description: definition.description.replace("%n", result.newQuest.finishCriteria.toString()),
-                finishCriteria: result.newQuest.finishCriteria,
-                image: ResourceManager.getIdlowById(definition.imageResource),
-                progress: result.newQuest.progress,
-                questId: result.newQuest.questId,
-                skipCost: definition.skipCost,
-                prizes: result.newQuest.prizes,
-            };
-
-            const updatedUser = await server.userService.findUserByUsername(currentUser.username);
-            if (updatedUser) {
-                client.user = updatedUser;
-            }
-
+            const newQuestPacketData = server.questService.buildQuestView(currentUser, result.newQuest);
             client.sendPacket(new QuestPackets.ReplaceQuest(result.oldQuestId, newQuestPacketData));
-
-            if (client.user) {
-                client.sendPacket(new UpdateCrystals(client.user.crystals));
-            }
+            client.sendPacket(new UpdateCrystals(currentUser.crystals));
         } catch (error: any) {
             logger.warn(`Failed to skip quest with payment for user ${currentUser.username}`, { error: error.message });
         }

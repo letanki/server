@@ -30,6 +30,7 @@ export class AuthWorkflow {
             "ui/quests/icons/battle_score",
             "ui/quests/icons/get_crystal",
             "ui/quests/icons/kill_enemies",
+            "ui/quests/icons/gold_box",
             "ui/quests/window/week1/quest_chain",
             "ui/quests/window/week2/quest_chain",
             "ui/quests/window/week3/quest_chain",

@@ -5,6 +5,7 @@ import { Battle, BattleMode, EquipmentConstraintsMode, MapTheme } from "@/featur
 import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import * as ChatPackets from "@/features/chat/chat.packets";
 import * as ClanPackets from "@/features/clan/clan.packets";
+import * as QuestPackets from "@/features/quests/quests.packets";
 import { PopulatedChatMessage } from "@/features/chat/chat.service";
 import { IChatMessageData } from "@/features/chat/chat.types";
 import { UnloadGaragePacket } from "@/features/garage/garage.packets";
@@ -107,6 +108,17 @@ export class LobbyWorkflow {
 
         await LobbyWorkflow.enterLobby(client, server);
         server.notifySubscribersOfStatusChange(user.username, true);
+
+        // Auto-open the daily-missions window if a mission completed while the player was away and they
+        // haven't seen it yet (matches the official; getQuestsForUser then marks it viewed).
+        if (server.questService.hasUnviewedCompletion(user)) {
+            const questData = await server.questService.getQuestsForUser(user);
+            client.sendPacket(
+                questData.quests.length === 0
+                    ? new QuestPackets.QuestSummaryWindow(questData)
+                    : new QuestPackets.ShowQuestsWindow(questData)
+            );
+        }
 
         return true;
     }

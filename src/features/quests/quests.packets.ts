@@ -79,6 +79,30 @@ export class ShowQuestsWindow extends BasePacket implements IShowQuestsWindow {
     }
 }
 
+/**
+ * S->C: the daily-missions SUMMARY, sent instead of ShowQuestsWindow when there are NO active missions to list
+ * (all completed & collected). Same tail fields as ShowQuestsWindow but no quest list — the official sends this
+ * for the empty state; sending ShowQuestsWindow with an empty list makes the client render wrong.
+ */
+export class QuestSummaryWindow extends BasePacket {
+    constructor(private readonly data?: DailyQuestData) {
+        super();
+    }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const w = new BufferWriter();
+        w.writeInt32BE(this.data?.currentQuestLevel ?? 0);
+        w.writeInt32BE(this.data?.currentQuestStreak ?? 0);
+        w.writeUInt8(this.data?.doneForToday ? 1 : 0);
+        w.writeResource(this.data?.questImage ?? 0);
+        w.writeResource(this.data?.rewardImage ?? 0);
+        return w.getBuffer();
+    }
+    static getId(): number {
+        return 885055495;
+    }
+}
+
 export class SkipQuestFree extends BasePacket implements ISkipQuest {
     missionId: number = 0;
     read(buffer: Buffer): void {
@@ -129,6 +153,45 @@ export class ReplaceQuest extends BasePacket implements IReplaceQuest {
 
     static getId(): number {
         return -1266665816;
+    }
+}
+
+/** S->C: a daily mission just reached its target (real-time popup + raises the unviewed flag). Empty body. */
+export class QuestCompletedNotification extends BasePacket {
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        return new BufferWriter().getBuffer();
+    }
+    static getId(): number {
+        return 1579425801;
+    }
+}
+
+/** C->S: the player clicks "collect" on a completed quest (progress == finishCriteria). Body = int32 questId. */
+export class CollectQuestReward extends BasePacket {
+    questId: number = 0;
+    read(buffer: Buffer): void {
+        this.questId = new BufferReader(buffer).readInt32BE();
+    }
+    write(): Buffer {
+        return new BufferWriter().writeInt32BE(this.questId).getBuffer();
+    }
+    static getId(): number {
+        return -867767128;
+    }
+}
+
+/** S->C: confirms a quest reward was collected (client removes the quest). Body = int32 questId. */
+export class QuestRewardCollected extends BasePacket {
+    constructor(private readonly questId: number = 0) {
+        super();
+    }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        return new BufferWriter().writeInt32BE(this.questId).getBuffer();
+    }
+    static getId(): number {
+        return 1768449810;
     }
 }
 

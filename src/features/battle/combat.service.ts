@@ -1,5 +1,7 @@
 import { GameClient } from "@/server/game.client";
 import * as ProfilePackets from "@/features/profile/profile.packets";
+import { advanceQuestsInMemory } from "@/features/quests/quests.service";
+import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { UserDocument } from "@/shared/models/user.model";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
@@ -167,8 +169,12 @@ export class CombatService {
             killerClient.battleScore += KILL_SCORE;
             killer.experience += KILL_XP;
             killerClient.roundStats.xpEarned += KILL_XP;
+            // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
+            // newly-finished mission pushes the completion notification.
+            const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: KILL_SCORE }).completed;
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
+            if (questCompleted) killerClient.sendPacket(new QuestCompletedNotification());
         }
         this._broadcastUserStat(battle, killerClient, killer);
 
