@@ -13,7 +13,11 @@
     "parse:logs": "ts-node -r tsconfig-paths/register scripts/log-parser.ts",
     "test": "node -r ts-node/register -r tsconfig-paths/register --test \"test/**/*.test.ts\"",
     "stress": "ts-node scripts/stress-test.ts",
-    "targets": "ts-node scripts/target-bots.ts"
+    "targets": "ts-node scripts/target-bots.ts",
+    "tara": "ts-node scripts/tara.ts",
+    "patch:list": "node scripts/patch-client.js --list",
+    "patch:client": "node scripts/patch-client.js --all --deploy",
+    "patch:deploy": "node scripts/patch-client.js --deploy-only"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
