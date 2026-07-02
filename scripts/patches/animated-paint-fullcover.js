@@ -1,48 +1,70 @@
 'use strict';
 /**
  * animated-paint-fullcover (hardware.swf): faz cada FRAME da pintura animada
- * cobrir o tanque/torreta INTEIROS (efeito "piscar"/blink), em vez de deslizar
- * a textura ao longo do casco.
+ * cobrir o tanque/torreta INTEIROS (efeito "piscar"/blink) e animar em todas as
+ * fases (inclusive antes do activateTank).
  *
  * O AnimatedPaintMaterial monta o uvTransform como:
- *     outU = inU * scaleX + (frameCol * frameWidth)
- *     outV = inV * scaleY + (frameRow * frameHeight)
- * com scaleX = details.width/sheet.width. Quando o frame NÃO tem a mesma
- * resolução da textura de detalhe (ex.: Spectrum = frames 1x1), scaleX != frameWidth
- * e a UV do tanque acaba varrendo um TRECHO da folha (gradiente deslizando).
+ *     outU = inU * scaleX + (frameCol * frameWidth)    (scaleX = details.width/sheet.width)
+ * Quando o frame NÃO tem a resolução da textura de detalhe (ex.: Spectrum = frames 1x1),
+ * scaleX != frameWidth e a UV do tanque varre um TRECHO da folha (gradiente deslizando).
  *
- * Fix: usar frameWidth/frameHeight na ESCALA da UV (não scaleX/scaleY). Assim a
- * UV 0..1 do tanque mapeia para EXATAMENTE um frame -> o frame inteiro cobre o
- * tanque; avançar o frame troca a cor do tanque todo. Para folhas "corretas"
- * (frame == tamanho do detail) scaleX já == frameWidth, então é no-op p/ elas.
+ * Além disso, o `update()` (que avança o frame E aplica o uvTransform) só é chamado
+ * pelo `drawOpaque`, NÃO pelo `drawTransparent`. No spawn (fade-in transparente, antes
+ * do activateTank) o material fica no uvTransform padrão (identidade) -> tira espalhada,
+ * frame 0 congelado ("modelo antigo").
  *
- * Edit: no método de update do material, troca
- *   getproperty scaleX  -> getproperty frameWidth   (uvTransformConst[0])
- *   getproperty scaleY  -> getproperty frameHeight  (uvTransformConst[5])
+ * Edits (3):
+ *   1. getproperty scaleX -> frameWidth   (uvTransformConst[0])  -> 1 frame cobre o tanque
+ *   2. getproperty scaleY -> frameHeight  (uvTransformConst[5])
+ *   3. drawTransparent chama update()     (como o drawOpaque)     -> anima/janela no spawn
+ * Para folhas "corretas" (frame == detail) scaleX já == frameWidth (no-op). Só afeta
+ * pinturas (nenhum efeito usa AnimatedPaintMaterial).
  */
 
 const FRAME_W = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPaintMaterial"), "frameWidth")';
 const FRAME_H = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPaintMaterial"), "frameHeight")';
+const UPDATE = 'QName(PackageNamespace(""), "update")';
+// bloco do drawTransparent, do nome até o callsupervoid (p/ inserir o update() dentro dele)
+const DRAW_TRANSP_RE = /name "drawTransparent"[\s\S]*?callsupervoid\s+QName\(Namespace\("http:\/\/alternativaplatform\.com\/en\/alternativa3d"\), "drawTransparent"\), 7/;
 
 module.exports = {
   id: 'animated-paint-fullcover',
   swf: 'hardware',
-  description: 'AnimatedPaintMaterial: cada frame cobre o tanque/torreta inteiros (blink), não desliza.',
+  description: 'AnimatedPaintMaterial: cada frame cobre o tanque/torreta inteiros (blink) e anima já no spawn.',
 
   apply({ classes, log }) {
-    let seen = false, edits = 0;
+    let seen = false, edits = 0, already = 0;
     for (const c of classes) {
       if (!/instance QName\(PackageNamespace\("alternativa\.tanks\.materials"\), "AnimatedPaintMaterial"\)/.test(c.text)) continue;
       seen = true;
       let t = c.text;
-      const x = t.replace(/getproperty(\s+)QName\(PackageNamespace\(""\), "scaleX"\)/, 'getproperty$1' + FRAME_W);
-      const y = x.replace(/getproperty(\s+)QName\(PackageNamespace\(""\), "scaleY"\)/, 'getproperty$1' + FRAME_H);
-      if (y !== t) { c.save(y); edits = (x !== t ? 1 : 0) + (y !== x ? 1 : 0); }
+
+      // 1 + 2: escala do uvTransform = frameWidth/frameHeight (não scaleX/scaleY)
+      const a = t.replace(/getproperty(\s+)QName\(PackageNamespace\(""\), "scaleX"\)/, 'getproperty$1' + FRAME_W);
+      const b = a.replace(/getproperty(\s+)QName\(PackageNamespace\(""\), "scaleY"\)/, 'getproperty$1' + FRAME_H);
+      if (a !== t) edits++; else already++;
+      if (b !== a) edits++; else already++;
+      t = b;
+
+      // 3: drawTransparent chama update() (mirror do drawOpaque)
+      const m = t.match(DRAW_TRANSP_RE);
+      if (m) {
+        if (new RegExp('callpropvoid\\s+' + esc(UPDATE) + ', 0').test(m[0])) { already++; }
+        else {
+          const patched = m[0].replace(/(pushscope[^\n]*\n)/, '$1      getlocal0\n      callpropvoid        ' + UPDATE + ', 0\n');
+          t = t.replace(m[0], patched); edits++;
+        }
+      }
+
+      if (t !== c.text) c.save(t);
     }
     if (!seen) throw new Error('AnimatedPaintMaterial não encontrado (base é hardware.swf?)');
-    if (edits === 0) return { edits: 0, note: 'já aplicado' };
-    if (edits !== 2) throw new Error(`esperava 2 edits (scaleX/scaleY), fez ${edits}`);
-    log('scaleX→frameWidth, scaleY→frameHeight (frame cobre o tanque todo)');
+    if (edits === 0 && already >= 3) return { edits: 0, note: 'já aplicado' };
+    if (edits !== 3) throw new Error(`esperava 3 edits, fez ${edits} (already=${already})`);
+    log('scaleX/Y→frameWidth/Height + drawTransparent chama update()');
     return { edits };
   },
 };
+
+function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
