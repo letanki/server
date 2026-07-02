@@ -133,6 +133,17 @@ export class GarageWorkflow {
             client.equipmentChangedInGarage = false;
             client.pendingEquipmentRespawn = true;
 
+            // Re-arm battles: now that the player is LEAVING the garage, arm the 15-min cooldown for each
+            // category whose equipped base actually changed vs the garage-open snapshot (swap-and-revert = free).
+            const rearmBattle = client.currentBattle;
+            if (rearmBattle?.settings.reArmorEnabled && client.equipSnapshot && client.user) {
+                const u = client.user, snap = client.equipSnapshot;
+                if (u.equippedHull !== snap.hull) server.garageService.startEquipCooldown(u.id, "armor");
+                if (u.equippedTurret !== snap.turret) server.garageService.startEquipCooldown(u.id, "weapon");
+                if (u.equippedPaint !== snap.paint) server.garageService.startEquipCooldown(u.id, "color");
+            }
+            client.equipSnapshot = null;
+
             const otherClientsInBattle = server.getClients().filter((c) => c !== client && c.currentBattle?.battleId === client.currentBattle?.battleId);
 
             if (otherClientsInBattle.length > 0) {
@@ -203,6 +214,14 @@ export class GarageWorkflow {
         }
 
         logger.info(`Initializing garage for ${client.user.username}.`);
+
+        // Snapshot the loadout on garage OPEN. The re-arm cooldown is armed on garage EXIT only for the
+        // categories that actually changed vs this — so swapping around (and back) inside the garage is free.
+        client.equipSnapshot = {
+            hull: client.user.equippedHull,
+            turret: client.user.equippedTurret,
+            paint: client.user.equippedPaint,
+        };
 
         const userInventory = {
             ...Object.fromEntries(client.user.turrets),

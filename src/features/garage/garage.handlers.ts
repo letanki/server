@@ -94,9 +94,12 @@ export class EquipItemRequestHandler implements IPacketHandler<GaragePackets.Equ
             }
 
             await server.garageService.equipItem(client.user, packet.itemId);
+            // NOTE: the cooldown is NOT armed here — inside the garage the player may swap freely (and back).
+            // It's armed on garage EXIT, per category actually changed vs the open-snapshot (see
+            // GarageWorkflow.applyEquipmentChange). The check above still blocks changing a category that is
+            // already on cooldown from a PREVIOUS exit.
             if (battle) {
                 client.equipmentChangedInGarage = true;
-                if (cooldownKey) server.garageService.startEquipCooldown(client.user.id, cooldownKey);
             }
             client.sendPacket(new GaragePackets.MountItemPacket(packet.itemId, true));
         } catch (error: any) {

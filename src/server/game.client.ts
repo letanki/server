@@ -126,6 +126,10 @@ export class GameClient {
   // and whenever a new kit is activated. See SupplyService.startHealing.
   public healTimer: NodeJS.Timeout | null = null;
   public equipmentChangedInGarage: boolean = false;
+  // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose
+  // equipped base changed vs this snapshot arm the re-arm 15-min cooldown (so the player can freely swap
+  // back and forth inside the garage without triggering it). Cleared on exit.
+  public equipSnapshot: { hull: string; turret: string; paint: string } | null = null;
   public pendingEquipmentRespawn: boolean = false;
   public pendingSpawnPoint: ISpawnPoint | null = null;
   // Set while OTHER clients are still loading this player's new equipment resources after a mid-battle
