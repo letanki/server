@@ -342,7 +342,9 @@ export class ClanService {
     }
 
     public getMembers(clan: ClanDocument): Promise<UserDocument[]> {
-        return User.find({ _id: { $in: clan.members } }, "username rank crystals").exec();
+        // Includes experience/lastLogin/createdAt/stats so the member panel can show real score, last-online
+        // and the per-member kills/deaths/mines pulled from the long-term stats (see buildMemberView).
+        return User.find({ _id: { $in: clan.members } }, "username rank crystals experience lastLogin createdAt stats").exec();
     }
 
     /** The clan leader's display username (to notify the owner's online client). */
@@ -441,13 +443,23 @@ export class ClanService {
     /** The 10-field member model (row) for a clan member — shared by the panel and the live member-update
      *  broadcast. `permission` = the member's stored clan position; `field1` = seconds in the clan. */
     public buildMemberView(clan: ClanDocument, m: UserDocument): ClanMemberView {
+        // kills/deaths/minesUsed come from the player's long-term stats (the client sums them across members
+        // into CLAN_TANKS_DESTROYED / CLAN_TANKS_LOST / CLAN_USED_MINES + a K/D ratio). `score` = the
+        // member's XP (personal score column). clanScore/weeklyClanScore are per-clan contribution columns
+        // we don't track yet, so they stay 0.
+        const counters = (m.stats as { counters?: Map<string, number> } | undefined)?.counters;
+        const stat = (key: string): number => counters?.get(key) ?? 0;
         return {
             lastOnlineDate: msToLong((m.lastLogin ?? m.createdAt ?? new Date()).getTime()), // member's last login (ms Long)
             nick: m.username,
-            deaths: 0, kills: 0, score: 0, clanScore: 0, weeklyClanScore: 0,
+            deaths: stat("deaths"),
+            kills: stat("kills"),
+            score: m.experience ?? 0,
+            clanScore: 0,
+            weeklyClanScore: 0,
             permission: this.getPosition(clan, m._id),
             secondsInClan: this.secondsInClan(clan, m._id),
-            minesUsed: 0,
+            minesUsed: stat("mines_used"),
         };
     }
 }
