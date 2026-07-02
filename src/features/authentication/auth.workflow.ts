@@ -40,6 +40,7 @@ export class AuthWorkflow {
             "ui/quests/window/week3/final_reward",
             "ui/quests/window/week4/final_reward",
             "sounds/notifications/battle_invite",
+            "sounds/notifications/gold_box_siren",
             "map/zone/summer/preview",
             "map/zone/winter/preview",
             "map/zone/space/preview",

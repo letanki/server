@@ -414,6 +414,7 @@ export class BattleService {
             battle.roundStartTime = Date.now();
             this.round.startRoundTimer(battle); // -> RUNNING
             this.bonus.startAutoSpawn(battle);
+            this.bonus.startGoldBoxDrops(battle);
             this.domination.startLoop(battle);
             logger.info(`Round started for battle ${battle.battleId}.`);
         }

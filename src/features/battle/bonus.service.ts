@@ -5,10 +5,12 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { getMapBonusRegions, IBonusRegion } from "@/maps/mapData";
+import { ResourceId } from "@/generated/resourceTypes";
+import { ResourceManager } from "@/utils/resource.manager";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { HEAL_DROP_EFFECT_MS, HEAL_MAX_GIVEN, SupplyService } from "./supply.service";
-import { RemoveBonusPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
+import { GoldBoxComingNotificationPacket, GoldBoxTakenNotificationPacket, RemoveBonusPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
 
 const BONUS_FALLBACK_LIFETIME_MS = 30000; // used if a type has no lifeTimeMs in getBonusData
 // Extra time the server keeps the box AFTER its disappear time, so the client's final fade-out blink
@@ -29,6 +31,14 @@ const BONUS_PICKUP_SAFETY_RADIUS = 800;
 const SPAWN_TICK_MS = 20000; // how often the auto-spawn loop runs
 const SPAWN_CHANCE_PER_REGION = 0.25; // chance an empty region drops a bonus on a given tick
 const MAX_ACTIVE_BONUSES = 8; // cap on simultaneous drops per battle
+
+// Gold-box drop cadence: a siren announces, then the box falls 30-50s later (wiki), repeating each cycle.
+const GOLD_BOX_FIRST_DELAY_MS = 20000; // first siren after the round starts
+const GOLD_BOX_INTERVAL_MS = 90000; // gap from one drop to the next siren
+const GOLD_BOX_DROP_MIN_MS = 30000; // siren → drop delay (wiki: random 30-50s)
+const GOLD_BOX_DROP_MAX_MS = 50000;
+const GOLD_BOX_COMING_MESSAGE = "A caixa de ouro será deixada em breve";
+const GOLD_BOX_SIREN_RESOURCE = "sounds/notifications/gold_box_siren" as ResourceId; // played with the siren toast
 
 // Maps the official bonus-type names found in the maps' <bonus-region> XML onto OUR bonus ids (the
 // ones the client already has resources for — see getBonusData). Keeps the client untouched.
@@ -76,7 +86,42 @@ export class BonusService {
     /** Stops the auto-spawn loop and clears every active drop. */
     public stopAutoSpawn(battle: Battle): void {
         battle.timers.clear("bonusSpawn");
+        this.stopGoldBoxDrops(battle);
         this.clearAll(battle);
+    }
+
+    /** Starts the gold-box drop cycle (siren → random 30-50s → a gold box falls → repeat). No-op if the
+     *  battle disabled gold boxes. */
+    public startGoldBoxDrops(battle: Battle): void {
+        if (battle.settings.withoutGoldBoxes) return;
+        battle.timers.set("goldBoxCycle", GOLD_BOX_FIRST_DELAY_MS, () => this._goldBoxAnnounce(battle));
+    }
+
+    /** Stops the gold-box drop cycle (pending siren + pending drop). */
+    public stopGoldBoxDrops(battle: Battle): void {
+        battle.timers.clear("goldBoxCycle");
+        battle.timers.clear("goldBoxDrop");
+    }
+
+    /** Broadcasts the "gold box coming" siren (unless disabled) and schedules the drop 30-50s later. */
+    private _goldBoxAnnounce(battle: Battle): void {
+        if (!battle.settings.withoutGoldSiren) {
+            battle.broadcast(new GoldBoxComingNotificationPacket(GOLD_BOX_COMING_MESSAGE, ResourceManager.getIdlowById(GOLD_BOX_SIREN_RESOURCE)));
+        }
+        const delay = GOLD_BOX_DROP_MIN_MS + Math.floor(Math.random() * (GOLD_BOX_DROP_MAX_MS - GOLD_BOX_DROP_MIN_MS));
+        battle.timers.set("goldBoxDrop", delay, () => this._goldBoxDrop(battle));
+    }
+
+    /** Drops a gold box at a random bonus-region point, then schedules the next cycle. */
+    private _goldBoxDrop(battle: Battle): void {
+        const regions = getMapBonusRegions(battle.mapResourceId);
+        if (regions.length > 0) {
+            const region = regions[Math.floor(Math.random() * regions.length)];
+            const rand = (a: number, b: number) => a + Math.random() * (b - a);
+            const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
+            this.spawnBonus(battle, "gold", position);
+        }
+        battle.timers.set("goldBoxCycle", GOLD_BOX_INTERVAL_MS, () => this._goldBoxAnnounce(battle));
     }
 
     /** Removes every active drop (e.g. on round restart) without stopping the auto-spawn loop. */
@@ -146,6 +191,8 @@ export class BonusService {
 
         battle.broadcast(new TakeBonusPacket(id)); // pickup animation/sound for everyone
         this.removeBonus(battle, id);
+        // Gold box: announce the pickup to the whole battle ("<nick> picked up the gold box").
+        if (bonus.type === "gold") battle.broadcast(new GoldBoxTakenNotificationPacket(client.user.username));
         // Metrics: a field drop was picked up (all types — supplies, crystal/gold/special boxes, medkit).
         client.roundStats.suppliesPicked++;
         client.roundStats.suppliesPickedByType[bonus.type] = (client.roundStats.suppliesPickedByType[bonus.type] ?? 0) + 1;
