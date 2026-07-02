@@ -80,66 +80,128 @@ const WRITERS: Record<PrimitiveType, (w: BufferWriter, value: any) => void> = {
     bytes: (w, v: Buffer) => { w.writeInt32BE(v.length); w.writeBuffer(v); },
 };
 
-function readInto(target: Record<string, any>, schema: PacketSchema, reader: BufferReader): void {
-    for (const field of schema) {
+/**
+ * PERFORMANCE — why this is compiled instead of a single reflective loop.
+ *
+ * A naive `for (const field of schema) target[field.name] = READERS[field.type](r)` shares ONE
+ * property-access bytecode site across EVERY packet type. Under load (movement relay + mine broadcast
+ * flood) V8's inline cache at that site sees dozens of object shapes and degrades to MEGAMORPHIC — a
+ * slow dictionary lookup. A CPU profile of two players mine-spamming showed ~38% of the whole process
+ * in `KeyedLoadIC_Megamorphic` / `LoadIC_Megamorphic` from exactly this.
+ *
+ * Fix: compile each schema ONCE into an array of per-field closures, cached by schema identity. Each
+ * closure's `src[name]` / `target[name] = …` site is only ever reached with a SINGLE packet shape
+ * (only that schema's packet uses that schema), so every IC stays MONOMORPHIC — the fast path. The
+ * closure also captures the concrete reader/writer fn, dropping the `READERS[field.type]` dictionary
+ * lookup too. Byte output is identical to the old reflective version (same ops, same order).
+ */
+type WriteStep = (w: BufferWriter, src: any) => void;
+type ReadStep = (r: BufferReader, target: any) => void;
+
+// Keyed by schema identity (the static readonly arrays are stable singletons). WeakMap so a schema
+// that's ever GC'd takes its compiled steps with it.
+const WRITE_STEPS = new WeakMap<object, WriteStep[]>();
+const READ_STEPS = new WeakMap<object, ReadStep[]>();
+
+function writeStepsFor(schema: PacketSchema): WriteStep[] {
+    let steps = WRITE_STEPS.get(schema);
+    if (steps) return steps;
+    steps = schema.map((field): WriteStep => {
+        const name = field.name;
         if (field.type === "list") {
-            const count = reader.readInt32BE();
-            const items: Record<string, any>[] = [];
-            for (let i = 0; i < count; i++) {
-                const item: Record<string, any> = {};
-                readInto(item, field.of, reader);
-                items.push(item);
-            }
-            target[field.name] = items;
-        } else if (field.type === "object") {
-            const obj: Record<string, any> = {};
-            readInto(obj, field.of, reader);
-            target[field.name] = obj;
-        } else if (field.type === "optObject") {
-            if (reader.readUInt8() === 1) {
-                target[field.name] = null;
-            } else {
-                const obj: Record<string, any> = {};
-                readInto(obj, field.of, reader);
-                target[field.name] = obj;
-            }
-        } else {
-            target[field.name] = READERS[field.type](reader);
+            const of = field.of;
+            return (w, src) => {
+                const items: any[] = src[name] ?? [];
+                w.writeInt32BE(items.length);
+                const sub = writeStepsFor(of);
+                for (const item of items) for (let i = 0; i < sub.length; i++) sub[i](w, item);
+            };
         }
-    }
+        if (field.type === "object") {
+            const of = field.of;
+            return (w, src) => {
+                const value = src[name];
+                const sub = writeStepsFor(of);
+                for (let i = 0; i < sub.length; i++) sub[i](w, value);
+            };
+        }
+        if (field.type === "optObject") {
+            const of = field.of;
+            return (w, src) => {
+                const value = src[name];
+                const isEmpty = value === null || value === undefined;
+                w.writeUInt8(isEmpty ? 1 : 0);
+                if (isEmpty) return;
+                const sub = writeStepsFor(of);
+                for (let i = 0; i < sub.length; i++) sub[i](w, value);
+            };
+        }
+        const fn = WRITERS[field.type];
+        return (w, src) => fn(w, src[name]);
+    });
+    WRITE_STEPS.set(schema, steps);
+    return steps;
 }
 
-function writeInto(source: Record<string, any>, schema: PacketSchema, writer: BufferWriter): void {
-    for (const field of schema) {
+function readStepsFor(schema: PacketSchema): ReadStep[] {
+    let steps = READ_STEPS.get(schema);
+    if (steps) return steps;
+    steps = schema.map((field): ReadStep => {
+        const name = field.name;
         if (field.type === "list") {
-            const items: any[] = source[field.name] ?? [];
-            writer.writeInt32BE(items.length);
-            for (const item of items) {
-                writeInto(item, field.of, writer);
-            }
-        } else if (field.type === "object") {
-            writeInto(source[field.name], field.of, writer);
-        } else if (field.type === "optObject") {
-            const value = source[field.name];
-            const isEmpty = value === null || value === undefined;
-            writer.writeUInt8(isEmpty ? 1 : 0);
-            if (!isEmpty) {
-                writeInto(value, field.of, writer);
-            }
-        } else {
-            WRITERS[field.type](writer, source[field.name]);
+            const of = field.of;
+            return (r, target) => {
+                const count = r.readInt32BE();
+                const items: Record<string, any>[] = [];
+                const sub = readStepsFor(of);
+                for (let n = 0; n < count; n++) {
+                    const item: Record<string, any> = {};
+                    for (let i = 0; i < sub.length; i++) sub[i](r, item);
+                    items.push(item);
+                }
+                target[name] = items;
+            };
         }
-    }
+        if (field.type === "object") {
+            const of = field.of;
+            return (r, target) => {
+                const obj: Record<string, any> = {};
+                const sub = readStepsFor(of);
+                for (let i = 0; i < sub.length; i++) sub[i](r, obj);
+                target[name] = obj;
+            };
+        }
+        if (field.type === "optObject") {
+            const of = field.of;
+            return (r, target) => {
+                if (r.readUInt8() === 1) {
+                    target[name] = null;
+                    return;
+                }
+                const obj: Record<string, any> = {};
+                const sub = readStepsFor(of);
+                for (let i = 0; i < sub.length; i++) sub[i](r, obj);
+                target[name] = obj;
+            };
+        }
+        const fn = READERS[field.type];
+        return (r, target) => { target[name] = fn(r); };
+    });
+    READ_STEPS.set(schema, steps);
+    return steps;
 }
 
 /** Reads `buffer` into `target`'s fields according to `schema` (in order). */
 export function readSchema(target: Record<string, any>, schema: PacketSchema, buffer: Buffer): void {
-    readInto(target, schema, new BufferReader(buffer));
+    const reader = new BufferReader(buffer);
+    const steps = readStepsFor(schema);
+    for (let i = 0; i < steps.length; i++) steps[i](reader, target);
 }
 
 /** Serializes `source`'s fields according to `schema` (in order). */
 export function writeSchema(source: Record<string, any>, schema: PacketSchema): Buffer {
     const writer = new BufferWriter();
-    writeInto(source, schema, writer);
+    const steps = writeStepsFor(schema);
+    for (let i = 0; i < steps.length; i++) steps[i](writer, source);
     return writer.getBuffer();
 }
