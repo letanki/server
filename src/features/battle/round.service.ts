@@ -79,6 +79,7 @@ export class RoundService {
             for (const c of players) {
                 if (c.statsFlushedForRound) continue;
                 void StatsService.flushRound(c, battle, outcomes.get(c) ?? "none");
+                this._contributeToClanMissions(c);
                 c.statsFlushedForRound = true;
             }
         });
@@ -266,6 +267,18 @@ export class RoundService {
         const bluePot = totalTeamScore > 0 ? Math.floor((fund * blueScore) / totalTeamScore) : Math.floor(fund / 2);
 
         return result(new Map<GameClient, number>([...splitByScore(red, redPot), ...splitByScore(blue, bluePot)]));
+    }
+
+    /** Feeds a player's round battle contribution into their clan's daily missions (no-op if not in a clan). */
+    private _contributeToClanMissions(client: GameClient): void {
+        const user = client.user;
+        if (!user?.clanId) return;
+        void this.server.clanService.applyRoundContribution(user, {
+            kills: client.kills,
+            battleScore: client.battleScore,
+            crystals: Math.round(client.roundStats.crystalsEarned),
+            goldBox: client.roundStats.suppliesPickedByType["gold"] ?? 0,
+        }, this.server);
     }
 
     /**

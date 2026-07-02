@@ -8,6 +8,7 @@ import { LoadDependencies } from "@/features/loader/loader.packets";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as ClanPackets from "./clan.packets";
 import type { ClanDocument } from "./clan.model";
+import { CLAN_MISSION_ICON_RESOURCES } from "./clan.missions.data";
 import { positionPermissions } from "./clan.roles";
 
 /** The images the not-in-clan window shows (intro illustration + clan card), plus the rankings podium. */
@@ -163,6 +164,29 @@ export class SetClanLogoHandler implements IPacketHandler<ClanPackets.SetClanLog
     public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanLogoPacket): Promise<void> {
         if (!client.user || !packet.image.length) return;
         await server.clanService.setClanLogo(client.user, packet.image);
+    }
+}
+
+/** Client opens the clan missions ("DAILY_QUEST_MISSIONS") tab → refresh the daily set (regenerate if the
+ *  day/week rolled over), then send the mission list. Prizes are auto-claimed on completion, so there's no
+ *  claim packet to handle. */
+export class OpenClanMissionsHandler implements IPacketHandler<ClanPackets.OpenClanMissionsPacket> {
+    public readonly packetId = ClanPackets.OpenClanMissionsPacket.getId();
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
+        if (!client.user?.clanId) return;
+        const clan = await server.clanService.getClanById(client.user.clanId);
+        if (!clan) return;
+        const fresh = await server.clanService.ensureMissions(clan);
+        const views = server.clanService.buildMissionViews(fresh);
+        // The mission icon is a Resource on the wire and the client resolves it DURING deserialization —
+        // if the icon isn't loaded it throws "Resource <id> not found" and drops the whole packet (the
+        // window stays on the loading spinner). So preload the icons first, then send the list.
+        const iconResources = ResourceManager.getBulkResources([...CLAN_MISSION_ICON_RESOURCES]);
+        const callbackId = server.registerDynamicCallback((c) => {
+            server.removeDynamicCallback(callbackId);
+            c.sendPacket(new ClanPackets.ShowClanMissionsPacket(views));
+        });
+        client.sendPacket(new LoadDependencies({ resources: iconResources }, callbackId));
     }
 }
 

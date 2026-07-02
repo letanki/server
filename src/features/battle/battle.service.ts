@@ -457,6 +457,15 @@ export class BattleService {
             const client = this.server.findClientByUsername(user.username);
             if (client && !client.isSpectator && !client.statsFlushedForRound) {
                 void StatsService.flushRound(client, battle, StatsService.countsWinLoss(battle) ? "loss" : "none");
+                // Leaving mid-round still contributes what the player did toward the clan's daily missions.
+                if (client.user?.clanId) {
+                    void this.server.clanService.applyRoundContribution(client.user, {
+                        kills: client.kills,
+                        battleScore: client.battleScore,
+                        crystals: Math.round(client.roundStats.crystalsEarned),
+                        goldBox: client.roundStats.suppliesPickedByType["gold"] ?? 0,
+                    }, this.server);
+                }
                 client.statsFlushedForRound = true;
             }
         }

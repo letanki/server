@@ -1,7 +1,11 @@
+import { UpdateCrystals } from "@/features/profile/profile.packets";
+import type { GameServer } from "@/server/game.server";
 import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
-import { ClanView, ClanMemberView } from "./clan.packets";
-import Clan, { ClanDocument } from "./clan.model";
+import { ResourceManager } from "@/utils/resource.manager";
+import { ClanView, ClanMemberView, ClanMissionView } from "./clan.packets";
+import Clan, { ClanDocument, IClanMission } from "./clan.model";
+import { CLAN_MISSION_TEMPLATES, IClanMissionContribution, IClanMissionTemplate, MISSION_POINTS } from "./clan.missions.data";
 import { ClanPermissionFlag, ClanPosition, isValidPosition, outranks, positionHasPermission } from "./clan.roles";
 import { saveClanLogo } from "./clan.logo";
 
@@ -10,6 +14,22 @@ function msToLong(ms: number): Buffer {
     const b = Buffer.alloc(8);
     b.writeBigInt64BE(BigInt(Math.floor(ms)));
     return b;
+}
+
+/** Next 00:00 UTC — when the daily clan mission set regenerates. */
+function nextDailyReset(): Date {
+    const d = new Date();
+    d.setUTCHours(24, 0, 0, 0);
+    return d;
+}
+
+/** Next Monday 00:00 UTC — when weeklyClanScore resets. */
+function nextWeeklyReset(): Date {
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    const daysUntilMonday = ((8 - d.getUTCDay()) % 7) || 7;
+    d.setUTCDate(d.getUTCDate() + daysUntilMonday);
+    return d;
 }
 
 export const CLAN_CREATION_COST = 500000; // crystals to found a clan (matches InitUserClanModels)
@@ -449,17 +469,157 @@ export class ClanService {
         // we don't track yet, so they stay 0.
         const counters = (m.stats as { counters?: Map<string, number> } | undefined)?.counters;
         const stat = (key: string): number => counters?.get(key) ?? 0;
+        const uid = String(m._id);
         return {
             lastOnlineDate: msToLong((m.lastLogin ?? m.createdAt ?? new Date()).getTime()), // member's last login (ms Long)
             nick: m.username,
             deaths: stat("deaths"),
             kills: stat("kills"),
             score: m.experience ?? 0,
-            clanScore: 0,
-            weeklyClanScore: 0,
+            clanScore: clan.clanScore?.get(uid) ?? 0, // lifetime clan-mission contribution points
+            weeklyClanScore: clan.weeklyClanScore?.get(uid) ?? 0, // this week's contribution points
             permission: this.getPosition(clan, m._id),
             secondsInClan: this.secondsInClan(clan, m._id),
             minesUsed: stat("mines_used"),
         };
+    }
+
+    // ---- Clan missions (daily collective goals — see clan.missions.data) ----
+
+    /** Builds the fresh daily mission set (stable ids within a UTC day so concurrent regens agree). */
+    private generateMissions(): IClanMission[] {
+        const base = Math.floor(Date.now() / 86_400_000) * 10; // day number × 10 → unique, int32-safe ids
+        return CLAN_MISSION_TEMPLATES.map((t, i) => ({
+            id: base + i,
+            icon: ResourceManager.getIdlowById(t.iconResource), // resolve the named icon → its wire idLow
+            metricKey: t.metricKey,
+            criteria: t.criteria,
+            progress: 0,
+            completed: false,
+        }));
+    }
+
+    /** Regenerates the daily mission set and/or resets weeklyClanScore if their windows have passed. Uses
+     *  targeted $set (never a full-doc save) so it can't clobber concurrent contribution $inc's, then returns
+     *  the authoritative clan. Called on opening the missions window. */
+    public async ensureMissions(clan: ClanDocument): Promise<ClanDocument> {
+        const now = Date.now();
+        const regen = !clan.missions?.length || !clan.missionResetAt || now >= clan.missionResetAt.getTime();
+        const weekly = !clan.weeklyResetAt || now >= clan.weeklyResetAt.getTime();
+        if (!regen && !weekly) return clan;
+        const set: Record<string, unknown> = {};
+        if (regen) { set.missions = this.generateMissions(); set.missionResetAt = nextDailyReset(); }
+        if (weekly) { set.weeklyClanScore = {}; set.weeklyResetAt = nextWeeklyReset(); }
+        try {
+            await Clan.updateOne({ _id: clan._id }, { $set: set });
+        } catch (error: any) {
+            // Never let a mission-refresh DB error bubble up (the packet dispatcher closes the connection on
+            // a thrown handler). Fall back to the in-memory regen so the window still populates.
+            logger.error(`[clan-missions] ensureMissions update failed for [${clan.tag}]`, { error: error.message });
+            if (regen) { clan.missions = this.generateMissions() as any; clan.missionResetAt = nextDailyReset(); }
+            return clan;
+        }
+        return (await this.getClanById(clan._id)) ?? clan;
+    }
+
+    /** Wire views for the mission window (progress clamped to target; shared countdown to the daily reset). */
+    public buildMissionViews(clan: ClanDocument): ClanMissionView[] {
+        const secondsToReset = clan.missionResetAt
+            ? Math.max(0, Math.floor((clan.missionResetAt.getTime() - Date.now()) / 1000))
+            : 0;
+        return (clan.missions ?? []).map((m) => {
+            const t = CLAN_MISSION_TEMPLATES.find((x) => x.metricKey === m.metricKey);
+            return {
+                id: m.id,
+                // Resolve the icon fresh from the template (not the stored m.icon), so missions saved before
+                // the icon fix still send a valid, preloaded resource id.
+                icon: t ? ResourceManager.getIdlowById(t.iconResource) : m.icon,
+                description: t?.description ?? m.metricKey,
+                prizes: (t?.prizes ?? []).map((p) => ({ count: p.count, name: p.name })),
+                criteria: m.criteria,
+                progress: Math.min(m.progress, m.criteria),
+                secondsToReset,
+                completed: m.completed,
+            };
+        });
+    }
+
+    /**
+     * Applies one member's per-round battle contribution to their clan's missions: advances each matching
+     * active mission (atomic $inc, guarded on `completed:false`), credits the member's clan/weekly score +
+     * the clan rating by the normalised points (round(applied/criteria × MISSION_POINTS)), and on any mission
+     * reaching its target flips it complete (once, via an atomic guard) and auto-grants the prize to ALL
+     * members. Fire-and-forget from the round-flush sites; the clan doc is shared, so this only uses atomic
+     * updates (never a full save).
+     */
+    public async applyRoundContribution(user: UserDocument, contribution: IClanMissionContribution, server: GameServer): Promise<void> {
+        if (!user.clanId) return;
+        const clan = await this.getClanById(user.clanId);
+        if (!clan || !clan.missions?.length || !clan.missionResetAt) return;
+        if (Date.now() >= clan.missionResetAt.getTime()) return; // stale set — regenerates on next window open
+        const uid = String(user._id);
+        const byMetric: Record<string, number> = {
+            kills: contribution.kills,
+            battleScore: contribution.battleScore,
+            crystals: contribution.crystals,
+            goldBox: contribution.goldBox,
+        };
+
+        let memberPoints = 0;
+        for (const m of clan.missions) {
+            if (m.completed) continue;
+            const delta = byMetric[m.metricKey] ?? 0;
+            const applied = Math.min(delta, Math.max(0, m.criteria - m.progress));
+            if (applied <= 0) continue;
+            await Clan.updateOne(
+                { _id: clan._id, missions: { $elemMatch: { id: m.id, completed: false } } },
+                { $inc: { "missions.$.progress": applied } }
+            );
+            memberPoints += Math.round((applied / m.criteria) * MISSION_POINTS);
+        }
+        if (memberPoints > 0) {
+            await Clan.updateOne(
+                { _id: clan._id },
+                { $inc: { [`clanScore.${uid}`]: memberPoints, [`weeklyClanScore.${uid}`]: memberPoints, rating: memberPoints } }
+            );
+        }
+
+        // Detect newly-completed missions from a fresh read; the update that flips `completed` wins the race
+        // and grants the prize exactly once.
+        const fresh = await this.getClanById(clan._id);
+        if (!fresh) return;
+        for (const m of fresh.missions) {
+            if (m.completed || m.progress < m.criteria) continue;
+            const res = await Clan.updateOne(
+                { _id: clan._id, missions: { $elemMatch: { id: m.id, completed: false } } },
+                { $set: { "missions.$.completed": true } }
+            );
+            if (res.modifiedCount > 0) {
+                const t = CLAN_MISSION_TEMPLATES.find((x) => x.metricKey === m.metricKey);
+                if (t) await this.grantClanPrizes(fresh, t, server);
+            }
+        }
+    }
+
+    /** Auto-claim: grants a completed mission's prizes to EVERY current member (persisted via $inc), and
+     *  live-refreshes online members (crystal balance + in-memory supply counts). */
+    private async grantClanPrizes(clan: ClanDocument, template: IClanMissionTemplate, server: GameServer): Promise<void> {
+        for (const p of template.prizes) {
+            const field = p.item === "crystals" ? "crystals" : `supplies.${p.item}`;
+            await User.updateMany({ _id: { $in: clan.members } }, { $inc: { [field]: p.count } });
+        }
+        const memberIds = new Set(clan.members.map((id) => String(id)));
+        for (const client of server.getClients()) {
+            if (!client.user || !memberIds.has(String(client.user._id))) continue;
+            for (const p of template.prizes) {
+                if (p.item === "crystals") {
+                    client.user.crystals += p.count;
+                    client.sendPacket(new UpdateCrystals(client.user.crystals));
+                } else {
+                    client.user.supplies.set(p.item, (client.user.supplies.get(p.item) ?? 0) + p.count);
+                }
+            }
+        }
+        logger.info(`Clan [${clan.tag}] completed mission "${template.description}" — prizes granted to ${clan.members.length} members.`);
     }
 }

@@ -694,3 +694,41 @@ export class ShowForeignClanWindowPacket extends BasePacket {
     }
     static getId(): number { return -1855118498; }
 }
+
+export interface ClanMissionView {
+    id: number;
+    icon: number; // icon resource idLow (sent as an 8-byte Resource)
+    description: string;
+    prizes: { count: number; name: string }[];
+    criteria: number; // clan-wide target
+    progress: number; // clan-wide progress (clamped to criteria on the wire)
+    secondsToReset: number; // countdown until the mission set resets
+    completed: boolean; // drives the client's GET PRIZE vs PRIZE_CLAIMED (we auto-claim, so completed == claimed)
+}
+
+/** C->S: open the clan missions ("DAILY_QUEST_MISSIONS") tab. Empty body. */
+export class OpenClanMissionsPacket extends BasePacket {
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return new BufferWriter().getBuffer(); }
+    static getId(): number { return -2127613673; }
+}
+
+/** S->C: the clan mission list (also pushed on progress change). Body = int32 count + count × mission
+ *  (int32 id, Resource icon, optString description, int32 prizeCount + prizes{int32 count, optString name},
+ *  int32 criteria, int32 progress, int32 secondsToReset, bool completed). */
+export class ShowClanMissionsPacket extends BasePacket {
+    constructor(private readonly missions: ClanMissionView[]) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const w = new BufferWriter().writeInt32BE(this.missions.length);
+        for (const m of this.missions) {
+            w.writeInt32BE(m.id).writeResource(m.icon).writeOptionalString(m.description);
+            w.writeInt32BE(m.prizes.length);
+            for (const p of m.prizes) w.writeInt32BE(p.count).writeOptionalString(p.name);
+            w.writeInt32BE(m.criteria).writeInt32BE(m.progress).writeInt32BE(m.secondsToReset);
+            w.writeUInt8(m.completed ? 1 : 0);
+        }
+        return w.getBuffer();
+    }
+    static getId(): number { return 1720177051; }
+}
