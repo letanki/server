@@ -16,7 +16,9 @@ export class ActivateTankPacket extends BasePacket {
 export class ActivateSupplyCommandPacket extends BasePacket {
     static readonly schema: PacketSchema = [{ name: "itemId", type: "string" }];
     itemId: string | null = null;
-    read(buffer: Buffer): void { readSchema(this, ActivateSupplyCommandPacket.schema, buffer); }
+    // HOT PATH — hand-written monomorphic read (received on every supply activation; mine-spam macros fire
+    // this hundreds of times/second). Byte-identical to `schema`.
+    read(buffer: Buffer): void { this.itemId = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return writeSchema(this, ActivateSupplyCommandPacket.schema); }
     static getId(): number { return -2102525054; }
 }
@@ -32,7 +34,14 @@ export class ActivatedSupplyPacket extends BasePacket {
     itemId: string | null; cooldownMs: number; flag: number;
     constructor(itemId: string | null = null, cooldownMs: number = 0, flag: number = 1) { super(); this.itemId = itemId; this.cooldownMs = cooldownMs; this.flag = flag; }
     read(buffer: Buffer): void { readSchema(this, ActivatedSupplyPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ActivatedSupplyPacket.schema); }
+    // HOT PATH — hand-written monomorphic write (sent back to the miner on every activation). Byte-identical to `schema`.
+    write(): Buffer {
+        return new BufferWriter()
+            .writeOptionalString(this.itemId)
+            .writeInt32BE(this.cooldownMs)
+            .writeInt8(this.flag)
+            .getBuffer();
+    }
     static getId(): number { return 2032104949; }
 }
 
@@ -148,7 +157,20 @@ export class FullMoveCommandPacket extends BasePacket implements BattleTypes.IFu
         { name: "direction", type: "f32" },
     ];
     clientTime: number = 0; incarnation: number = 0; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null; direction: number = 0;
-    read(buffer: Buffer): void { readSchema(this, FullMoveCommandPacket.schema, buffer); }
+    // HOT PATH — hand-written monomorphic read (received on every movement tick from every client). The
+    // generic readSchema shares one megamorphic property site across all packet types; this doesn't. Must
+    // stay byte-identical to `schema` above.
+    read(buffer: Buffer): void {
+        const r = new BufferReader(buffer);
+        this.clientTime = r.readInt32BE();
+        this.incarnation = r.readInt16BE();
+        this.angularVelocity = r.readOptionalVector3();
+        this.control = r.readInt8();
+        this.linearVelocity = r.readOptionalVector3();
+        this.orientation = r.readOptionalVector3();
+        this.position = r.readOptionalVector3();
+        this.direction = r.readFloatBE();
+    }
     write(): Buffer { return writeSchema(this, FullMoveCommandPacket.schema); }
     static getId(): number { return -1683279062; }
 }
@@ -166,7 +188,19 @@ export class FullMovePacket extends BasePacket implements BattleTypes.IFullMoveP
     nickname: string | null; angularVelocity: BattleTypes.IVector3 | null; control: number; linearVelocity: BattleTypes.IVector3 | null; orientation: BattleTypes.IVector3 | null; position: BattleTypes.IVector3 | null; direction: number;
     constructor(data: BattleTypes.IFullMovePacketData) { super(); this.nickname = data.nickname; this.angularVelocity = data.angularVelocity; this.control = data.control; this.linearVelocity = data.linearVelocity; this.orientation = data.orientation; this.position = data.position; this.direction = data.direction; }
     read(buffer: Buffer): void { readSchema(this, FullMovePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, FullMovePacket.schema); }
+    // HOT PATH — hand-written monomorphic write (broadcast to every client on every movement tick). Must
+    // stay byte-identical to `schema` above.
+    write(): Buffer {
+        return new BufferWriter()
+            .writeOptionalString(this.nickname)
+            .writeOptionalVector3(this.angularVelocity)
+            .writeInt8(this.control)
+            .writeOptionalVector3(this.linearVelocity)
+            .writeOptionalVector3(this.orientation)
+            .writeOptionalVector3(this.position)
+            .writeFloatBE(this.direction)
+            .getBuffer();
+    }
     static getId(): number { return 1516578027; }
 }
 
@@ -181,7 +215,17 @@ export class MoveCommandPacket extends BasePacket implements BattleTypes.IMoveCo
         { name: "position", type: "vector3" },
     ];
     clientTime: number = 0; incarnation: number = 0; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null;
-    read(buffer: Buffer): void { readSchema(this, MoveCommandPacket.schema, buffer); }
+    // HOT PATH — hand-written monomorphic read (see FullMoveCommandPacket). Byte-identical to `schema`.
+    read(buffer: Buffer): void {
+        const r = new BufferReader(buffer);
+        this.clientTime = r.readInt32BE();
+        this.incarnation = r.readInt16BE();
+        this.angularVelocity = r.readOptionalVector3();
+        this.control = r.readInt8();
+        this.linearVelocity = r.readOptionalVector3();
+        this.orientation = r.readOptionalVector3();
+        this.position = r.readOptionalVector3();
+    }
     write(): Buffer { return writeSchema(this, MoveCommandPacket.schema); }
     static getId(): number { return 329279865; }
 }
@@ -196,9 +240,21 @@ export class MovePacket extends BasePacket implements BattleTypes.IMovePacket {
         { name: "position", type: "vector3" },
     ];
     nickname: string | null = null; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null;
-    constructor(data: BattleTypes.IMovePacketData) { super(); Object.assign(this, data); }
+    // Explicit field assignment (not Object.assign) so every instance shares one hidden class — keeps the
+    // hot write() below monomorphic and avoids Object.assign's per-relay hasOwnProperty scan.
+    constructor(data: BattleTypes.IMovePacketData) { super(); this.nickname = data.nickname; this.angularVelocity = data.angularVelocity; this.control = data.control; this.linearVelocity = data.linearVelocity; this.orientation = data.orientation; this.position = data.position; }
     read(buffer: Buffer): void { readSchema(this, MovePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, MovePacket.schema); }
+    // HOT PATH — hand-written monomorphic write (broadcast every movement tick). Byte-identical to `schema`.
+    write(): Buffer {
+        return new BufferWriter()
+            .writeOptionalString(this.nickname)
+            .writeOptionalVector3(this.angularVelocity)
+            .writeInt8(this.control)
+            .writeOptionalVector3(this.linearVelocity)
+            .writeOptionalVector3(this.orientation)
+            .writeOptionalVector3(this.position)
+            .getBuffer();
+    }
     static getId(): number { return -64696933; }
 }
 
