@@ -119,6 +119,16 @@ export class GarageWorkflow {
         client.sendPacket(new SetLayout(3));
         client.sendPacket(new GaragePackets.UnloadGaragePacket());
 
+        this.applyEquipmentChange(client, server);
+
+        client.sendPacket(new ConfirmLayoutChange(3, 3));
+    }
+
+    /** Applies a pending equipment change (flagged via client.equipmentChangedInGarage) to the current
+     *  battle: loads the new hull/turret/paint resources on every other client, then respawns this player
+     *  with the new equipment (or defers the held spawn if they were dead). No-op when nothing changed.
+     *  Shared by the garage→battle return flow and by test commands that swap equipment in-battle. */
+    public static applyEquipmentChange(client: GameClient, server: GameServer): void {
         if (client.equipmentChangedInGarage) {
             client.equipmentChangedInGarage = false;
             client.pendingEquipmentRespawn = true;
@@ -184,8 +194,6 @@ export class GarageWorkflow {
                 this._triggerSelfDestructForRespawn(client, server);
             }
         }
-
-        client.sendPacket(new ConfirmLayoutChange(3, 3));
     }
 
     public static initializeGarage(client: GameClient, server: GameServer): void {
