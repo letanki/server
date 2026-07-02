@@ -64,12 +64,25 @@ export class MineService {
         const { user, currentBattle: battle, battlePosition } = client;
         if (!user || !battle || !battlePosition || client.battleState !== "active") return;
 
+        // HOIST all Mongoose access OUT of the per-mine loop. `user.username` and `battle.teamOf(user)` go
+        // through Mongoose getters/virtuals — and the `.id` virtual inside teamOf allocates a hex string per
+        // call. Doing them per mine turned a big minefield into O(mines) Mongoose calls on EVERY movement
+        // packet, which pinned a CPU core (profiled: ~77% of CPU under checkTriggers → idGetter/Document.get/
+        // slice). mine.owner/mine.ownerTeam are already plain values, so the in-loop test needs no document.
+        const myName = user.username;
+        const isDM = battle.settings.battleMode === BattleMode.DM;
+        const myTeam = isDM ? -1 : battle.teamOf(user);
+        const px = battlePosition.x, py = battlePosition.y, pz = battlePosition.z;
+        const r2 = MINE_TRIGGER_RADIUS * MINE_TRIGGER_RADIUS;
+
         for (const mine of battle.activeMines.values()) {
-            if (!mine.armed || !this._isEnemy(battle, client, mine.owner, mine.ownerTeam)) continue;
-            const dx = mine.position.x - battlePosition.x;
-            const dy = mine.position.y - battlePosition.y;
-            const dz = mine.position.z - battlePosition.z;
-            if (dx * dx + dy * dy + dz * dz <= MINE_TRIGGER_RADIUS * MINE_TRIGGER_RADIUS) {
+            if (!mine.armed) continue;
+            if (mine.owner === myName) continue;              // your own mine never triggers on you
+            if (!isDM && mine.ownerTeam === myTeam) continue; // a teammate's mine (team modes)
+            const dx = mine.position.x - px;
+            const dy = mine.position.y - py;
+            const dz = mine.position.z - pz;
+            if (dx * dx + dy * dy + dz * dz <= r2) {
                 this._detonate(battle, mine.id, client);
                 break;
             }
@@ -105,10 +118,4 @@ export class MineService {
         logger.info(`Mine ${id} (${mine.owner}) detonated on ${victimClient.user.username} in battle ${battle.battleId}`);
     }
 
-    /** A tank that should trigger `mine`: not the owner, and (team modes) on the opposing team. */
-    private _isEnemy(battle: Battle, client: GameClient, owner: string, ownerTeam: number): boolean {
-        if (client.user!.username === owner) return false;
-        if (battle.settings.battleMode === BattleMode.DM) return true; // everyone is an enemy in DM
-        return battle.teamOf(client.user!) !== ownerTeam;
-    }
 }
