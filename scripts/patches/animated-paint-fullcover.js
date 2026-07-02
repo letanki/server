@@ -14,10 +14,14 @@
  * do activateTank) o material fica no uvTransform padrão (identidade) -> tira espalhada,
  * frame 0 congelado ("modelo antigo").
  *
- * Edits (3):
+ * Edits (4):
  *   1. getproperty scaleX -> frameWidth   (uvTransformConst[0])  -> 1 frame cobre o tanque
  *   2. getproperty scaleY -> frameHeight  (uvTransformConst[5])
  *   3. drawTransparent chama update()     (como o drawOpaque)     -> anima/janela no spawn
+ *   4. remove a guarda de early-return do update() (`if(ultimoFrame==frameAtual) return`).
+ *      O uvTransformConst é um buffer COMPARTILHADO por draw; com o frame parado (spawn) a
+ *      guarda pulava a regravação e o buffer ficava com lixo -> faixa. Sem a guarda, todo
+ *      draw regrava a janela do frame atual (parado = frame atual cobrindo o tanque todo).
  * Para folhas "corretas" (frame == detail) scaleX já == frameWidth (no-op). Só afeta
  * pinturas (nenhum efeito usa AnimatedPaintMaterial).
  */
@@ -27,6 +31,8 @@ const FRAME_H = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPai
 const UPDATE = 'QName(PackageNamespace(""), "update")';
 // bloco do drawTransparent, do nome até o callsupervoid (p/ inserir o update() dentro dele)
 const DRAW_TRANSP_RE = /name "drawTransparent"[\s\S]*?callsupervoid\s+QName\(Namespace\("http:\/\/alternativaplatform\.com\/en\/alternativa3d"\), "drawTransparent"\), 7/;
+// guarda de early-return do update(): getproperty a4d5069f ; getproperty b4f88b65 ; ifne LX ; returnvoid
+const GUARD_RE = /(getproperty\s+QName\(PrivateNamespace\("alternativa\.tanks\.materials:AnimatedPaintMaterial"\), "a4d5069f"\)\s*getlocal0\s*getproperty\s+QName\(PrivateNamespace\("alternativa\.tanks\.materials:AnimatedPaintMaterial"\), "b4f88b65"\)\s*)ifne(\s+)(L\d+)(\s*returnvoid)/;
 
 module.exports = {
   id: 'animated-paint-fullcover',
@@ -57,12 +63,17 @@ module.exports = {
         }
       }
 
+      // 4: remove a guarda de early-return do update() -> sempre regrava o uvTransform.
+      // guarda: getproperty a4d5069f ... getproperty b4f88b65 ; ifne LX ; returnvoid ; LX:
+      const g = t.replace(GUARD_RE, '$1pop\n      pop\n      jump$2$3$4');
+      if (g !== t) { t = g; edits++; } else if (/pop\n      pop\n      jump/.test(t)) already++;
+
       if (t !== c.text) c.save(t);
     }
     if (!seen) throw new Error('AnimatedPaintMaterial não encontrado (base é hardware.swf?)');
-    if (edits === 0 && already >= 3) return { edits: 0, note: 'já aplicado' };
-    if (edits !== 3) throw new Error(`esperava 3 edits, fez ${edits} (already=${already})`);
-    log('scaleX/Y→frameWidth/Height + drawTransparent chama update()');
+    if (edits === 0 && already >= 4) return { edits: 0, note: 'já aplicado' };
+    if (edits !== 4) throw new Error(`esperava 4 edits, fez ${edits} (already=${already})`);
+    log('scaleX/Y→frameWidth/Height + drawTransparent update() + update() sem guarda');
     return { edits };
   },
 };
