@@ -18,6 +18,7 @@ import { DominationService } from "./domination.service";
 import { evictMapData, getMapCeilingBox, getMapGeometries } from "@/maps/mapData";
 import { evictMapCollision } from "@/maps/mapCollision";
 import logger from "@/utils/logger";
+import { StatsService } from "@/features/stats/stats.service";
 import { Battle, BattleMode, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
 import { DestroyTankPacket, RemoveTankPacket, UpdateSpectatorListPacket, UserDisconnectedDmPacket, UserDisconnectTeamPacket } from "./battle.packets";
 import { UnloadSpaceBattlePacket } from "./battle-init.packets";
@@ -448,6 +449,17 @@ export class BattleService {
         this.server.garageService.clearEquipCooldowns(userId);
 
         const wasSpectator = battle.spectators.some((s) => s.id === userId);
+
+        // Leaving a LIVE match counts as a loss and flushes the round's accumulated stats. Only real
+        // players during active play — spectators, the results-pause and reconnect flows don't penalise.
+        const wasPlayer = [...battle.users, ...battle.usersBlue, ...battle.usersRed].some((u) => u.id === userId);
+        if (wasPlayer && battle.roundState === BattleRoundState.RUNNING) {
+            const client = this.server.findClientByUsername(user.username);
+            if (client && !client.isSpectator && !client.statsFlushedForRound) {
+                void StatsService.flushRound(client, battle, StatsService.countsWinLoss(battle) ? "loss" : "none");
+                client.statsFlushedForRound = true;
+            }
+        }
 
         battle.users = battle.users.filter((u) => u.id !== userId);
         battle.usersBlue = battle.usersBlue.filter((u) => u.id !== userId);

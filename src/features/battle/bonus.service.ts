@@ -145,6 +145,9 @@ export class BonusService {
 
         battle.broadcast(new TakeBonusPacket(id)); // pickup animation/sound for everyone
         this.removeBonus(battle, id);
+        // Metrics: a field drop was picked up (all types — supplies, crystal/gold/special boxes, medkit).
+        client.roundStats.suppliesPicked++;
+        client.roundStats.suppliesPickedByType[bonus.type] = (client.roundStats.suppliesPickedByType[bonus.type] ?? 0) + 1;
         void this._applyEffect(client, battle, bonus.type);
     }
 
@@ -170,6 +173,7 @@ export class BonusService {
             try {
                 const updated = await this.server.userService.updateResources(user.id, { crystals: user.crystals + crystals });
                 client.user = updated;
+                client.roundStats.crystalsEarned += crystals; // metrics: crystals earned from field drops
                 client.sendPacket(new UpdateCrystals(updated.crystals));
             } catch (error: any) {
                 logger.error(`Failed to grant ${crystals} crystals from bonus to ${user.username}`, { error: error.message });

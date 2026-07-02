@@ -87,6 +87,12 @@ export class CombatService {
         const shownDamage = Math.round(fatal ? Math.min(realDamage, hpBefore) : realDamage);
         const shownType = fatal ? 2 : damageType;
 
+        // Metrics: the damage actually removed (excludes self-damage — ricochet/splash/self-destruct).
+        if (shooterUser && shooterUser.id !== targetUser.id) {
+            shooterClient.roundStats.damageDealt += shownDamage;
+            targetClient.roundStats.damageTaken += shownDamage;
+        }
+
         battle.broadcast(new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }));
         battle.broadcast(new DamageIndicatorPacket(targetUser.username, shownDamage, shownType));
         logger.info(`${shooterClient.user?.username} hit ${targetUser.username}: ${Math.round(realDamage)} dmg (hull ${hullHP}hp) -> ${Math.round(targetClient.currentHealth)}/10000`);
@@ -129,6 +135,7 @@ export class CombatService {
     public registerSuicideDeath(battle: Battle, client: GameClient): void {
         if (!client.user) return;
         client.deaths++;
+        client.roundStats.suicides++;
         this._broadcastUserStat(battle, client, client.user);
         this.events.emit("tankDestroyed", { battle, client });
     }
@@ -159,6 +166,7 @@ export class CombatService {
             killerClient.kills++;
             killerClient.battleScore += KILL_SCORE;
             killer.experience += KILL_XP;
+            killerClient.roundStats.xpEarned += KILL_XP;
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
         }

@@ -5,6 +5,7 @@ import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import logger from "@/utils/logger";
+import { BattleOutcome, StatsService, createRoundStats } from "@/features/stats/stats.service";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { BattleEvents, BattleEventMap } from "./battle-events";
 import { BonusService } from "./bonus.service";
@@ -59,12 +60,28 @@ export class RoundService {
         const players = [...battle.clients].filter((c) => c.user && !c.isSpectator);
         const rewards = this._computeRewards(battle, players);
 
+        // Long-term metrics: fold the fund payout into each player's earned-crystals tally now (so the
+        // record reflects it); the actual stats flush is deferred until AFTER crystals are credited —
+        // _awardCrystals reloads the doc and does a full save(), which would otherwise clobber the stats
+        // write if they raced.
+        const rewardByClient = new Map(rewards.map((r) => [r.client, r.reward]));
+        const outcomes = this._computeOutcomes(battle, players);
+        for (const c of players) {
+            if (!c.statsFlushedForRound) c.roundStats.crystalsEarned += rewardByClient.get(c) ?? 0;
+        }
+
         battle.broadcast(new FinishBattlePacket(rewards.map((r) => ({ nickname: r.nickname, reward: r.reward })), ROUND_FINISH_PAUSE_MS / 1000));
         // Lobby preview watchers: the running timer they see should reset.
         this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket(battle.battleId));
 
-        // Credit the earned crystals to each player's account (persist + refresh their balance).
-        void this._awardCrystals(rewards);
+        // Credit the earned crystals, THEN flush each player's round stats (order avoids the save/updateOne race).
+        void this._awardCrystals(rewards).then(() => {
+            for (const c of players) {
+                if (c.statsFlushedForRound) continue;
+                void StatsService.flushRound(c, battle, outcomes.get(c) ?? "none");
+                c.statsFlushedForRound = true;
+            }
+        });
 
         // Carried flags fall (CTF).
         if (battle.settings.battleMode === BattleMode.CTF) {
@@ -114,7 +131,7 @@ export class RoundService {
         battle.broadcast(new ChangeFundPacket(0));
         this.bonus.clearAll(battle); // fresh round starts with no leftover drops
         const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
-        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; }
+        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; c.roundStats = createRoundStats(); c.statsFlushedForRound = false; }
 
         // A new round wipes the equipment-change cooldown (re-arm battles) for EVERY participant — the
         // whole roster, so someone in the reconnect grace window resets too. They may re-arm freely again.
@@ -249,6 +266,42 @@ export class RoundService {
         const bluePot = totalTeamScore > 0 ? Math.floor((fund * blueScore) / totalTeamScore) : Math.floor(fund / 2);
 
         return result(new Map<GameClient, number>([...splitByScore(red, redPot), ...splitByScore(blue, bluePot)]));
+    }
+
+    /**
+     * Win/loss per player at round finish. Team modes: the team with the higher score wins (score = flag
+     * captures in CTF, point score in CP, else summed player score); a tie is a draw for everyone. DM:
+     * whoever tops the scoreboard wins, the rest lose; a scoreless round has no winner. Parkour and
+     * single-player rounds count for nobody ("none" leaves streaks untouched).
+     */
+    private _computeOutcomes(battle: Battle, players: GameClient[]): Map<GameClient, BattleOutcome> {
+        const out = new Map<GameClient, BattleOutcome>();
+        const allNone = (): Map<GameClient, BattleOutcome> => {
+            for (const c of players) out.set(c, "none");
+            return out;
+        };
+        if (!StatsService.countsWinLoss(battle) || players.length < 2) return allNone();
+
+        if (battle.isTeamMode()) {
+            const red = players.filter((c) => battle.teamOf(c.user!) === 0);
+            const blue = players.filter((c) => battle.teamOf(c.user!) === 1);
+            if (red.length === 0 || blue.length === 0) return allNone();
+            const useField = battle.settings.battleMode === BattleMode.CTF || battle.settings.battleMode === BattleMode.CP;
+            const strength = (team: GameClient[], teamScore: number) =>
+                useField ? teamScore : team.reduce((s, c) => s + Math.max(0, c.battleScore), 0);
+            const redStrength = strength(red, battle.scoreRed);
+            const blueStrength = strength(blue, battle.scoreBlue);
+            if (redStrength === blueStrength) return allNone();
+            const winners = new Set(redStrength > blueStrength ? red : blue);
+            for (const c of players) out.set(c, winners.has(c) ? "win" : "loss");
+            return out;
+        }
+
+        // DM: top of the scoreboard wins (ties at the top both win); nobody scored → no winner.
+        const maxScore = Math.max(...players.map((c) => c.battleScore));
+        if (maxScore <= 0) return allNone();
+        for (const c of players) out.set(c, c.battleScore === maxScore ? "win" : "loss");
+        return out;
     }
 
     /** Persists each player's earned crystals and refreshes their displayed balance. */

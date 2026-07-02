@@ -29,6 +29,42 @@ const UserQuestSchema = new Schema<IUserQuest>(
     { _id: false }
 );
 
+/**
+ * Long-term competitive metrics per user, accumulated once per round at battle end / on leave (see
+ * StatsService). `counters` is a flexible bag keyed by `<metric>` / `<metric>:<mode>` /
+ * `<metric>:<mode>:<type>` (mode = dm/tdm/ctf/cp/as, type = normal/xpbp/parkour), so new metrics need no
+ * schema change. The scalar fields hold values that need special update logic (per-match records via $max,
+ * and win/loss streaks). Most of this isn't surfaced yet — we keep the data for future leaderboards.
+ */
+export interface IUserStats {
+    counters: Map<string, number>;
+    maxKillsInBattle: number;
+    maxDeathsInBattle: number;
+    maxCrystalsInBattle: number;
+    maxXpInBattle: number;
+    maxDamageInBattle: number;
+    currentWinStreak: number;
+    maxWinStreak: number;
+    currentLossStreak: number;
+    maxLossStreak: number;
+}
+
+const UserStatsSchema = new Schema<IUserStats>(
+    {
+        counters: { type: Map, of: Number, default: () => new Map() },
+        maxKillsInBattle: { type: Number, default: 0 },
+        maxDeathsInBattle: { type: Number, default: 0 },
+        maxCrystalsInBattle: { type: Number, default: 0 },
+        maxXpInBattle: { type: Number, default: 0 },
+        maxDamageInBattle: { type: Number, default: 0 },
+        currentWinStreak: { type: Number, default: 0 },
+        maxWinStreak: { type: Number, default: 0 },
+        currentLossStreak: { type: Number, default: 0 },
+        maxLossStreak: { type: Number, default: 0 },
+    },
+    { _id: false }
+);
+
 export interface UserAttributes {
     username: string; // display name (original casing)
     login: string; // lowercase of username — the unique, indexed key used for authentication
@@ -72,6 +108,7 @@ export interface UserAttributes {
     equippedTurret: string;
     equippedHull: string;
     equippedPaint: string;
+    stats: IUserStats; // long-term competitive metrics (see IUserStats)
     createdAt?: Date;
     lastLogin?: Date | null;
 }
@@ -134,6 +171,7 @@ const UserSchema = new Schema<UserDocument>({
     equippedTurret: { type: String, default: "smoky" },
     equippedHull: { type: String, default: "wasp" },
     equippedPaint: { type: String, default: "holiday" },
+    stats: { type: UserStatsSchema, default: () => ({}) },
     createdAt: { type: Date, default: Date.now },
     lastLogin: { type: Date, default: null },
 });

@@ -3,6 +3,7 @@ import { Protection } from "@/core/security/security.packets";
 import { SecurityService } from "@/core/security/security.service";
 import { Battle } from "@/features/battle/battle.model";
 import { TimeCheckerPacket } from "@/features/battle/battle.packets";
+import { createRoundStats, RoundStatAccumulator } from "@/features/stats/stats.service";
 import { Ping } from "@/features/system/system.packets";
 import { IPacket } from "@/packets/packet.interfaces";
 import { UserDocument } from "@/shared/models/user.model";
@@ -65,6 +66,9 @@ export class GameClient {
     this.kills = 0;
     this.deaths = 0;
     this.battleScore = 0;
+    // Long-term metrics accumulate per round in memory and flush once at round end / on leave.
+    this.roundStats = createRoundStats();
+    this.statsFlushedForRound = false;
     // A pending self-destruct belongs to the incarnation that started it — leaving/joining cancels it.
     this.selfDestructIncarnation = null;
   }
@@ -102,6 +106,11 @@ export class GameClient {
   public kills: number = 0;
   public deaths: number = 0;
   public battleScore: number = 0;
+  // Per-round competitive-metric accumulator (kills/deaths come from the fields above; the rest here).
+  // Flushed to the user's persistent `stats` at round finish / on leave, then reset. See StatsService.
+  public roundStats: RoundStatAccumulator = createRoundStats();
+  // True once this round's stats have been flushed, so finishRound + a same-round leave can't double-count.
+  public statsFlushedForRound: boolean = false;
   // When the railgun charge began (server-enforced fixed charge time = anti fire-rate hack).
   public railgunChargeStart: number = 0;
   // When the shaft entered aiming mode (the sniper damage scales with how long it has charged).

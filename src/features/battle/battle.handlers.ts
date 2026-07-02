@@ -588,6 +588,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         user.supplies.set(supplyId, count - 1);
         await User.updateOne({ _id: user._id }, { $inc: { [`supplies.${supplyId}`]: -1 } });
 
+        // Metrics: a supply was consumed from inventory (all types, incl. mine).
+        client.roundStats.suppliesUsed++;
+        client.roundStats.suppliesUsedByItem[supplyId] = (client.roundStats.suppliesUsedByItem[supplyId] ?? 0) + 1;
+        if (supplyId === "mine") client.roundStats.minesUsed++;
+
         if (supplyId === "health") {
             // Inventory repair kit: gradual regen up to a full repair. itemEffectTime is 0, so cooldown
             // is just itemRestSec (30s) — the same as the official reactivation delay.
