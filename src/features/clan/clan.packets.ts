@@ -13,11 +13,39 @@ export class KickClanMemberPacket extends BasePacket {
     static getId(): number { return 459991202; }
 }
 
+/** Owner/officer changes a member's clan position ("cargo"). Body = optionalString(nick) + int32(position 0-6). */
+export class SetClanMemberPositionPacket extends BasePacket {
+    username: string | null = null;
+    position: number = 6;
+    read(buffer: Buffer): void {
+        const r = new BufferReader(buffer);
+        this.username = r.readOptionalString();
+        this.position = r.readInt32BE();
+    }
+    write(): Buffer {
+        return new BufferWriter().writeOptionalString(this.username).writeInt32BE(this.position).getBuffer();
+    }
+    static getId(): number { return 90109270; }
+}
+
 /** Member leaves the clan. Empty body. */
 export class LeaveClanPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
     static getId(): number { return -1298483664; }
+}
+
+/** The recipient's own clan permission flags (drives the client's clan UI). Sent on clan open and whenever
+ *  the recipient's position changes. Body = int32 count + count×int32 permissionFlagValue. */
+export class ClanPermissionsPacket extends BasePacket {
+    constructor(private readonly flags: number[]) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const w = new BufferWriter().writeInt32BE(this.flags.length);
+        for (const f of this.flags) w.writeInt32BE(f);
+        return w.getBuffer();
+    }
+    static getId(): number { return -453603415; }
 }
 
 /** Post-leave cooldown shown in the not-in-clan modal. Body = int(seconds remaining, e.g. 86400 = 24h). */
@@ -429,11 +457,11 @@ export function writeLightClanModel(w: BufferWriter, v: ClanView): void {
 /** The 10-field clan MemberModel — shared by the my-clan window member vector and the add-member packet. */
 export function writeMemberModel(w: BufferWriter, m: ClanMemberView): void {
     const long = (b: Buffer) => w.writeInt32BE(b.readInt32BE(0)).writeInt32BE(b.readInt32BE(4));
-    w.writeInt32BE(m.field1).writeInt32BE(m.deaths).writeInt32BE(m.kills);
-    long(m.userId);
+    w.writeInt32BE(m.secondsInClan).writeInt32BE(m.deaths).writeInt32BE(m.kills);
+    long(m.lastOnlineDate);
     w.writeInt32BE(m.permission).writeInt32BE(m.score);
     w.writeOptionalString(m.nick);
-    w.writeInt32BE(m.field8).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
+    w.writeInt32BE(m.minesUsed).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
 }
 
 export class MyClanWindowPacket extends BasePacket {
@@ -589,11 +617,12 @@ export class ShowNotInClanWindowPacket extends BasePacket {
 }
 
 export interface ClanMemberView {
-    userId: Buffer; // 8-byte Long
+    lastOnlineDate: Buffer; // 8-byte Long — member's last-online time in ms (client shows "last seen")
     nick: string;
     deaths: number; kills: number; score: number; clanScore: number; weeklyClanScore: number;
-    permission: number; // clan role ordinal (0-6)
-    field1: number; field8: number;
+    permission: number; // clan position ordinal (0=Supreme Commander .. 6=Novice)
+    secondsInClan: number; // client shows as "time in clan" (its `.date` field)
+    minesUsed: number; // client sums these across members → the "CLAN_USED_MINES" clan stat
 }
 
 export interface ClanView {
@@ -639,11 +668,11 @@ export class ShowForeignClanWindowPacket extends BasePacket {
         w.writeOptionalString(c.tag);
         w.writeInt32BE(c.members.length);
         for (const m of c.members) {
-            w.writeInt32BE(m.field1).writeInt32BE(m.deaths).writeInt32BE(m.kills);
-            long(m.userId);
+            w.writeInt32BE(m.secondsInClan).writeInt32BE(m.deaths).writeInt32BE(m.kills);
+            long(m.lastOnlineDate);
             w.writeInt32BE(m.permission).writeInt32BE(m.score);
             w.writeOptionalString(m.nick);
-            w.writeInt32BE(m.field8).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
+            w.writeInt32BE(m.minesUsed).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
         }
         w.writeOptionalString(c.logo);
         w.writeInt32BE(c.rating);

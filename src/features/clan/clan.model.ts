@@ -6,6 +6,7 @@ export interface ClanAttributes {
     description: string; // rich text (the client allows <font>/<a> HTML)
     leaderId: Types.ObjectId; // founder / owner (a User)
     members: Types.ObjectId[]; // member Users (includes the leader)
+    positions: Map<string, number>; // userId (string) -> ClanPosition (0=Supreme Commander .. 6=Novice). Leader=0; new members default to Novice (absent = Novice).
     memberSince: Map<string, Date>; // userId (string) -> when they joined; drives the "time in clan" display
     joinRequests: Types.ObjectId[]; // Users who asked to join (pending leader approval)
     invites: Types.ObjectId[]; // Users the clan invited (pending their accept/decline)
@@ -23,6 +24,7 @@ const ClanSchema = new Schema<ClanDocument>({
     description: { type: String, default: "" },
     leaderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    positions: { type: Map, of: Number, default: () => new Map() },
     memberSince: { type: Map, of: Date, default: () => new Map() },
     joinRequests: [{ type: Schema.Types.ObjectId, ref: "User" }],
     invites: [{ type: Schema.Types.ObjectId, ref: "User" }],

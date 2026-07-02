@@ -1,13 +1,8 @@
 import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
-import { ClanView } from "./clan.packets";
+import { ClanView, ClanMemberView } from "./clan.packets";
 import Clan, { ClanDocument } from "./clan.model";
-
-/** A Mongo ObjectId (12 bytes) compressed into a stable 8-byte Long for the member wire id. */
-function objectIdToLong(id: unknown): Buffer {
-    const hex = String(id).padEnd(24, "0").slice(0, 24);
-    return Buffer.from(hex.slice(0, 16), "hex"); // first 8 bytes
-}
+import { ClanPermissionFlag, ClanPosition, isValidPosition, outranks, positionHasPermission } from "./clan.roles";
 
 /** The clan wire "id" is the creation time in MILLISECONDS (the client derives the founding date from it). */
 function msToLong(ms: number): Buffer {
@@ -38,6 +33,7 @@ export class ClanService {
             description: description ?? "",
             leaderId: user._id,
             members: [user._id],
+            positions: new Map([[String(user._id), ClanPosition.SUPREME_COMMANDER]]),
             memberSince: new Map([[String(user._id), new Date()]]),
             rating: 0,
         });
@@ -48,6 +44,18 @@ export class ClanService {
 
         logger.info(`Clan "${cleanName}" [${cleanTag}] created by ${user.username}.`);
         return clan;
+    }
+
+    /** A member's clan position. Legacy clans (no positions map) → leader=Supreme Commander, others=Novice. */
+    public getPosition(clan: ClanDocument, userId: unknown): ClanPosition {
+        const stored = clan.positions?.get(String(userId));
+        if (stored !== undefined && isValidPosition(stored)) return stored;
+        return String(clan.leaderId) === String(userId) ? ClanPosition.SUPREME_COMMANDER : ClanPosition.NOVICE;
+    }
+
+    /** Whether the member holds a permission flag (via their position's flag set). */
+    public memberHasPermission(clan: ClanDocument, userId: unknown, flag: ClanPermissionFlag): boolean {
+        return positionHasPermission(this.getPosition(clan, userId), flag);
     }
 
     public getClanById(id: unknown): Promise<ClanDocument | null> {
@@ -124,6 +132,8 @@ export class ClanService {
      *  Valid = the account exists and isn't already in a clan (and isn't the leader). */
     public async canInviteUser(leader: UserDocument, username: string): Promise<boolean> {
         if (!leader.clanId) return false;
+        const clan = await this.getClanById(leader.clanId);
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.INVITE)) return false;
         const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!target) return false;
         if (String(target._id) === String(leader._id)) return false;
@@ -135,7 +145,7 @@ export class ClanService {
     public async inviteUser(leader: UserDocument, username: string): Promise<{ clan: ClanDocument; target: UserDocument } | null> {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
-        if (!clan || String(clan.leaderId) !== String(leader._id)) return null; // only the leader invites (for now)
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.INVITE)) return null; // needs "invite"
         const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!target || target.clanId) return null;
         if (!clan.invites.some((id) => String(id) === String(target._id))) {
@@ -150,7 +160,7 @@ export class ClanService {
     public async cancelInvite(leader: UserDocument, username: string): Promise<{ clan: ClanDocument; target: UserDocument } | null> {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
-        if (!clan || String(clan.leaderId) !== String(leader._id)) return null;
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.INVITE)) return null;
         const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!target) return null;
         const before = clan.invites.length;
@@ -169,6 +179,7 @@ export class ClanService {
         if (!clan || !clan.invites.some((id) => String(id) === String(user._id))) return null;
         clan.invites = clan.invites.filter((id) => String(id) !== String(user._id)) as any;
         if (!clan.members.some((id) => String(id) === String(user._id))) clan.members.push(user._id as any);
+        clan.positions.set(String(user._id), ClanPosition.NOVICE);
         clan.memberSince.set(String(user._id), new Date());
         await clan.save();
         user.clanId = clan._id as any;
@@ -210,7 +221,7 @@ export class ClanService {
     ): Promise<ClanDocument | null> {
         if (!owner.clanId) return null;
         const clan = await this.getClanById(owner.clanId);
-        if (!clan || String(clan.leaderId) !== String(owner._id)) return null; // only the leader edits
+        if (!clan || !this.memberHasPermission(clan, owner._id, ClanPermissionFlag.EDIT_SETTINGS)) return null; // needs "edit settings"
         if (patch.description !== undefined) clan.description = patch.description ?? "";
         if (patch.minRank !== undefined) clan.minRank = patch.minRank;
         if (patch.recruiting !== undefined) clan.recruiting = patch.recruiting;
@@ -231,17 +242,42 @@ export class ClanService {
     public async kickMember(leader: UserDocument, username: string): Promise<UserDocument | null> {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
-        if (!clan || String(clan.leaderId) !== String(leader._id)) return null; // leader only
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.KICK)) return null; // needs "kick"
         const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!target || String(target._id) === String(leader._id)) return null; // not self
         if (!clan.members.some((id) => String(id) === String(target._id))) return null; // must be a member
+        if (!outranks(this.getPosition(clan, leader._id), this.getPosition(clan, target._id))) return null; // must outrank target
         clan.members = clan.members.filter((id) => String(id) !== String(target._id)) as any;
+        clan.positions.delete(String(target._id));
         clan.memberSince.delete(String(target._id));
         await clan.save();
         target.clanId = null;
         await target.save();
         logger.info(`${leader.username} kicked ${target.username} from clan [${clan.tag}].`);
         return target;
+    }
+
+    /** Changes a member's clan position ("cargo"). The actor needs CHANGE_POSITION and must strictly outrank
+     *  BOTH the target's current position AND the new one (can't touch a peer/superior, can't promote to
+     *  own rank or above). Can't target the Supreme Commander, can't target self, can't assign Supreme.
+     *  Returns { clan, target, position } or null. */
+    public async changeMemberPosition(actor: UserDocument, username: string, newPosition: number): Promise<{ clan: ClanDocument; target: UserDocument; position: ClanPosition } | null> {
+        if (!actor.clanId) return null;
+        if (!isValidPosition(newPosition) || newPosition === ClanPosition.SUPREME_COMMANDER) return null; // assigning Supreme = ownership transfer, not this action
+        const clan = await this.getClanById(actor.clanId);
+        if (!clan || !this.memberHasPermission(clan, actor._id, ClanPermissionFlag.CHANGE_POSITION)) return null; // needs "change position"
+        const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
+        if (!target || String(target._id) === String(actor._id)) return null; // not self
+        if (!clan.members.some((id) => String(id) === String(target._id))) return null; // must be a member
+        const actorPos = this.getPosition(clan, actor._id);
+        const targetPos = this.getPosition(clan, target._id);
+        if (targetPos === ClanPosition.SUPREME_COMMANDER) return null; // can't touch the owner
+        if (!outranks(actorPos, targetPos) || !outranks(actorPos, newPosition)) return null; // must outrank current & new
+        if (targetPos === newPosition) return { clan, target, position: newPosition }; // no-op
+        clan.positions.set(String(target._id), newPosition);
+        await clan.save();
+        logger.info(`${actor.username} set ${target.username}'s position to ${ClanPosition[newPosition]} in clan [${clan.tag}].`);
+        return { clan, target, position: newPosition };
     }
 
     /** `user` leaves their clan. A non-leader is just removed; a leader hands off to another member, or
@@ -252,11 +288,13 @@ export class ClanService {
         if (!clan) return null;
         const wasLeader = String(clan.leaderId) === String(user._id);
         clan.members = clan.members.filter((id) => String(id) !== String(user._id)) as any;
+        clan.positions.delete(String(user._id));
         clan.memberSince.delete(String(user._id));
         let disbanded = false;
         if (wasLeader) {
             if (clan.members.length > 0) {
                 clan.leaderId = clan.members[0] as any; // promote the next member
+                clan.positions.set(String(clan.members[0]), ClanPosition.SUPREME_COMMANDER); // new owner
                 await clan.save();
             } else {
                 await Clan.deleteOne({ _id: clan._id }).exec();
@@ -319,12 +357,13 @@ export class ClanService {
     public async acceptJoinRequest(leader: UserDocument, username: string): Promise<{ clan: ClanDocument; requester: UserDocument } | null> {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
-        if (!clan || String(clan.leaderId) !== String(leader._id)) return null; // leader only
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.MANAGE_REQUESTS)) return null; // needs "manage requests"
         const requester = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!requester || requester.clanId) return null;
         if (!clan.joinRequests.some((id) => String(id) === String(requester._id))) return null; // must have requested
         clan.joinRequests = clan.joinRequests.filter((id) => String(id) !== String(requester._id)) as any;
         if (!clan.members.some((id) => String(id) === String(requester._id))) clan.members.push(requester._id as any);
+        clan.positions.set(String(requester._id), ClanPosition.NOVICE);
         clan.memberSince.set(String(requester._id), new Date());
         await clan.save();
         requester.clanId = clan._id as any;
@@ -337,7 +376,7 @@ export class ClanService {
     public async declineAllJoinRequests(leader: UserDocument): Promise<{ tag: string; nicks: string[] } | null> {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
-        if (!clan || String(clan.leaderId) !== String(leader._id)) return null;
+        if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.MANAGE_REQUESTS)) return null;
         const nicks = await this.getJoinRequestNicks(clan);
         if (clan.joinRequests.length) {
             clan.joinRequests = [] as any;
@@ -351,7 +390,7 @@ export class ClanService {
     public async declineJoinRequest(owner: UserDocument, username: string): Promise<{ nick: string; tag: string } | null> {
         if (!owner.clanId) return null;
         const clan = await this.getClanById(owner.clanId);
-        if (!clan || String(clan.leaderId) !== String(owner._id)) return null; // only the leader (for now)
+        if (!clan || !this.memberHasPermission(clan, owner._id, ClanPermissionFlag.MANAGE_REQUESTS)) return null; // needs "manage requests"
         const requester = await User.findOne({ login: username.trim().toLowerCase() }, "username").exec();
         if (!requester) return null;
         const before = clan.joinRequests.length;
@@ -382,16 +421,20 @@ export class ClanService {
             minRank: clan.minRank ?? -1,
             joinRequests: await this.getJoinRequestNicks(clan),
             sentInvites: await this.getInviteNicks(clan),
-            members: members.map((m) => ({
-                userId: objectIdToLong(m._id),
-                nick: m.username,
-                deaths: 0, kills: 0, score: 0, clanScore: 0, weeklyClanScore: 0,
-                permission: String(m._id) === String(clan.leaderId) ? 0 : 6, // 0 = leader, 6 = recruit (official default)
-                // field1 = seconds since this member joined (the client renders it as the "time in clan",
-                // e.g. "1d 6h"). Falls back to the clan's creation date for members predating memberSince.
-                field1: this.secondsInClan(clan, m._id),
-                field8: 0,
-            })),
+            members: members.map((m) => this.buildMemberView(clan, m)),
+        };
+    }
+
+    /** The 10-field member model (row) for a clan member — shared by the panel and the live member-update
+     *  broadcast. `permission` = the member's stored clan position; `field1` = seconds in the clan. */
+    public buildMemberView(clan: ClanDocument, m: UserDocument): ClanMemberView {
+        return {
+            lastOnlineDate: msToLong((m.lastLogin ?? m.createdAt ?? new Date()).getTime()), // member's last login (ms Long)
+            nick: m.username,
+            deaths: 0, kills: 0, score: 0, clanScore: 0, weeklyClanScore: 0,
+            permission: this.getPosition(clan, m._id),
+            secondsInClan: this.secondsInClan(clan, m._id),
+            minesUsed: 0,
         };
     }
 }

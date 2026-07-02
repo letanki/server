@@ -8,6 +8,7 @@ import { LoadDependencies } from "@/features/loader/loader.packets";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as ClanPackets from "./clan.packets";
 import type { ClanDocument } from "./clan.model";
+import { positionPermissions } from "./clan.roles";
 
 /** The images the not-in-clan window shows (intro illustration + clan card), plus the rankings podium. */
 const CLAN_MODAL_RESOURCES = ["clan/intro", "clan/card", "clan/podium"] as const;
@@ -58,6 +59,8 @@ async function openClanWindowForState(client: GameClient, server: GameServer): P
         if (clan) {
             const view = await server.clanService.buildClanView(clan);
             client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
+            // Tell the client which clan actions this member may use (gates the UI buttons by their position).
+            client.sendPacket(new ClanPackets.ClanPermissionsPacket(positionPermissions(server.clanService.getPosition(clan, client.user._id))));
             return;
         }
         client.user.clanId = null; // clan no longer exists (disbanded) → fall through to not-in-clan
@@ -126,6 +129,29 @@ export class KickClanMemberHandler implements IPacketHandler<ClanPackets.KickCla
             kickedClient.sendPacket(new ClanPackets.CloseClanWindowPacket());
             kickedClient.sendPacket(new ProfilePackets.ClanNotifierData(kicked.username, null));
         }
+    }
+}
+
+/** Owner/officer changes a member's clan position ("cargo"). The service validates the actor's permission +
+ *  rank (must outrank the target and the new position, target ≠ owner/self); on success we push the target's
+ *  new permission set to their live session so their clan UI updates. */
+export class SetClanMemberPositionHandler implements IPacketHandler<ClanPackets.SetClanMemberPositionPacket> {
+    public readonly packetId = ClanPackets.SetClanMemberPositionPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanMemberPositionPacket): Promise<void> {
+        if (!client.user || !packet.username) return;
+        const result = await server.clanService.changeMemberPosition(client.user, packet.username, packet.position);
+        if (!result) return;
+        // Live-update the member's row (cargo) in EVERY online clan member's open panel (same packet the
+        // official server uses for position changes).
+        const memberView = server.clanService.buildMemberView(result.clan, result.target);
+        const clanId = String(result.clan._id);
+        for (const c of server.getClients()) {
+            if (c.user && String(c.user.clanId) === clanId) c.sendPacket(new ClanPackets.AddClanMemberPacket(memberView));
+        }
+        // Push the target's new permission set to their live session so their own clan UI re-gates.
+        const targetClient = server.findClientByUsername(result.target.username);
+        if (targetClient) targetClient.sendPacket(new ClanPackets.ClanPermissionsPacket(positionPermissions(result.position)));
+        logger.info(`${client.user.username} changed ${result.target.username}'s clan position to ${result.position}.`);
     }
 }
 
