@@ -450,7 +450,7 @@ export class ClanService {
             description: clan.description ?? "",
             name: clan.name,
             tag: clan.tag,
-            rating: clan.rating ?? 0,
+            rating: Math.round(clan.rating ?? 0), // stored as float (per-delta contribution points), rounded for the wire
             logo: clan.logo || null,
             recruiting: clan.recruiting ?? true,
             minRank: clan.minRank ?? -1,
@@ -476,8 +476,8 @@ export class ClanService {
             deaths: stat("deaths"),
             kills: stat("kills"),
             score: m.experience ?? 0,
-            clanScore: clan.clanScore?.get(uid) ?? 0, // lifetime clan-mission contribution points
-            weeklyClanScore: clan.weeklyClanScore?.get(uid) ?? 0, // this week's contribution points
+            clanScore: Math.round(clan.clanScore?.get(uid) ?? 0), // lifetime clan-mission contribution points (stored as float, rounded for the wire)
+            weeklyClanScore: Math.round(clan.weeklyClanScore?.get(uid) ?? 0), // this week's contribution points
             permission: this.getPosition(clan, m._id),
             secondsInClan: this.secondsInClan(clan, m._id),
             minesUsed: stat("mines_used"),
@@ -575,7 +575,10 @@ export class ClanService {
                 { _id: clan._id, missions: { $elemMatch: { id: m.id, completed: false } } },
                 { $inc: { "missions.$.progress": applied } }
             );
-            memberPoints += Math.round((applied / m.criteria) * MISSION_POINTS);
+            // Kept as a FLOAT (rounded only at the wire — buildMemberView / buildClanView). Contribution now
+            // arrives in small per-death deltas; rounding each one would floor sub-point deltas to 0 and lose
+            // almost all the score. Float accumulation is exact: Σ(appliedᵢ/criteria) == (Σappliedᵢ)/criteria.
+            memberPoints += (applied / m.criteria) * MISSION_POINTS;
         }
         if (memberPoints > 0) {
             await Clan.updateOne(

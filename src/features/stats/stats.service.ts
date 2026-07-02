@@ -1,5 +1,6 @@
 import type { Battle } from "@/features/battle/battle.model";
 import type { GameClient } from "@/server/game.client";
+import type { GameServer } from "@/server/game.server";
 import User from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 
@@ -10,9 +11,11 @@ export type BattleOutcome = "win" | "loss" | "none";
 
 /**
  * Per-round in-memory tally carried on a GameClient. Accumulated cheaply during play (plain number
- * increments, no DB writes), then flushed ONCE to the user's persistent stats at round end / on leave.
- * kills/deaths come from the client scoreboard fields (client.kills / client.deaths); everything else
- * lives here.
+ * increments, no DB writes). The RUNNING TOTAL for the whole round lives here; it is persisted to the
+ * user's stats in DELTAS at each flush trigger — death, disconnect, leave/kick and round-finish (see
+ * StatsService.flushDelta) — so a player who never leaves still has their progress saved every time they
+ * die. kills/deaths come from the client scoreboard fields (client.kills / client.deaths); everything
+ * else lives here. Reset (together with the flush snapshot) only at round-restart / battle entry.
  */
 export interface RoundStatAccumulator {
     xpEarned: number;
@@ -43,10 +46,28 @@ export function createRoundStats(): RoundStatAccumulator {
 }
 
 /**
- * Long-term competitive metrics. Everything is accumulated in-memory during a round and persisted in a
- * single atomic update per player at round finish / on leave — no DB writes on the combat/supply hot
- * paths. The in-memory user document is mirrored so a later user.save() (e.g. the kill-XP path) can't
- * clobber the freshly-flushed stats.
+ * A snapshot of what has already been persisted this round, carried on the GameClient alongside the
+ * accumulator. Each flush computes `current counters − snapshot` (the delta), writes only that, then
+ * updates the snapshot. This lets us flush on every death / disconnect / leave without ever double-
+ * counting when a later trigger fires. `battleScore` is tracked separately (clan-mission contribution
+ * only — it is not a persisted stat counter). Reset with the accumulator at round-restart / entry.
+ */
+export interface StatsFlushSnapshot {
+    counters: Record<string, number>;
+    battleScore: number;
+}
+
+export function createStatsSnapshot(): StatsFlushSnapshot {
+    return { counters: {}, battleScore: 0 };
+}
+
+/**
+ * Long-term competitive metrics. Accumulated in-memory during a round (no DB writes on the combat/supply
+ * hot paths) and persisted in DELTAS at each flush trigger — death, disconnect, leave/kick, round-finish
+ * — so progress is saved every life, not just when the player leaves. Each write is a single atomic $inc
+ * (order-independent, race-safe) and the in-memory user document is mirrored so a later user.save() (e.g.
+ * the kill-XP path) can't clobber the freshly-flushed stats. The round-finish/leave flush additionally
+ * settles the per-match records ($max) and win/loss streaks.
  */
 export class StatsService {
     /** The mode ("tdm") and type ("normal"/"xpbp"/"parkour") tags used to granulate every metric. */
@@ -66,16 +87,94 @@ export class StatsService {
     }
 
     /**
-     * Flushes a player's accumulated round stats into their profile: per-mode×type totals, per-match
-     * records ($max) and win/loss streaks. `outcome` "none" leaves streaks untouched (e.g. parkour, a
-     * tie, or a match with a single player). Safe to call once per round per player.
+     * The round's running counter totals for this client, as a flat map (the values the flush snapshot is
+     * diffed against). Base metrics (kills/deaths/xp/…) are expanded to their three granularities by the
+     * flush; the per-item breakdowns (item_used:<id>, bonus_taken:<type>) are already-namespaced keys and
+     * stay flat. `battleScore` is NOT here — it's clan-only and tracked separately on the snapshot.
      */
-    public static async flushRound(client: GameClient, battle: Battle, outcome: BattleOutcome): Promise<void> {
+    private static _currentCounters(client: GameClient): Record<string, number> {
+        const rs = client.roundStats;
+        const c: Record<string, number> = {
+            kills: client.kills,
+            deaths: client.deaths,
+            suicides: rs.suicides,
+            xp_earned: rs.xpEarned,
+            crystals_earned: rs.crystalsEarned,
+            supplies_used: rs.suppliesUsed,
+            mines_used: rs.minesUsed,
+            supplies_picked: rs.suppliesPicked,
+            damage_dealt: Math.round(rs.damageDealt),
+            damage_taken: Math.round(rs.damageTaken),
+        };
+        for (const [id, n] of Object.entries(rs.suppliesUsedByItem)) c[`item_used:${id}`] = n;
+        for (const [t, n] of Object.entries(rs.suppliesPickedByType)) c[`bonus_taken:${t}`] = n;
+        return c;
+    }
+
+    /**
+     * Persists everything accumulated SINCE THE LAST FLUSH — the delta between the round's running totals
+     * and the client's snapshot — then advances the snapshot. Called on every flush trigger (death,
+     * disconnect, leave/kick, round-finish), so it is safe to call many times per round without double-
+     * counting. Writes the stat counters (global + per-mode + per-mode×type) with one atomic $inc and, for
+     * clan members, feeds the same delta (kills / battle-score / crystals / gold boxes) into the clan's
+     * daily missions. Fire-and-forget — never blocks the caller.
+     */
+    public static flushDelta(client: GameClient, battle: Battle, server: GameServer): void {
         const user = client.user;
         if (!user || client.isSpectator) return;
-        // Legacy accounts created before this field: materialise the sub-doc (with defaults) so the
-        // in-memory mirror below is consistent with what we persist.
-        if (!user.stats) user.set("stats", {});
+        if (!user.stats) user.set("stats", {}); // materialise on legacy accounts so the mirror stays consistent
+
+        const cur = this._currentCounters(client);
+        const snap = client.statsSnapshot;
+        const { mode, type } = this.context(battle);
+
+        const inc: Record<string, number> = {};
+        for (const [metric, total] of Object.entries(cur)) {
+            const delta = total - (snap.counters[metric] ?? 0);
+            if (delta <= 0) continue;
+            if (metric.includes(":")) {
+                // Already-namespaced per-item breakdown (item_used:<id>, bonus_taken:<type>) — flat, no expansion.
+                inc[`stats.counters.${metric}`] = (inc[`stats.counters.${metric}`] ?? 0) + delta;
+            } else {
+                for (const k of [metric, `${metric}:${mode}`, `${metric}:${mode}:${type}`]) {
+                    inc[`stats.counters.${k}`] = (inc[`stats.counters.${k}`] ?? 0) + delta;
+                }
+            }
+        }
+
+        // Clan daily missions get the same delta (kills, battle score, crystals, gold boxes caught).
+        const clanDelta = {
+            kills: Math.max(0, (cur.kills ?? 0) - (snap.counters.kills ?? 0)),
+            battleScore: Math.max(0, client.battleScore - snap.battleScore),
+            crystals: Math.max(0, (cur.crystals_earned ?? 0) - (snap.counters.crystals_earned ?? 0)),
+            goldBox: Math.max(0, (cur["bonus_taken:gold"] ?? 0) - (snap.counters["bonus_taken:gold"] ?? 0)),
+        };
+        if (user.clanId && (clanDelta.kills || clanDelta.battleScore || clanDelta.crystals || clanDelta.goldBox)) {
+            void server.clanService.applyRoundContribution(user, clanDelta, server);
+        }
+
+        // Advance the snapshot to the current totals (do this even if nothing changed — cheap and keeps it fresh).
+        client.statsSnapshot = { counters: cur, battleScore: client.battleScore };
+
+        if (!Object.keys(inc).length) return;
+        this._mirror(user, inc, {}, {});
+        void User.updateOne({ _id: user._id }, { $inc: inc }).catch((error: any) => {
+            logger.error(`Failed to flush stat delta for ${user.username}`, { error: error?.message });
+        });
+    }
+
+    /**
+     * Round-finish / leave flush: settles the final counter delta (via flushDelta) AND the per-round
+     * aggregates that only make sense once the round is over — battles_played, win/loss, the per-match
+     * records ($max) and win/loss streaks. `outcome` "none" leaves streaks untouched (e.g. parkour, a tie,
+     * or a match with a single player). Guarded by the caller's `statsFlushedForRound` so it runs once.
+     */
+    public static flushRound(client: GameClient, battle: Battle, outcome: BattleOutcome, server: GameServer): void {
+        const user = client.user;
+        if (!user || client.isSpectator) return;
+
+        // Final counter + clan-mission delta for the round.
+        this.flushDelta(client, battle, server);
 
         const rs = client.roundStats;
         const kills = client.kills;
@@ -83,36 +182,17 @@ export class StatsService {
         const { mode, type } = this.context(battle);
 
         const inc: Record<string, number> = {};
-        // Each metric is recorded at three granularities: global, per game-mode, and per mode×type.
         const bump = (metric: string, amount: number): void => {
             if (!amount) return;
             for (const k of [metric, `${metric}:${mode}`, `${metric}:${mode}:${type}`]) {
                 inc[`stats.counters.${k}`] = (inc[`stats.counters.${k}`] ?? 0) + amount;
             }
         };
-        // A single flat counter (no mode expansion) — used for per-item / per-bonus-type breakdowns.
-        const flat = (key: string, amount: number): void => {
-            if (!amount) return;
-            inc[`stats.counters.${key}`] = (inc[`stats.counters.${key}`] ?? 0) + amount;
-        };
-
         bump("battles_played", 1);
-        bump("kills", kills);
-        bump("deaths", deaths);
-        bump("suicides", rs.suicides);
-        bump("xp_earned", rs.xpEarned);
-        bump("crystals_earned", rs.crystalsEarned);
-        bump("supplies_used", rs.suppliesUsed);
-        bump("mines_used", rs.minesUsed);
-        bump("supplies_picked", rs.suppliesPicked);
-        bump("damage_dealt", Math.round(rs.damageDealt));
-        bump("damage_taken", Math.round(rs.damageTaken));
         if (outcome === "win") bump("wins", 1);
         else if (outcome === "loss") bump("losses", 1);
-        for (const [id, n] of Object.entries(rs.suppliesUsedByItem)) flat(`item_used:${id}`, n);
-        for (const [t, n] of Object.entries(rs.suppliesPickedByType)) flat(`bonus_taken:${t}`, n);
 
-        // Per-match records: keep the best single round ever.
+        // Per-match records: keep the best single round ever (round totals, not the per-flush deltas).
         const max: Record<string, number> = {
             "stats.maxKillsInBattle": kills,
             "stats.maxDeathsInBattle": deaths,
@@ -142,11 +222,9 @@ export class StatsService {
         if (Object.keys(inc).length) update.$inc = inc;
         if (Object.keys(max).length) update.$max = max;
         if (Object.keys(set).length) update.$set = set;
-        try {
-            await User.updateOne({ _id: user._id }, update);
-        } catch (error: any) {
-            logger.error(`Failed to flush stats for ${user.username}`, { error: error.message });
-        }
+        void User.updateOne({ _id: user._id }, update).catch((error: any) => {
+            logger.error(`Failed to flush round stats for ${user.username}`, { error: error?.message });
+        });
     }
 
     /** Applies the same deltas to the in-memory user doc so a later save() writes consistent values. */

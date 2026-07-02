@@ -588,7 +588,8 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         user.supplies.set(supplyId, count - 1);
         await User.updateOne({ _id: user._id }, { $inc: { [`supplies.${supplyId}`]: -1 } });
 
-        // Metrics: a supply was consumed from inventory (all types, incl. mine).
+        // Metrics: a supply was consumed from inventory (all types, incl. mine). Accumulated here and
+        // persisted at the next flush trigger (death / disconnect / leave / round-finish).
         client.roundStats.suppliesUsed++;
         client.roundStats.suppliesUsedByItem[supplyId] = (client.roundStats.suppliesUsedByItem[supplyId] ?? 0) + 1;
         if (supplyId === "mine") client.roundStats.minesUsed++;

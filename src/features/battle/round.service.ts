@@ -6,7 +6,7 @@ import { IPacket } from "@/packets/packet.interfaces";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import logger from "@/utils/logger";
-import { BattleOutcome, StatsService, createRoundStats } from "@/features/stats/stats.service";
+import { BattleOutcome, StatsService, createRoundStats, createStatsSnapshot } from "@/features/stats/stats.service";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
 import { BattleEvents, BattleEventMap } from "./battle-events";
 import { BonusService } from "./bonus.service";
@@ -36,6 +36,10 @@ export class RoundService {
     ) {
         this.events.on("kill", (p) => this._onKill(p));
         this.events.on("flagCaptured", (p) => this._onFlagCaptured(p));
+        // Every death (combat kill, self-destruct, void) is a stats flush trigger: persist the delta so a
+        // player who never leaves still has their kills/deaths/mines/etc. saved each life. Delta-based, so
+        // it can't double-count against the later leave / round-finish flush.
+        this.events.on("tankDestroyed", ({ battle, client }) => StatsService.flushDelta(client, battle, this.server));
     }
 
     /** (Re)starts the round clock: marks the round RUNNING, tells everyone the time limit and arms
@@ -79,8 +83,7 @@ export class RoundService {
         void this._awardCrystals(rewards).then(() => {
             for (const c of players) {
                 if (c.statsFlushedForRound) continue;
-                void StatsService.flushRound(c, battle, outcomes.get(c) ?? "none");
-                this._contributeToClanMissions(c);
+                StatsService.flushRound(c, battle, outcomes.get(c) ?? "none", this.server);
                 c.statsFlushedForRound = true;
             }
         });
@@ -133,7 +136,7 @@ export class RoundService {
         battle.broadcast(new ChangeFundPacket(0));
         this.bonus.clearAll(battle); // fresh round starts with no leftover drops
         const active = [...battle.clients].filter((c) => c.user && !c.isSpectator);
-        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; c.roundStats = createRoundStats(); c.statsFlushedForRound = false; }
+        for (const c of active) { c.kills = 0; c.deaths = 0; c.battleScore = 0; c.roundStats = createRoundStats(); c.statsSnapshot = createStatsSnapshot(); c.statsFlushedForRound = false; }
 
         // A new round wipes the equipment-change cooldown (re-arm battles) for EVERY participant — the
         // whole roster, so someone in the reconnect grace window resets too. They may re-arm freely again.
@@ -270,18 +273,6 @@ export class RoundService {
         return result(new Map<GameClient, number>([...splitByScore(red, redPot), ...splitByScore(blue, bluePot)]));
     }
 
-    /** Feeds a player's round battle contribution into their clan's daily missions (no-op if not in a clan). */
-    private _contributeToClanMissions(client: GameClient): void {
-        const user = client.user;
-        if (!user?.clanId) return;
-        void this.server.clanService.applyRoundContribution(user, {
-            kills: client.kills,
-            battleScore: client.battleScore,
-            crystals: Math.round(client.roundStats.crystalsEarned),
-            goldBox: client.roundStats.suppliesPickedByType["gold"] ?? 0,
-        }, this.server);
-    }
-
     /**
      * Win/loss per player at round finish. Team modes: the team with the higher score wins (score = flag
      * captures in CTF, point score in CP, else summed player score); a tie is a draw for everyone. DM:
@@ -327,7 +318,7 @@ export class RoundService {
                 const updated = await this.server.userService.updateResources(client.user.id, { crystals: newTotal });
                 client.user = updated;
                 client.sendPacket(new UpdateCrystals(updated.crystals));
-                // Fund crystals count toward the "earn crystals in battles" daily quest.
+                // Fund crystals count toward the "earn crystals" daily quest.
                 const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals: reward });
                 if (questCompleted && !client.isDestroyed) client.sendPacket(new QuestPackets.QuestCompletedNotification());
             } catch (error: any) {

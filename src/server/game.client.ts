@@ -3,7 +3,7 @@ import { Protection } from "@/core/security/security.packets";
 import { SecurityService } from "@/core/security/security.service";
 import { Battle } from "@/features/battle/battle.model";
 import { TimeCheckerPacket } from "@/features/battle/battle.packets";
-import { createRoundStats, RoundStatAccumulator } from "@/features/stats/stats.service";
+import { createRoundStats, createStatsSnapshot, RoundStatAccumulator, StatsFlushSnapshot, StatsService } from "@/features/stats/stats.service";
 import { Ping } from "@/features/system/system.packets";
 import { IPacket } from "@/packets/packet.interfaces";
 import { UserDocument } from "@/shared/models/user.model";
@@ -66,8 +66,10 @@ export class GameClient {
     this.kills = 0;
     this.deaths = 0;
     this.battleScore = 0;
-    // Long-term metrics accumulate per round in memory and flush once at round end / on leave.
+    // Long-term metrics accumulate per round in memory and flush in deltas at each trigger (death /
+    // disconnect / leave / round-finish). The snapshot tracks what's already persisted for this round.
     this.roundStats = createRoundStats();
+    this.statsSnapshot = createStatsSnapshot();
     this.statsFlushedForRound = false;
     // A pending self-destruct belongs to the incarnation that started it — leaving/joining cancels it.
     this.selfDestructIncarnation = null;
@@ -109,7 +111,11 @@ export class GameClient {
   // Per-round competitive-metric accumulator (kills/deaths come from the fields above; the rest here).
   // Flushed to the user's persistent `stats` at round finish / on leave, then reset. See StatsService.
   public roundStats: RoundStatAccumulator = createRoundStats();
-  // True once this round's stats have been flushed, so finishRound + a same-round leave can't double-count.
+  // Snapshot of what's already been persisted to `stats` this round; each flush writes only the delta
+  // against it (so death/disconnect/leave/finish never double-count). Reset with roundStats. See StatsService.
+  public statsSnapshot: StatsFlushSnapshot = createStatsSnapshot();
+  // True once this round's per-match aggregates (win/loss/records/streaks) have been flushed, so
+  // finishRound + a same-round leave can't double-count them. (Counter deltas are idempotent regardless.)
   public statsFlushedForRound: boolean = false;
   // When the railgun charge began (server-enforced fixed charge time = anti fire-rate hack).
   public railgunChargeStart: number = 0;
@@ -291,6 +297,11 @@ export class GameClient {
 
     if (this.user) {
       if (this.currentBattle) {
+        // Closing the client mid-match must not lose the round's progress: persist whatever's accumulated
+        // since the last flush before the socket goes away. Delta-based, so the later removal/round-finish
+        // won't double-count. Only the counters + clan missions — the win/loss outcome waits for the
+        // player to actually leave (they may reconnect during the grace window).
+        if (!this.isSpectator) StatsService.flushDelta(this, this.currentBattle, this.server);
         this.server.battleService.handlePlayerDisconnection(this);
       }
       this.server.notifySubscribersOfStatusChange(this.user.username, false);

@@ -457,16 +457,10 @@ export class BattleService {
         if (wasPlayer && battle.roundState === BattleRoundState.RUNNING) {
             const client = this.server.findClientByUsername(user.username);
             if (client && !client.isSpectator && !client.statsFlushedForRound) {
-                void StatsService.flushRound(client, battle, StatsService.countsWinLoss(battle) ? "loss" : "none");
-                // Leaving mid-round still contributes what the player did toward the clan's daily missions.
-                if (client.user?.clanId) {
-                    void this.server.clanService.applyRoundContribution(client.user, {
-                        kills: client.kills,
-                        battleScore: client.battleScore,
-                        crystals: Math.round(client.roundStats.crystalsEarned),
-                        goldBox: client.roundStats.suppliesPickedByType["gold"] ?? 0,
-                    }, this.server);
-                }
+                // Flush the final counter + clan-mission delta and settle the per-round outcome (maxes,
+                // streaks, win/loss — leaving mid-round = a loss). flushDelta already ran on each death, so
+                // this only writes what happened since the last one plus the round aggregates.
+                StatsService.flushRound(client, battle, StatsService.countsWinLoss(battle) ? "loss" : "none", this.server);
                 client.statsFlushedForRound = true;
             }
         }

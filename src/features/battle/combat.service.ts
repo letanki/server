@@ -90,6 +90,8 @@ export class CombatService {
         const shownType = fatal ? 2 : damageType;
 
         // Metrics: the damage actually removed (excludes self-damage — ricochet/splash/self-destruct).
+        // Accumulated in roundStats and persisted with the rest of the counters at the next flush trigger
+        // (death / disconnect / leave / round-finish) — see StatsService.flushDelta.
         if (shooterUser && shooterUser.id !== targetUser.id) {
             shooterClient.roundStats.damageDealt += shownDamage;
             targetClient.roundStats.damageTaken += shownDamage;
