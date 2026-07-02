@@ -1,3 +1,4 @@
+import { CLAN_LOGO_DIR, CLAN_LOGO_ROUTE } from "@/features/clan/clan.logo";
 import logger from "@/utils/logger";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -23,6 +24,8 @@ export class ResourceServer {
 
   private setupRoutes(): void {
     this.app.use(express.static(this.resourceDir));
+    // Uploaded clan logos live outside .resource (which build:resources overwrites); served under /clanlogo.
+    this.app.use(CLAN_LOGO_ROUTE, express.static(CLAN_LOGO_DIR));
     this.app.get("/", (req: Request, res: Response) => {
       res.send("Resource Server is running");
     });

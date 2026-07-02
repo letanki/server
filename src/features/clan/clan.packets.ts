@@ -28,6 +28,20 @@ export class SetClanMemberPositionPacket extends BasePacket {
     static getId(): number { return 90109270; }
 }
 
+/** Uploads a new clan logo image (part of "edit clan settings"). Body = int32(byteLength) + raw image bytes
+ *  (JPEG/PNG, ~81×100 px). The int32 prefix is a serialized Vector.<int> length. */
+export class SetClanLogoPacket extends BasePacket {
+    image: Buffer = Buffer.alloc(0);
+    read(buffer: Buffer): void {
+        const len = new BufferReader(buffer).readInt32BE();
+        this.image = buffer.subarray(4, 4 + len);
+    }
+    write(): Buffer {
+        return new BufferWriter().writeInt32BE(this.image.length).writeBuffer(this.image).getBuffer();
+    }
+    static getId(): number { return 99387765; }
+}
+
 /** Member leaves the clan. Empty body. */
 export class LeaveClanPacket extends BasePacket {
     read(_buffer: Buffer): void {}

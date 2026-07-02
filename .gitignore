@@ -129,6 +129,8 @@ dist
 .yarn/install-state.gz
 .pnp.*
 database.sqlite
+# Uploaded clan logos (runtime data served by the resource server) — never commit.
+clan-logos/
 t.js
 teste.js
 .prettierrc

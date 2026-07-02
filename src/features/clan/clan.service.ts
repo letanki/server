@@ -3,6 +3,7 @@ import logger from "@/utils/logger";
 import { ClanView, ClanMemberView } from "./clan.packets";
 import Clan, { ClanDocument } from "./clan.model";
 import { ClanPermissionFlag, ClanPosition, isValidPosition, outranks, positionHasPermission } from "./clan.roles";
+import { saveClanLogo } from "./clan.logo";
 
 /** The clan wire "id" is the creation time in MILLISECONDS (the client derives the founding date from it). */
 function msToLong(ms: number): Buffer {
@@ -280,6 +281,18 @@ export class ClanService {
         return { clan, target, position: newPosition };
     }
 
+    /** Stores an uploaded clan logo image and points `clan.logo` at its served path (cache-busted by version).
+     *  Requires the EDIT_SETTINGS permission (same gate as description/minRank/recruiting). Returns the clan. */
+    public async setClanLogo(owner: UserDocument, image: Buffer): Promise<ClanDocument | null> {
+        if (!owner.clanId || !image.length) return null;
+        const clan = await this.getClanById(owner.clanId);
+        if (!clan || !this.memberHasPermission(clan, owner._id, ClanPermissionFlag.EDIT_SETTINGS)) return null; // needs "edit settings"
+        clan.logo = saveClanLogo(String(clan._id), image);
+        await clan.save();
+        logger.info(`${owner.username} updated clan [${clan.tag}] logo (${image.length} bytes) -> ${clan.logo}.`);
+        return clan;
+    }
+
     /** `user` leaves their clan. A non-leader is just removed; a leader hands off to another member, or
      *  the clan is deleted if they were the last one. Sets the 24h cooldown. Returns details or null. */
     public async leaveClan(user: UserDocument): Promise<{ clan: ClanDocument; wasLeader: boolean; disbanded: boolean } | null> {
@@ -416,7 +429,7 @@ export class ClanService {
             name: clan.name,
             tag: clan.tag,
             rating: clan.rating ?? 0,
-            logo: null,
+            logo: clan.logo || null,
             recruiting: clan.recruiting ?? true,
             minRank: clan.minRank ?? -1,
             joinRequests: await this.getJoinRequestNicks(clan),

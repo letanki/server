@@ -155,6 +155,17 @@ export class SetClanMemberPositionHandler implements IPacketHandler<ClanPackets.
     }
 }
 
+/** Member with EDIT_SETTINGS uploads a new clan logo → store the image + point clan.logo at the served path.
+ *  The official server sends no echo (the editor already shows the uploaded bytes locally); other members pick
+ *  up the new logo from the clan model the next time they open the window. */
+export class SetClanLogoHandler implements IPacketHandler<ClanPackets.SetClanLogoPacket> {
+    public readonly packetId = ClanPackets.SetClanLogoPacket.getId();
+    public async execute(client: GameClient, server: GameServer, packet: ClanPackets.SetClanLogoPacket): Promise<void> {
+        if (!client.user || !packet.image.length) return;
+        await server.clanService.setClanLogo(client.user, packet.image);
+    }
+}
+
 /** Member leaves the clan → remove them, start their 24h cooldown, and update both sides. */
 export class LeaveClanHandler implements IPacketHandler<ClanPackets.LeaveClanPacket> {
     public readonly packetId = ClanPackets.LeaveClanPacket.getId();
