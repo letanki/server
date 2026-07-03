@@ -1,5 +1,6 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
+import { hullCollision } from "@/generated/hullCollision";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
@@ -7,11 +8,13 @@ import { CombatService } from "./combat.service";
 import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
 const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger) this long after placement
-// A mine fires when a tank is physically ON it (its hull covers the mine), NOT by proximity/chain. Derived
-// from an official capture (2026-06-23 s1): a stationary tank simultaneously set off two mines 290 units
-// apart, i.e. its footprint reached ~145 units from centre to each. The old 250 fired ~100 units before the
-// hull actually touched the mine ("explodes before you drive over it"). Centre-to-centre distance in world units.
-const MINE_TRIGGER_RADIUS = 150;
+// A mine fires when a tank is physically ON it — its REAL hull collision box (per-hull, oriented by the tank
+// yaw; the same boxes CtfService uses for flag pickup) covers the mine. A fixed centre-radius was wrong: a
+// wasp's nose is 231 units from centre, so driving the tip onto a mine never got the centre close enough.
+// MINE_FOOTPRINT = the mine object's own half-size (the .3ds disc, ~0.5 m ≈ 50 u) added to the hull box, so
+// "touch" means the hull edge reaches the mine's edge.
+const MINE_FOOTPRINT = 50;
+const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 }; // unknown hull → mid-size box (matches CtfService)
 // Mine damage is a flat RANDOM real-HP range (like every other weapon), NOT a % of health — so heavy hulls
 // tank far more mines than light ones. Derived from official captures (2026-06-23 s1 log) by converting the
 // normalised health drops back to real HP with each victim's HULL_ARMOR: Flu (wasp_m3, armor 180) took 89 &
@@ -75,16 +78,21 @@ export class MineService {
         const { user, currentBattle: battle, battlePosition } = client;
         if (!user || !battle || !battlePosition || client.battleState !== "active") return;
 
-        // HOIST all Mongoose access OUT of the per-mine loop. `user.username` and `battle.teamOf(user)` go
-        // through Mongoose getters/virtuals — and the `.id` virtual inside teamOf allocates a hex string per
-        // call. Doing them per mine turned a big minefield into O(mines) Mongoose calls on EVERY movement
-        // packet, which pinned a CPU core (profiled: ~77% of CPU under checkTriggers → idGetter/Document.get/
-        // slice). mine.owner/mine.ownerTeam are already plain values, so the in-loop test needs no document.
+        // HOIST all Mongoose access OUT of the per-mine loop. `user.username`, `user.equippedHull` and
+        // `battle.teamOf(user)` go through Mongoose getters/virtuals (the `.id` virtual inside teamOf allocates
+        // a hex string per call). Doing them per mine turned a big minefield into O(mines) Mongoose calls on
+        // EVERY movement packet, which pinned a CPU core (profiled — see [[mongoose-hotloop-perf]]).
         const myName = user.username;
         const isDM = battle.settings.battleMode === BattleMode.DM;
         const myTeam = isDM ? -1 : battle.teamOf(user);
+        // Oriented hull box: rotate each mine offset into the tank's local frame (yaw around z) and test the
+        // real per-hull half-extents (+ the mine's footprint). This fires when ANY part of the hull is over
+        // the mine — including just the nose — not only when the centre is close.
+        const hull = hullCollision[user.equippedHull] ?? HULL_FALLBACK;
+        const yaw = client.battleOrientation?.z ?? 0;
+        const cos = Math.cos(yaw), sin = Math.sin(yaw);
+        const reachX = hull.halfX + MINE_FOOTPRINT, reachY = hull.halfY + MINE_FOOTPRINT;
         const px = battlePosition.x, py = battlePosition.y, pz = battlePosition.z;
-        const r2 = MINE_TRIGGER_RADIUS * MINE_TRIGGER_RADIUS;
 
         for (const mine of battle.activeMines.values()) {
             if (!mine.armed) continue;
@@ -92,11 +100,15 @@ export class MineService {
             if (!isDM && mine.ownerTeam === myTeam) continue; // a teammate's mine (team modes)
             const dx = mine.position.x - px;
             const dy = mine.position.y - py;
+            const localX = dx * cos + dy * sin;   // along hull width  (model X)
+            const localY = -dx * sin + dy * cos;  // along hull length (model Y)
+            if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
+            // Height: the mine must be at roughly the tank's level (parkour is vertical — don't trigger a
+            // mine one platform below/above). z span = the hull box, with the mine footprint as slack.
             const dz = mine.position.z - pz;
-            if (dx * dx + dy * dy + dz * dz <= r2) {
-                this._detonate(battle, mine.id, client);
-                break;
-            }
+            if (dz < -MINE_FOOTPRINT || dz > hull.zMax + MINE_FOOTPRINT) continue;
+            this._detonate(battle, mine.id, client);
+            break;
         }
     }
 
