@@ -14,6 +14,11 @@ const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger)
 // MINE_FOOTPRINT = the mine object's own half-size (the .3ds disc, ~0.5 m ≈ 50 u) added to the hull box, so
 // "touch" means the hull edge reaches the mine's edge.
 const MINE_FOOTPRINT = 50;
+// Vertical trigger window (world units): the mine sits ON THE GROUND, so it fires only when the tank's tracks
+// are within this much of the mine's z — NOT anywhere up the tank's body. Small because the mine is a flat
+// object (no .3ds to measure, so estimated). Keeps a tank RAMPING/elevated near the mine from setting it off
+// while it's above the mine's level. Lower it if ramps still trigger; raise it if flat-ground mines get missed.
+const MINE_HEIGHT = 30;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 }; // unknown hull → mid-size box (matches CtfService)
 // Mine damage = flat RANDOM real-HP roll, per the official wiki ("Mine — Damage to opponents 120-240 hp").
 // Confirmed by a clean single-mine capture: Giovana's wasp (180 HP) was ONE-SHOT by a SINGLE mine (health
@@ -104,10 +109,11 @@ export class MineService {
             const localX = dx * cos + dy * sin;   // along hull width  (model X)
             const localY = -dx * sin + dy * cos;  // along hull length (model Y)
             if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
-            // Height: the mine must be at roughly the tank's level (parkour is vertical — don't trigger a
-            // mine one platform below/above). z span = the hull box, with the mine footprint as slack.
+            // Height: the tank's tracks (base z) must be at ~the mine's ground level. A tight window around 0
+            // (NOT the tank's full height) — a mine is on the floor, so a tank ramping/elevated above it, even
+            // horizontally near, must NOT set it off ("dies on the ramp without being on the ground").
             const dz = mine.position.z - pz;
-            if (dz < -MINE_FOOTPRINT || dz > hull.zMax + MINE_FOOTPRINT) continue;
+            if (Math.abs(dz) > MINE_HEIGHT) continue;
             this._detonate(battle, mine.id, client);
             break;
         }
