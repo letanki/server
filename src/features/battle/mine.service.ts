@@ -1,6 +1,7 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { hullCollision } from "@/generated/hullCollision";
+import { IVector3 } from "@/shared/types/geom/ivector3";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
@@ -58,18 +59,25 @@ export class MineService {
 
     /** Drops a mine at the caller's current position (Mine supply activation). */
     public placeMine(client: GameClient, battle: Battle): void {
-        const user = client.user;
         const pos = client.battlePosition;
-        if (!user || !pos || client.battleState !== "active" || battle.settings.withoutMines) return;
+        if (!pos) return;
+        const id = this.placeMineAt(client, battle, pos);
+        if (id) logger.info(`Mine ${id} placed by ${client.user?.username} in battle ${battle.battleId}`);
+    }
 
+    /** Places a mine at an explicit world position, owned by `client`'s user, and returns its id (or null if
+     *  it can't be placed). Shared by placeMine (own position) and the debug "mine around me" command. */
+    public placeMineAt(client: GameClient, battle: Battle, position: IVector3): string | null {
+        const user = client.user;
+        if (!user || client.battleState !== "active" || battle.settings.withoutMines) return null;
         const id = `${++battle.mineCounter}`;
-        battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: { ...pos }, armed: false });
-        battle.broadcast(new PutMinePacket(id, pos, user.username));
+        battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: { ...position }, armed: false });
+        battle.broadcast(new PutMinePacket(id, position, user.username));
         // A placed mine always arms after the same short delay — parkour included. Parkour's ONLY mine
         // difference is the reactivation cooldown (0 in parkour, so you can drop another immediately); it
         // does NOT arm instantly. Arming instantly let a freshly-dropped mine trigger before it settled.
         battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
-        logger.info(`Mine ${id} placed by ${user.username} in battle ${battle.battleId}`);
+        return id;
     }
 
     private _arm(battle: Battle, id: string): void {

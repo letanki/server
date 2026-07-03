@@ -19,7 +19,7 @@ import { ResourceId } from "@/generated/resourceTypes";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { Battle, BattleMode, IDomPointState, MapTheme } from "./battle.model";
+import { Battle, BattleMode, IActiveMine, IDomPointState, MapTheme } from "./battle.model";
 import { SupplyService } from "./supply.service";
 import * as BattlePackets from "./battle.packets";
 import { BonusType, IBattleUser, IBattleUserInfo } from "./battle.types";
@@ -476,13 +476,13 @@ export class BattleWorkflow {
         client.sendPacket(new BattlePackets.BattleStatsPacket(battleStatsData));
         client.sendPacket(new BattlePackets.LoadBattleChatPacket());
 
-        // Mines properties must be sent before InitBattleDM/Team and InitModelPost
-        // (the client finalizes its battle models in InitModelPost; sending mines
-        // afterwards leaves the mines model uninitialized -> TypeError #1009).
-        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps(battle)));
-        // The snapshot has no armed flag, so re-arm the already-armed mines for this joiner (same packet the
-        // arm timer broadcasts), otherwise armed enemy mines wouldn't show/trigger visuals for them.
-        for (const mine of battle.activeMines.values()) {
+        // Mines properties must be sent before InitBattleDM/Team and InitModelPost (the client finalizes
+        // its battle models in InitModelPost; sending mines afterwards leaves the mines model uninitialized
+        // -> TypeError #1009). A mid-battle joiner gets every existing mine here in one snapshot; armed
+        // mines are then re-armed with an ActivateMinePacket each.
+        const allMines = [...battle.activeMines.values()];
+        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps(allMines)));
+        for (const mine of allMines) {
             if (mine.armed) client.sendPacket(new BattlePackets.ActivateMinePacket(mine.id));
         }
 
@@ -646,19 +646,14 @@ export class BattleWorkflow {
         }
     }
 
-    private static _buildMineProps(battle: Battle) {
+    private static _buildMineProps(mines: readonly IActiveMine[]) {
         return {
             activateSound: ResourceManager.getIdlowById("sounds/mine_activate"),
             activateTimeMsec: 1000,
-            // Existing mines snapshot: a mid-battle joiner must receive every mine already on the field here
-            // (the official client loads them from THIS packet, not PutMine — PutMine would replay a drop
-            // animation/sound per mine). No armed flag in the wire format; armed mines are re-armed with
-            // ActivateMinePacket right after this packet is sent (see loadGeneralBattleResources caller).
-            battleMines: [...battle.activeMines.values()].map((m) => ({
-                mineId: m.id,
-                ownerId: m.owner,
-                position: m.position,
-            })),
+            // Existing mines: a mid-battle joiner gets them from THIS packet, not PutMine (PutMine replays a drop
+            // anim/sound per mine). No armed flag in the wire format; armed mines are re-armed with
+            // ActivateMinePacket after.
+            battleMines: mines.map((m) => ({ mineId: m.id, ownerId: m.owner, position: m.position })),
             blueMineTexture: ResourceManager.getIdlowById("effects/mine/blue_mine_texture"),
             deactivateSound: ResourceManager.getIdlowById("sounds/mine_deactivate"),
             enemyMineTexture: ResourceManager.getIdlowById("effects/mine/enemy_mine_texture"),
@@ -676,6 +671,7 @@ export class BattleWorkflow {
             redMineTexture: ResourceManager.getIdlowById("effects/mine/red_mine_texture"),
         };
     }
+
 
     /** (Re)loads the in-battle supply panel for the player with their current counts. Sent at battle
      *  entry (when they have supplies) and when they buy their first supply mid-battle. Respects the
