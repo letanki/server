@@ -17,10 +17,13 @@ export class BattleMinesPropertiesPacket extends BasePacket implements BattleTyp
     static readonly schema: PacketSchema = [
         { name: "activateSound", type: "resource" },
         { name: "activateTimeMsec", type: "i32" },
+        // Wire order verified byte-for-byte against an official 351-mine join snapshot: mineId, ownerId,
+        // activated (armed state), then a PLAIN vector3 (3 floats, no present byte). This list was never
+        // populated before (joiners got an empty mine snapshot), so the field order had never been exercised.
         { name: "battleMines", type: "list", of: [
-            { name: "activated", type: "bool" },
             { name: "mineId", type: "string" },
             { name: "ownerId", type: "string" },
+            { name: "activated", type: "bool" },
             { name: "position", type: "object", of: [
                 { name: "x", type: "f32" }, { name: "y", type: "f32" }, { name: "z", type: "f32" },
             ] },

@@ -479,7 +479,7 @@ export class BattleWorkflow {
         // Mines properties must be sent before InitBattleDM/Team and InitModelPost
         // (the client finalizes its battle models in InitModelPost; sending mines
         // afterwards leaves the mines model uninitialized -> TypeError #1009).
-        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps()));
+        client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps(battle)));
 
         if (battle.settings.battleMode === BattleMode.CTF) {
             const adjustZ = (pos: IVector3 | null): IVector3 | null => {
@@ -641,11 +641,19 @@ export class BattleWorkflow {
         }
     }
 
-    private static _buildMineProps() {
+    private static _buildMineProps(battle: Battle) {
         return {
             activateSound: ResourceManager.getIdlowById("sounds/mine_activate"),
             activateTimeMsec: 1000,
-            battleMines: [],
+            // Existing mines snapshot: a mid-battle joiner must receive every mine already on the field here
+            // (the official client loads them from THIS packet, not PutMine — PutMine would replay a drop
+            // animation/sound per mine). `activated` = armed state so armed enemy mines stay hidden correctly.
+            battleMines: [...battle.activeMines.values()].map((m) => ({
+                activated: m.armed,
+                mineId: m.id,
+                ownerId: m.owner,
+                position: m.position,
+            })),
             blueMineTexture: ResourceManager.getIdlowById("effects/mine/blue_mine_texture"),
             deactivateSound: ResourceManager.getIdlowById("sounds/mine_deactivate"),
             enemyMineTexture: ResourceManager.getIdlowById("effects/mine/enemy_mine_texture"),
