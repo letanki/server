@@ -21,29 +21,6 @@ export interface HullConfig {
 
 export const hullsData: HullConfig[] = [
     {
-        // XT hulls (from the 2026-07-03 garage capture): own micro-upgrade stat progression, but the
-        // masses match the base hull per mod and the m3 stats are identical to the base m3 — so m3
-        // reuses the base hull's captured physics; m0–m2 fall back to the formula.
-        id: "hornet_xt", name: "Zangão XT", category: "armor", index: 620, type: 2,
-        description: "O zangão XT de elite tem uma aparência única. Placas de armadura espetaculares, estilizadas como asas, enfatizam sua rapidez e elegância.",
-        mods: [
-            { rank: 5, price: 500, nextPrice: 12600, nextRank: 12, armor: 98, speed: 9.5, turnSpeed: 80.2, acceleration: 9.5, mass: 1409 },
-            { rank: 12, price: 12600, nextPrice: 51960, nextRank: 19, armor: 140, speed: 10.4, turnSpeed: 98.5, acceleration: 11.1, mass: 1774 },
-            { rank: 19, price: 51960, nextPrice: 129300, nextRank: 27, armor: 181, speed: 11.3, turnSpeed: 116.9, acceleration: 12.8, mass: 2139 },
-            { rank: 27, price: 129300, nextPrice: 0, nextRank: 27, armor: 210, speed: 12, turnSpeed: 130, acceleration: 14, mass: 2400, reverseAcceleration: 23, sideAcceleration: 19, turnAcceleration: 2.9670597283903604, reverseTurnAcceleration: 5.585053606381854, dampingCoeff: 1250 },
-        ],
-    },
-    {
-        id: "viking_xt", name: "Viking XT", category: "armor", index: 630, type: 2,
-        description: "O exclusivo Viking XT se destaca pelo seu visual. O padrão característico da armadura é feito no estilo nórdico severo.",
-        mods: [
-            { rank: 7, price: 700, nextPrice: 17940, nextRank: 14, armor: 163, speed: 7.5, turnSpeed: 72.8, acceleration: 10.4, mass: 2039 },
-            { rank: 14, price: 17940, nextPrice: 61620, nextRank: 21, armor: 226, speed: 8.1, turnSpeed: 88.2, acceleration: 12.3, mass: 2435 },
-            { rank: 21, price: 61620, nextPrice: 146520, nextRank: 29, armor: 288, speed: 8.7, turnSpeed: 103.7, acceleration: 14.2, mass: 2830 },
-            { rank: 29, price: 146520, nextPrice: 0, nextRank: 29, armor: 315, speed: 9, turnSpeed: 110, acceleration: 15, mass: 3000, reverseAcceleration: 20, sideAcceleration: 18, turnAcceleration: 2.792526803190927, reverseTurnAcceleration: 4.1887902047863905, dampingCoeff: 2000 },
-        ],
-    },
-    {
         id: "wasp", name: "Vespa", category: "armor", index: 700, type: 2,
         description: "Leve, econômico, fácil de operar — Vespa é uma carroceria perfeito para iniciantes. Vespa atualizado pode atingir uma alta velocidade, que em combinação com tamanho pequeno dá liberdade de ação no campo de batalha. Devido ao baixo peso, Vespa pode ser facilmente enrolado pelo tiro de um inimigo.",
         mods: [
@@ -114,6 +91,30 @@ export const hullsData: HullConfig[] = [
         ],
     },
 ];
+
+/**
+ * XT variant of a base hull: identical stats AND physics per mod (user decision: XT is a pure skin —
+ * differs only in model/sfx and upgrade prices). Prices: m0 costs the same, m1–m3 cost 60% of the
+ * base (exact official rule — reproduces the captured hornet_xt/viking_xt prices to the crystal).
+ * NOTE: the official server gives hornet_xt/viking_xt slightly different m0–m2 primary stats (own
+ * micro-upgrade curve, see the 2026-07-03 garage capture); we intentionally deviate for consistency.
+ */
+function xtHullVariant(baseId: string, name: string, index: number, description: string): HullConfig {
+    const base = hullsData.find((h) => h.id === baseId)!;
+    const prices = base.mods.map((m, i) => (i === 0 ? m.price : Math.round(m.price * 0.6)));
+    return {
+        ...base, id: `${baseId}_xt`, name, index, description,
+        mods: base.mods.map((m, i) => ({ ...m, price: prices[i], nextPrice: i + 1 < prices.length ? prices[i + 1] : 0 })),
+    };
+}
+
+hullsData.push(
+    xtHullVariant("mammoth", "Mamute XT", 610, "O Mamute XT de elite é uma fortaleza com acabamento de cerimônia. As placas de superconcreto escurecidas mostram que este flagship já venceu incontáveis batalhas."),
+    xtHullVariant("hornet", "Zangão XT", 620, "O zangão XT de elite tem uma aparência única. Placas de armadura espetaculares, estilizadas como asas, enfatizam sua rapidez e elegância."),
+    xtHullVariant("viking", "Viking XT", 630, "O exclusivo Viking XT se destaca pelo seu visual. O padrão característico da armadura é feito no estilo nórdico severo."),
+    xtHullVariant("wasp", "Vespa XT", 640, "A exclusiva Vespa XT mantém toda a agilidade do modelo original, com uma carenagem única reservada aos pilotos mais rápidos do campo de batalha."),
+    xtHullVariant("titan", "Titã XT", 650, "O Titã XT de elite veste uma blindagem com padrão exclusivo. Debaixo dela, a mesma liga lendária que segura o meio de qualquer batalha."),
+);
 
 const byId = new Map(hullsData.map((h) => [h.id, h]));
 

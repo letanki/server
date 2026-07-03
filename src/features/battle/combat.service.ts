@@ -32,6 +32,13 @@ const WEAPON_RESISTANCE: Record<string, string> = {
     shaft: "SHAFT_RESISTANCE",
     flamethrower: "FIREBIRD_RESISTANCE",
     isida: "ISIS_RESISTANCE",
+    // XT turrets are the same weapon as the base version — same resistance property.
+    railgun_xt: "RAILGUN_RESISTANCE",
+    thunder_xt: "THUNDER_RESISTANCE",
+    machinegun_xt: "MACHINE_GUN_RESISTANCE",
+    flamethrower_xt: "FIREBIRD_RESISTANCE",
+    isida_xt: "ISIS_RESISTANCE",
+    ricochet_xt: "RICOCHET_RESISTANCE",
 };
 
 /**

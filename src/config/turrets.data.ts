@@ -174,6 +174,28 @@ export const turretsData: TurretConfig[] = [
     },
 ];
 
+/**
+ * XT variant of a base turret: identical parameters per mod (properts/kickback/turn acceleration —
+ * battle captures confirm XT turrets use the base TankModelData; the weapon-sim table in
+ * physics.data.ts already carries the <id>_xt_m* entries); only the upgrade prices change — m0
+ * costs the same, m1–m3 cost 60% of the base (rule from the captured hornet_xt/viking_xt data).
+ */
+function xtTurretVariant(baseId: string, name: string, index: number, description: string): TurretConfig {
+    const base = turretsData.find((t) => t.id === baseId)!;
+    const prices = base.mods.map((m, i) => (i === 0 ? m.price : Math.round(m.price * 0.6)));
+    return {
+        ...base, id: `${baseId}_xt`, name, index, description,
+        mods: base.mods.map((m, i) => ({ ...m, price: prices[i], nextPrice: i + 1 < prices.length ? prices[i + 1] : 0 })),
+    };
+}
+
+turretsData.push(
+    xtTurretVariant("machinegun", "Vulcão XT", 60, "O Vulcão XT de elite. Os canos com acabamento exclusivo denunciam um veterano — e giram tão implacavelmente quanto os do modelo original."),
+    xtTurretVariant("flamethrower", "Lança-chamas XT", 70, "O exclusivo Lança-chamas XT. O acabamento especial das placas resiste ao calor extremo e dá à arma um brilho inconfundível no campo de batalha."),
+    xtTurretVariant("railgun", "Canhão-elétrico XT", 80, "A versão XT de elite do Canhão-elétrico, com pintura exclusiva reservada aos atiradores que dispensam apresentações."),
+    xtTurretVariant("thunder", "Trovão XT", 90, "O exclusivo Trovão XT. A pintura de cerimônia esconde um canhão idêntico ao original — a diferença está no medo que ele inspira."),
+);
+
 const byId = new Map(turretsData.map((t) => [t.id, t]));
 
 /** A turret modification's config (kickback / turret-turn acceleration), keyed like the battle workflow. */

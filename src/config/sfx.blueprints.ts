@@ -1666,3 +1666,72 @@ export const sfxBlueprints: { [key: string]: any } = {
     ],
   },
 };
+
+// XT turrets m0–m2 fire with the base turret's effects — confirmed by the captured official
+// machinegun_xt_m2 sfxData, which is byte-identical to the base one. Only m3 has the signature XT
+// look (dedicated entries below, synced verbatim from the official InitTank sfxData captures).
+for (const baseId of ["machinegun", "flamethrower", "railgun", "thunder"]) {
+    for (let mod = 0; mod < 3; mod++) sfxBlueprints[`${baseId}_xt_m${mod}`] = sfxBlueprints[`${baseId}_m${mod}`];
+}
+
+// railgun_xt m3: same textures as base; every light turns pure white and the trail/charge bcsh is
+// blown to full brightness — the classic white XT rail.
+sfxBlueprints.railgun_xt_m3 = {
+    ...sfxBlueprints.railgun_m3,
+    lighting: sfxBlueprints.railgun_m3.lighting.map((l: any) => ({
+        name: l.name,
+        light: l.light.map((e: any) => ({ ...e, color: 16777215 })),
+    })),
+    bcsh: [
+        { brightness: 255, contrast: 0, saturation: 0, hue: 0, key: "trail" },
+        { brightness: 255, contrast: 0, saturation: 0, hue: 0, key: "charge" },
+    ],
+};
+
+// thunder_xt m3: own explosion sprite (official id 1125) and white hit/shell lights; the muzzle
+// "shot" light stays the base orange.
+sfxBlueprints.thunder_xt_m3 = {
+    ...sfxBlueprints.thunder_m3,
+    explosionTexture: "effects/thunder_xt/explosion" as ResourceId,
+    lighting: sfxBlueprints.thunder_m3.lighting.map((l: any) => ({
+        name: l.name,
+        light: l.light.map((e: any) => (l.name === "shot" ? e : { ...e, color: 16777215 })),
+    })),
+};
+
+// flamethrower_xt m3: own fire + muzzle sprites (official 798/797), silver-grey lights and a
+// silver flame colorTransform ramp.
+sfxBlueprints.flamethrower_xt_m3 = {
+    ...sfxBlueprints.flamethrower_m3,
+    fireTexture: "effects/flamethrower_xt/fire_texture" as ResourceId,
+    muzzlePlaneTexture: "effects/flamethrower_xt/muzzle_plane_texture" as ResourceId,
+    lighting: sfxBlueprints.flamethrower_m3.lighting.map((l: any) => ({
+        name: l.name,
+        light: l.light.map((e: any) => ({ ...e, color: 15066597 })),
+    })),
+    colorTransform: [
+        { redMultiplier: 0, greenMultiplier: 0, blueMultiplier: 0, alphaMultiplier: 1, redOffset: 0, greenOffset: 0, blueOffset: 0, alphaOffset: 0, t: 0 },
+        { redMultiplier: 0.7659091, greenMultiplier: 0.7659091, blueMultiplier: 0.7659091, alphaMultiplier: 1, redOffset: 255, greenOffset: 255, blueOffset: 255, alphaOffset: 0, t: 0.05 },
+        { redMultiplier: 0.6431818, greenMultiplier: 0.6409091, blueMultiplier: 0.6431818, alphaMultiplier: 1, redOffset: 86, greenOffset: 86, blueOffset: 86, alphaOffset: 0, t: 0.1 },
+        { redMultiplier: 0.6363636, greenMultiplier: 0.6227273, blueMultiplier: 0.6159091, alphaMultiplier: 1, redOffset: 110, greenOffset: 110, blueOffset: 109, alphaOffset: 0, t: 0.65 },
+        { redMultiplier: 0.44545454, greenMultiplier: 0.44772726, blueMultiplier: 0.44545454, alphaMultiplier: 1, redOffset: 52, greenOffset: 51, blueOffset: 51, alphaOffset: 0, t: 0.75 },
+        { redMultiplier: 1, greenMultiplier: 1, blueMultiplier: 1, alphaMultiplier: 0, redOffset: 0, greenOffset: 0, blueOffset: 0, alphaOffset: 0, t: 1 },
+    ],
+};
+
+// machinegun_xt m3: own animated texture set (official ids 152-158) and white muzzle light; the
+// crumbs texture and all sounds are shared with the base Vulcão.
+sfxBlueprints.machinegun_xt_m3 = {
+    ...sfxBlueprints.machinegun_m3,
+    dustTexture: "effects/machinegun_xt/dust_texture" as ResourceId,
+    fireAcrossTexture: "effects/machinegun_xt/fire_across_texture" as ResourceId,
+    fireAlongTexture: "effects/machinegun_xt/fire_along_texture" as ResourceId,
+    smokeTexture: "effects/machinegun_xt/smoke_texture" as ResourceId,
+    sparklesTexture: "effects/machinegun_xt/sparkles_texture" as ResourceId,
+    tankSparklesTexture: "effects/machinegun_xt/tank_sparkles_texture" as ResourceId,
+    tracerTexture: "effects/machinegun_xt/tracer_texture" as ResourceId,
+    lighting: sfxBlueprints.machinegun_m3.lighting.map((l: any) => ({
+        name: l.name,
+        light: l.light.map((e: any) => ({ ...e, color: 16777215 })),
+    })),
+};
