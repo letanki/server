@@ -93,6 +93,12 @@ export class BattleWorkflow {
             "effects/smoky/explosion/m0", "effects/smoky/explosion/m1", "effects/smoky/explosion/m2", "effects/smoky/explosion/m3", "sounds/smoky/shot", "effects/smoky/shot",
             "effects/thunder/explosion_mark", "sounds/thunder/explosion", "effects/thunder/explosion/m0", "sounds/thunder/shot", "effects/thunder/shot", "effects/thunder/explosion/m1",
             "effects/thunder/explosion/m2", "effects/thunder/explosion/m3", "effects/twins/explosion", "effects/twins/hit_mark", "effects/twins/muzzle_flash", "sounds/twins/shot", "effects/twins/shot",
+            // XT m3 exclusive effect textures — the official loads these in EVERY battle (verified in
+            // reference logs without any XT player), so any client can render an XT tank that joins or
+            // equips mid-battle without an extra LoadDependencies round.
+            "effects/thunder_xt/explosion", "effects/flamethrower_xt/fire_texture", "effects/flamethrower_xt/muzzle_plane_texture",
+            "effects/machinegun_xt/dust_texture", "effects/machinegun_xt/fire_across_texture", "effects/machinegun_xt/fire_along_texture", "effects/machinegun_xt/smoke_texture",
+            "effects/machinegun_xt/sparkles_texture", "effects/machinegun_xt/tank_sparkles_texture", "effects/machinegun_xt/tracer_texture",
             "flags/blue_flag_sprite", "flags/blue_pedestal", "flags/red_flag_sprite", "flags/red_pedestal", "sounds/flags/flag_drop", "sounds/flags/flag_return", "sounds/flags/flag_take",
             "sounds/flags/win", "effects/cp/big_letters", "effects/cp/blue_circle", "effects/cp/blue_pedestal_texture", "effects/cp/blue_ray", "effects/cp/blue_ray_tip",
             "effects/cp/neutral_circle", "effects/cp/neutral_pedestal_texture", "effects/cp/pedestal", "effects/cp/red_circle", "effects/cp/red_pedestal_texture",
