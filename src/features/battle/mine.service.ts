@@ -5,6 +5,7 @@ import { IVector3 } from "@/shared/types/geom/ivector3";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
+import { CollisionService } from "./collision.service";
 import { CombatService } from "./combat.service";
 import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
@@ -15,10 +16,11 @@ const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger)
 // MINE_FOOTPRINT = the mine object's own half-size (the .3ds disc, ~0.5 m ≈ 50 u) added to the hull box, so
 // "touch" means the hull edge reaches the mine's edge.
 const MINE_FOOTPRINT = 50;
-// Vertical trigger window (world units): the mine sits ON THE GROUND, so it fires only when the tank's tracks
-// are within this much of the mine's z — NOT anywhere up the tank's body. Small because the mine is a flat
-// object (no .3ds to measure, so estimated). Keeps a tank RAMPING/elevated near the mine from setting it off
-// while it's above the mine's level. Lower it if ramps still trigger; raise it if flat-ground mines get missed.
+// Vertical margin (world units) added to each end of the hull's z-extent [zMin, zMax] in the tank's LOCAL
+// (tilted) frame — see checkTriggers. The mine is a flat floor object with no .3ds to measure, so this is a
+// small estimated slack around the hull box. Because the test is done in the rotated frame, this stays tight
+// without missing pitched/rolled hulls. Lower it if mines fire from too far above/below; raise it if flat-
+// ground mines get missed.
 const MINE_HEIGHT = 30;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 }; // unknown hull → mid-size box (matches CtfService)
 // Mine damage = flat RANDOM real-HP roll, per the official wiki ("Mine — Damage to opponents 120-240 hp").
@@ -36,7 +38,7 @@ const MINE_DAMAGE_MAX = 240;
  * enemies' mines until they activate). Constructed with the server + CombatService for the explosion.
  */
 export class MineService {
-    constructor(private readonly server: GameServer, private readonly combat: CombatService, events: BattleEvents) {
+    constructor(private readonly server: GameServer, private readonly combat: CombatService, private readonly collision: CollisionService, events: BattleEvents) {
         // When a tank is destroyed (any cause), its mines are deactivated/removed.
         events.on("tankDestroyed", ({ battle, client }) => {
             if (client.user) this.removeMinesOf(battle, client.user.username);
@@ -71,13 +73,34 @@ export class MineService {
         const user = client.user;
         if (!user || client.battleState !== "active" || battle.settings.withoutMines) return null;
         const id = `${++battle.mineCounter}`;
-        battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: { ...position }, armed: false });
-        battle.broadcast(new PutMinePacket(id, position, user.username));
+        const pos = this._snapToGround(client, battle, position);
+        battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: pos, armed: false });
+        battle.broadcast(new PutMinePacket(id, pos, user.username));
         // A placed mine always arms after the same short delay — parkour included. Parkour's ONLY mine
         // difference is the reactivation cooldown (0 in parkour, so you can drop another immediately); it
         // does NOT arm instantly. Arming instantly let a freshly-dropped mine trigger before it settled.
         battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
         return id;
+    }
+
+    /** Re-bases a placement onto the ground beneath its (x,y). A mine is stored at TANK-CENTRE height (that's
+     *  what checkTriggers compares against a passing tank's battlePosition.z), so we take the ground under the
+     *  mine and add the PLACER's own height above its ground. For a normal drop (mine at the placer's exact
+     *  position) this reproduces the placer's z unchanged; for a mine dropped over lower/higher terrain — the
+     *  /minar debug scatter, or a mine dropped mid-jump — it lands the mine at the height a tank driving there
+     *  will actually have, instead of floating at the placer's flat z (which never matched, so it never fired).
+     *  Over the void (no ground) the position is kept as given. */
+    private _snapToGround(client: GameClient, battle: Battle, position: IVector3): IVector3 {
+        const map = battle.mapResourceId;
+        const groundAtMine = this.collision.raycastGroundZ(map, position.x, position.y, position.z);
+        if (groundAtMine === null) return { ...position };
+        const p = client.battlePosition;
+        let offset = 0;
+        if (p) {
+            const groundAtPlacer = this.collision.raycastGroundZ(map, p.x, p.y, p.z);
+            if (groundAtPlacer !== null) offset = p.z - groundAtPlacer;
+        }
+        return { x: position.x, y: position.y, z: groundAtMine + offset };
     }
 
     private _arm(battle: Battle, id: string): void {
@@ -99,12 +122,22 @@ export class MineService {
         const myName = user.username;
         const isDM = battle.settings.battleMode === BattleMode.DM;
         const myTeam = isDM ? -1 : battle.teamOf(user);
-        // Oriented hull box: rotate each mine offset into the tank's local frame (yaw around z) and test the
-        // real per-hull half-extents (+ the mine's footprint). This fires when ANY part of the hull is over
-        // the mine — including just the nose — not only when the centre is close.
+        // Full 3D ORIENTED hull box. A tank can pitch and roll (nose or tail down on ramps/jumps, tipped on
+        // a slope), so a flat yaw-only footprint plus a world-space height check misses a mine the tilted
+        // hull is visibly sitting on. Build the tank's local→world rotation from ALL THREE Euler angles
+        // (Alternativa3D order Rz·Ry·Rx — x=pitch, y=roll, z=yaw; this reduces to the old yaw-only formula
+        // when pitch=roll=0) and transform each mine offset into the hull's local frame with its transpose
+        // (world→local), then test the real per-hull box + the mine footprint.
         const hull = hullCollision[user.equippedHull] ?? HULL_FALLBACK;
-        const yaw = client.battleOrientation?.z ?? 0;
-        const cos = Math.cos(yaw), sin = Math.sin(yaw);
+        const ori = client.battleOrientation;
+        const rx = ori?.x ?? 0, ry = ori?.y ?? 0, rz = ori?.z ?? 0;
+        const sinX = Math.sin(rx), cosX = Math.cos(rx);
+        const sinY = Math.sin(ry), cosY = Math.cos(ry);
+        const sinZ = Math.sin(rz), cosZ = Math.cos(rz);
+        // Rows of local→world M; we dot the world offset against M's COLUMNS to get local coords (M^T·d).
+        const ma = cosZ * cosY, mb = cosZ * sinY * sinX - sinZ * cosX, mc = cosZ * sinY * cosX + sinZ * sinX;
+        const me = sinZ * cosY, mf = sinZ * sinY * sinX + cosZ * cosX, mg = sinZ * sinY * cosX - cosZ * sinX;
+        const mi = -sinY,       mj = cosY * sinX,                      mk = cosY * cosX;
         const reachX = hull.halfX + MINE_FOOTPRINT, reachY = hull.halfY + MINE_FOOTPRINT;
         const px = battlePosition.x, py = battlePosition.y, pz = battlePosition.z;
 
@@ -114,14 +147,17 @@ export class MineService {
             if (!isDM && mine.ownerTeam === myTeam) continue; // a teammate's mine (team modes)
             const dx = mine.position.x - px;
             const dy = mine.position.y - py;
-            const localX = dx * cos + dy * sin;   // along hull width  (model X)
-            const localY = -dx * sin + dy * cos;  // along hull length (model Y)
-            if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
-            // Height: the tank's tracks (base z) must be at ~the mine's ground level. A tight window around 0
-            // (NOT the tank's full height) — a mine is on the floor, so a tank ramping/elevated above it, even
-            // horizontally near, must NOT set it off ("dies on the ramp without being on the ground").
             const dz = mine.position.z - pz;
-            if (Math.abs(dz) > MINE_HEIGHT) continue;
+            const localX = ma * dx + me * dy + mi * dz;   // across hull width  (model X)
+            const localY = mb * dx + mf * dy + mj * dz;   // along hull length  (model Y)
+            const localZ = mc * dx + mg * dy + mk * dz;   // up through the hull (model Z; 0 = belly/origin)
+            if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
+            // Vertical: the mine rests at the hull belly (zMin=0 at the origin) up through the body, plus a
+            // small margin each side. Because localZ is now measured in the TILTED hull frame, a tank with
+            // its nose/tail pitched down onto the mine still reads localZ≈0 and fires; a mine on the floor
+            // BELOW a tank up on a ramp maps to a large NEGATIVE localZ and is correctly ignored (the old
+            // "dies on the ramp without being on the ground" bug stays fixed).
+            if (localZ < hull.zMin - MINE_HEIGHT || localZ > hull.zMax + MINE_HEIGHT) continue;
             this._detonate(battle, mine.id, client);
             break;
         }
