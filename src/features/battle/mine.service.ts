@@ -7,8 +7,18 @@ import { CombatService } from "./combat.service";
 import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
 const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger) this long after placement
-const MINE_TRIGGER_RADIUS = 250; // an enemy this close (x,y,z) sets the mine off
-const MINE_DAMAGE = 800; // damage dealt to the tank that steps on it (garage HP units)
+// A mine fires when a tank is physically ON it (its hull covers the mine), NOT by proximity/chain. Derived
+// from an official capture (2026-06-23 s1): a stationary tank simultaneously set off two mines 290 units
+// apart, i.e. its footprint reached ~145 units from centre to each. The old 250 fired ~100 units before the
+// hull actually touched the mine ("explodes before you drive over it"). Centre-to-centre distance in world units.
+const MINE_TRIGGER_RADIUS = 150;
+// Mine damage is a flat RANDOM real-HP range (like every other weapon), NOT a % of health — so heavy hulls
+// tank far more mines than light ones. Derived from official captures (2026-06-23 s1 log) by converting the
+// normalised health drops back to real HP with each victim's HULL_ARMOR: Flu (wasp_m3, armor 180) took 89 &
+// 70 HP; testosterone (hornet_m3, armor 210) took 70 & 87 HP → a ~70-90 HP roll. (The old flat 800 one-shot
+// light hulls — that was the bug.) Rolled per detonation.
+const MINE_DAMAGE_MIN = 70;
+const MINE_DAMAGE_MAX = 90;
 
 /**
  * Battle mines: a player drops an invisible mine (Mine supply); it detonates when an enemy gets close,
@@ -46,9 +56,10 @@ export class MineService {
         const id = `${++battle.mineCounter}`;
         battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: { ...pos }, armed: false });
         battle.broadcast(new PutMinePacket(id, pos, user.username));
-        // Parkour mode: no delay at all — arm immediately. Otherwise arm after a short delay.
-        if (battle.settings.parkourMode) this._arm(battle, id);
-        else battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
+        // A placed mine always arms after the same short delay — parkour included. Parkour's ONLY mine
+        // difference is the reactivation cooldown (0 in parkour, so you can drop another immediately); it
+        // does NOT arm instantly. Arming instantly let a freshly-dropped mine trigger before it settled.
+        battle.timers.set(`mineArm:${id}`, MINE_ARM_DELAY_MS, () => this._arm(battle, id));
         logger.info(`Mine ${id} placed by ${user.username} in battle ${battle.battleId}`);
     }
 
@@ -112,9 +123,11 @@ export class MineService {
         // the victim as shooter if the owner is gone, so the death still registers).
         battle.broadcast(new DetonateMinePacket(id, victimClient.user.username));
         const shooter = this.server.findClientByUsername(mine.owner) ?? victimClient;
+        // Flat random real-HP roll (see constants) — applyDamage normalises it per the victim's hull.
+        const damage = MINE_DAMAGE_MIN + Math.random() * (MINE_DAMAGE_MAX - MINE_DAMAGE_MIN);
         // sourceWeapon=null: mine damage isn't a turret hit, so no paint resistance applies (there's no
         // MINE_RESISTANCE). Without this it would wrongly use the owner's currently-equipped turret.
-        void this.combat.applyDamage(battle, shooter, victimClient, MINE_DAMAGE, 0, null);
+        void this.combat.applyDamage(battle, shooter, victimClient, damage, 0, null);
         logger.info(`Mine ${id} (${mine.owner}) detonated on ${victimClient.user.username} in battle ${battle.battleId}`);
     }
 
