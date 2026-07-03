@@ -480,6 +480,11 @@ export class BattleWorkflow {
         // (the client finalizes its battle models in InitModelPost; sending mines
         // afterwards leaves the mines model uninitialized -> TypeError #1009).
         client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps(battle)));
+        // The snapshot has no armed flag, so re-arm the already-armed mines for this joiner (same packet the
+        // arm timer broadcasts), otherwise armed enemy mines wouldn't show/trigger visuals for them.
+        for (const mine of battle.activeMines.values()) {
+            if (mine.armed) client.sendPacket(new BattlePackets.ActivateMinePacket(mine.id));
+        }
 
         if (battle.settings.battleMode === BattleMode.CTF) {
             const adjustZ = (pos: IVector3 | null): IVector3 | null => {
@@ -647,9 +652,9 @@ export class BattleWorkflow {
             activateTimeMsec: 1000,
             // Existing mines snapshot: a mid-battle joiner must receive every mine already on the field here
             // (the official client loads them from THIS packet, not PutMine — PutMine would replay a drop
-            // animation/sound per mine). `activated` = armed state so armed enemy mines stay hidden correctly.
+            // animation/sound per mine). No armed flag in the wire format; armed mines are re-armed with
+            // ActivateMinePacket right after this packet is sent (see loadGeneralBattleResources caller).
             battleMines: [...battle.activeMines.values()].map((m) => ({
-                activated: m.armed,
                 mineId: m.id,
                 ownerId: m.owner,
                 position: m.position,

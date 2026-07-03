@@ -17,16 +17,15 @@ export class BattleMinesPropertiesPacket extends BasePacket implements BattleTyp
     static readonly schema: PacketSchema = [
         { name: "activateSound", type: "resource" },
         { name: "activateTimeMsec", type: "i32" },
-        // Wire order verified byte-for-byte against an official 351-mine join snapshot: mineId, ownerId,
-        // activated (armed state), then a PLAIN vector3 (3 floats, no present byte). This list was never
-        // populated before (joiners got an empty mine snapshot), so the field order had never been exercised.
+        // Per-mine entry: mineId, ownerId, position (OPTIONAL vector3 = 1 present-byte + 3 floats). There is
+        // NO "armed" flag here — a 351-mine official snapshot from a busy battle had that present-byte = 0 for
+        // EVERY mine (armed ones included), i.e. it's the vector3 present-byte, not an armed bool. Sending an
+        // armed bool of 1 made the client read "position absent", skip the floats, desync and hit EOF (#2030).
+        // Armed state is (re)applied with ActivateMinePacket after this snapshot — see battle.workflow.
         { name: "battleMines", type: "list", of: [
             { name: "mineId", type: "string" },
             { name: "ownerId", type: "string" },
-            { name: "activated", type: "bool" },
-            { name: "position", type: "object", of: [
-                { name: "x", type: "f32" }, { name: "y", type: "f32" }, { name: "z", type: "f32" },
-            ] },
+            { name: "position", type: "vector3" },
         ] },
         { name: "blueMineTexture", type: "resource" },
         { name: "deactivateSound", type: "resource" },
