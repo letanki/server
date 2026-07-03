@@ -139,9 +139,9 @@ export class MineService {
         // Flat random real-HP roll (wiki 120-240) — applyDamage normalises it per the victim's hull and
         // halves it under Double Armour.
         const damage = MINE_DAMAGE_MIN + Math.random() * (MINE_DAMAGE_MAX - MINE_DAMAGE_MIN);
-        // sourceWeapon=null: mine damage isn't a turret hit, so no paint resistance applies (there's no
-        // MINE_RESISTANCE). Without this it would wrongly use the owner's currently-equipped turret.
-        void this.combat.applyDamage(battle, shooter, victimClient, damage, 0, null);
+        // sourceWeapon=null: no paint resistance (mines aren't a turret hit). ignoreShooterBuffs=true: the
+        // mine's damage is fixed at placement, so the owner's current Double Damage must not scale it.
+        void this.combat.applyDamage(battle, shooter, victimClient, damage, 0, null, true);
         logger.info(`Mine ${id} (${mine.owner}) detonated on ${victimClient.user.username} in battle ${battle.battleId}`);
     }
 

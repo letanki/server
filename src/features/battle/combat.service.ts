@@ -47,7 +47,7 @@ export class CombatService {
      * 0-10000 scale (RULE OF 3: normalizedDamage = realDamage * 10000 / hullHP). Broadcasts SetHealth
      * + the damage number, and runs the kill flow at 0. Shared by all weapons (railgun, thunder, ...).
      */
-    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 0, sourceWeapon?: string | null): Promise<void> {
+    public async applyDamage(battle: Battle, shooterClient: GameClient, targetClient: GameClient, realDamage: number, damageType: number = 0, sourceWeapon?: string | null, ignoreShooterBuffs: boolean = false): Promise<void> {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
@@ -61,7 +61,11 @@ export class CombatService {
         }
 
         // Supply/bonus multipliers: shooter's Double Damage doubles output, target's Double Armor halves it.
-        if (SupplyService.hasEffect(shooterClient, SUPPLY_SLOT.DOUBLE_DAMAGE)) realDamage *= 2;
+        // `ignoreShooterBuffs` skips the Double Damage step for damage that isn't a live shot — a MINE deals a
+        // fixed roll set when it was placed, so the owner's CURRENT Double Damage must not scale it (and, if
+        // it did, it would exactly cancel the victim's Double Armor, making armor look broken). The victim's
+        // Double Armor ALWAYS applies.
+        if (!ignoreShooterBuffs && SupplyService.hasEffect(shooterClient, SUPPLY_SLOT.DOUBLE_DAMAGE)) realDamage *= 2;
         if (SupplyService.hasEffect(targetClient, SUPPLY_SLOT.ARMOR)) realDamage *= 0.5;
 
         // Paint resistance: the victim's equipped paint reduces damage from the SHOOTER's weapon by its
