@@ -13,9 +13,10 @@ const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger)
 // A mine fires when a tank is physically ON it — its REAL hull collision box (per-hull, oriented by the tank
 // yaw; the same boxes CtfService uses for flag pickup) covers the mine. A fixed centre-radius was wrong: a
 // wasp's nose is 231 units from centre, so driving the tip onto a mine never got the centre close enough.
-// MINE_FOOTPRINT = the mine object's own half-size (the .3ds disc, ~0.5 m ≈ 50 u) added to the hull box, so
-// "touch" means the hull edge reaches the mine's edge.
-const MINE_FOOTPRINT = 50;
+// MINE_FOOTPRINT = slack added to the hull box so "touch" means the hull edge reaches the mine's edge. Kept
+// SMALL (tighter than the mine disc) on purpose: the tank must actually drive up ONTO the mine to set it off,
+// not just graze near it. Raise it if mines feel unresponsive; lower it toward 0 to require more overlap.
+const MINE_FOOTPRINT = 20;
 // Vertical margin (world units) added to each end of the hull's z-extent [zMin, zMax] in the tank's LOCAL
 // (tilted) frame — see checkTriggers. The mine is a flat floor object with no .3ds to measure, so this is a
 // small estimated slack around the hull box. Because the test is done in the rotated frame, this stays tight
