@@ -15,13 +15,14 @@ const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger)
 // "touch" means the hull edge reaches the mine's edge.
 const MINE_FOOTPRINT = 50;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 }; // unknown hull → mid-size box (matches CtfService)
-// Mine damage is a flat RANDOM real-HP range (like every other weapon), NOT a % of health — so heavy hulls
-// tank far more mines than light ones. Derived from official captures (2026-06-23 s1 log) by converting the
-// normalised health drops back to real HP with each victim's HULL_ARMOR: Flu (wasp_m3, armor 180) took 89 &
-// 70 HP; testosterone (hornet_m3, armor 210) took 70 & 87 HP → a ~70-90 HP roll. (The old flat 800 one-shot
-// light hulls — that was the bug.) Rolled per detonation.
-const MINE_DAMAGE_MIN = 70;
-const MINE_DAMAGE_MAX = 90;
+// Mine damage = flat RANDOM real-HP roll, per the official wiki ("Mine — Damage to opponents 120-240 hp").
+// Confirmed by a clean single-mine capture: Giovana's wasp (180 HP) was ONE-SHOT by a SINGLE mine (health
+// 10000 → -888 / -1666 = ~196-210 HP dealt) — squarely in the 120-240 band. So a mine one-shots light hulls
+// and takes 2-4 to kill heavy ones (mammoth 500 → ~24-48% each). applyDamage does the hull normalisation and
+// halves it under Double Armour. (My earlier "% of health" reading came from multi-mine cluster drops in an
+// older log — wrong.) Rolled per detonation.
+const MINE_DAMAGE_MIN = 120;
+const MINE_DAMAGE_MAX = 240;
 
 /**
  * Battle mines: a player drops an invisible mine (Mine supply); it detonates when an enemy gets close,
@@ -135,7 +136,8 @@ export class MineService {
         // the victim as shooter if the owner is gone, so the death still registers).
         battle.broadcast(new DetonateMinePacket(id, victimClient.user.username));
         const shooter = this.server.findClientByUsername(mine.owner) ?? victimClient;
-        // Flat random real-HP roll (see constants) — applyDamage normalises it per the victim's hull.
+        // Flat random real-HP roll (wiki 120-240) — applyDamage normalises it per the victim's hull and
+        // halves it under Double Armour.
         const damage = MINE_DAMAGE_MIN + Math.random() * (MINE_DAMAGE_MAX - MINE_DAMAGE_MIN);
         // sourceWeapon=null: mine damage isn't a turret hit, so no paint resistance applies (there's no
         // MINE_RESISTANCE). Without this it would wrongly use the owner's currently-equipped turret.
