@@ -48,19 +48,22 @@ export class BattleService {
     /**
      * Enforces an equipment-constraint mode's required hull + turret on join: XP = hornet+railgun,
      * BP = wasp+railgun, XP/BP = either hull, all with the railgun at >= m2. NONE allows anything.
+     * XT variants are pure skins of the base items (same stats/physics), so they qualify too.
      * Throws a join-rejection error (shown to the player) when the equipped gear doesn't comply.
      */
     private static _enforceEquipmentConstraint(mode: EquipmentConstraintsMode, user: UserDocument): void {
         if (mode === EquipmentConstraintsMode.NONE) return;
 
-        const allowedHulls =
+        const baseHulls =
             mode === EquipmentConstraintsMode.HORNET_RAILGUN ? ["hornet"] :
             mode === EquipmentConstraintsMode.WASP_RAILGUN ? ["wasp"] :
             ["hornet", "wasp"]; // HORNET_WASP_RAILGUN
+        const allowedHulls = baseHulls.flatMap((h) => [h, `${h}_xt`]);
 
-        const railgunMod = user.equippedTurret === "railgun" ? (user.turrets.get("railgun") ?? 0) : -1;
+        const turretId = user.equippedTurret;
+        const railgunMod = turretId === "railgun" || turretId === "railgun_xt" ? (user.turrets.get(turretId) ?? 0) : -1;
         if (!allowedHulls.includes(user.equippedHull) || railgunMod < BattleService.RAILGUN_MIN_MOD) {
-            const hullLabel = allowedHulls.map((h) => (h === "hornet" ? "Zangão" : "Vespa")).join(" ou ");
+            const hullLabel = baseHulls.map((h) => (h === "hornet" ? "Zangão" : "Vespa")).join(" ou ");
             throw new EquipmentConstraintError(`Esta batalha exige ${hullLabel} + Canhão-elétrico (no mínimo M2).`);
         }
     }
