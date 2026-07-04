@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>LT map editor</title>
+<!--
+  Editor de mapas completo (ver PLANO.md).
+  Uso: abra este arquivo no navegador (Chrome recomendado).
+    1. "Bibliotecas": selecione a pasta resources/library (uma vez; fica em memória).
+    2. "map.xml": selecione/arraste um resources/map/<mapa>/<tema>/xml/v1/map.xml.
+    3. Edite: clique seleciona (ctrl+clique adiciona à seleção); W move, E rotaciona, Del apaga,
+       Ctrl+D duplica, Ctrl+Z/Ctrl+Y desfaz/refaz, Esc deseleciona. Painel direito edita propriedades.
+    4. "Salvar XML" baixa o map.xml. Depois: npm run build:maps para o servidor usar.
+  O Document XML parseado é a FONTE DA VERDADE: renderização lê dele, edição escreve nele —
+  seções desconhecidas (lights, way-points...) sobrevivem intactas ao round-trip.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 13px/1.4 system-ui, sans-serif; background: #14161a; color: #d7dae0; }
+  .panel { position: fixed; top: 0; bottom: 0; overflow-y: auto; background: #1c1f26; padding: 10px; box-sizing: border-box; z-index: 2; }
+  #left { left: 0; width: 280px; }
+  #right { right: 0; width: 300px; border-left: 1px solid #30343d; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  section { margin-bottom: 10px; border-top: 1px solid #30343d; padding-top: 8px; }
+  label { display: block; margin: 3px 0; cursor: pointer; }
+  button { background: #2f6fed; color: #fff; border: 0; border-radius: 4px; padding: 4px 9px; cursor: pointer; margin: 2px 2px 2px 0; }
+  button.sec { background: #3a3f4a; }
+  button.danger { background: #c23b3b; }
+  select, input[type=text], input[type=number] { background: #0f1114; color: #d7dae0; border: 1px solid #3a3f4a; border-radius: 3px; padding: 2px 4px; max-width: 100%; }
+  input[type=number] { width: 70px; }
+  #stats, #hover, #valid { font-family: Consolas, monospace; font-size: 11.5px; white-space: pre-wrap; }
+  #valid .warn { color: #ffb84d; }
+  .legend span { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; }
+  #canvas-wrap { position: absolute; inset: 0 300px 0 280px; }
+  #props .row { margin: 2px 0; }
+  #props .row b { display: inline-block; width: 84px; font-weight: 600; }
+  input[type=range] { width: 100%; }
+  .muted { color: #8a8f99; }
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  } }
+</script>
+</head>
+<body>
+<div id="left" class="panel">
+  <h1>LT map editor</h1>
+  <div>map.xml: <input type="file" id="file" accept=".xml" /></div>
+  <div>bibliotecas: <input type="file" id="libdir" webkitdirectory multiple /></div>
+  <div id="libstats" class="muted">nenhuma biblioteca carregada</div>
+  <button id="saveBtn" disabled>Salvar XML</button>
+  <button id="validateBtn" class="sec" disabled>Validar</button>
+  <div id="stats">nenhum mapa carregado</div>
+
+  <section>
+    <b>Camadas</b>
+    <label class="legend"><span style="background:#c9b28a"></span><input type="checkbox" id="L_prop" checked /> Props</label>
+    <label class="legend"><span style="background:#9aa0ab"></span><input type="checkbox" id="L_col" checked /> Colisão</label>
+    <label class="legend"><span style="background:#ffd24d"></span><input type="checkbox" id="L_spawn" checked /> Spawns</label>
+    <label class="legend"><span style="background:#ff4d4d"></span><input type="checkbox" id="L_flags" checked /> Bandeiras</label>
+    <label class="legend"><span style="background:#b26bff"></span><input type="checkbox" id="L_dom" checked /> Pontos DOM</label>
+    <label class="legend"><span style="background:#57d977"></span><input type="checkbox" id="L_bonus" checked /> Bonus</label>
+    <label class="legend"><span style="background:#ff2222"></span><input type="checkbox" id="L_kill" checked /> Kill/kick</label>
+    <label><input type="checkbox" id="wireframe" /> Wireframe (colisão)</label>
+  </section>
+
+  <section>
+    <b>Filtro de altura (Z)</b>
+    <div>min <span id="zminLabel"></span></div><input type="range" id="zmin" />
+    <div>max <span id="zmaxLabel"></span></div><input type="range" id="zmax" />
+  </section>
+
+  <section>
+    <b>Adicionar</b> <span class="muted">(sobre a prop selecionada · kill zone: alvo da câmera)</span><br/>
+    <button class="sec" data-add="spawn">Spawn</button>
+    <button class="sec" data-add="dom">Ponto DOM</button>
+    <button class="sec" data-add="bonus">Bonus</button>
+    <button class="sec" data-add="special">Kill zone</button>
+    <button class="sec" data-add="flag-red">Flag R</button>
+    <button class="sec" data-add="flag-blue">Flag B</button>
+    <div style="margin-top:6px"><b>Prop</b>
+      <select id="palLib"></select><select id="palGroup"></select><select id="palProp"></select><select id="palTex"></select>
+      <button class="sec" id="addPropBtn">Adicionar prop</button>
+    </div>
+  </section>
+
+  <section>
+    <b>Edição</b>
+    <label><input type="checkbox" id="snap" checked /> Snap <input type="number" id="snapStep" value="25" min="1" step="25" style="width:56px" />u / 45°</label>
+    <div class="muted">W mover · E rotacionar · S redimensionar (bonus/kill) · R girar 90° (Shift inverte)<br/>
+    Setas movem 1 passo do snap (PgUp/PgDn = Z) · Del apagar · Ctrl+D duplicar · Ctrl+Z/Y undo/redo</div>
+  </section>
+
+  <section><b>Sob o cursor</b><div id="hover">—</div></section>
+  <section><b>Validação</b><div id="valid">—</div></section>
+</div>
+
+<div id="right" class="panel">
+  <b>Seleção</b>
+  <div id="selinfo" class="muted">nada selecionado</div>
+  <div id="props"></div>
+  <div id="selbtns" style="display:none">
+    <button id="applyBtn">Aplicar</button>
+    <button id="dupBtn" class="sec">Duplicar</button>
+    <button id="delBtn" class="danger">Apagar</button>
+    <div id="colBtns" style="display:none">
+      <button id="colGenBtn" class="sec">Gerar colisão</button>
+      <button id="colDelBtn" class="danger">Remover colisão</button>
+    </div>
+  </div>
+</div>
+<div id="canvas-wrap"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { TDSLoader } from "three/addons/loaders/TDSLoader.js";
+
+// ============================== cena ==============================
+const wrap = document.getElementById("canvas-wrap");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.localClippingEnabled = true;
+wrap.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14161a);
+const camera = new THREE.PerspectiveCamera(60, 1, 10, 500000);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(1, 2, 3);
+scene.add(sun);
+function resize() {
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  camera.aspect = wrap.clientWidth / wrap.clientHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+resize();
+const clipLow = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const clipHigh = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+renderer.clippingPlanes = [clipLow, clipHigh];
+
+// gizmo — para PROPS ele é ancorado num PROXY no CENTRO do bbox (a âncora XML pode ficar na ponta);
+// o movimento/rotação do proxy é espelhado no prop real durante o arrasto.
+const gizmo = new TransformControls(camera, renderer.domElement);
+const gizmoProxy = new THREE.Object3D();
+scene.add(gizmoProxy);
+gizmo.addEventListener("dragging-changed", (e) => {
+  controls.enabled = !e.value;
+  if (e.value) beginDrag(); else endDrag();
+});
+gizmo.addEventListener("objectChange", () => {
+  if (gizmo.object !== gizmoProxy || !dragStart || !selection.length) return;
+  const t = selection[selection.length - 1].obj;
+  const delta = gizmoProxy.position.clone().sub(dragStart.gpos);
+  if (gizmo.mode === "translate") {
+    t.position.copy(dragStart.pos).add(delta);
+  } else if (gizmo.mode === "rotate") {
+    const drot = gizmoProxy.rotation.z - dragStart.grotZ;
+    t.rotation.z = dragStart.rotZ + drot;
+    const rp = rotAroundZ({ x: dragStart.pos.x, y: dragStart.pos.y, z: dragStart.pos.z }, dragStart.gpos, drot);
+    t.position.set(rp.x, rp.y, rp.z); // âncora orbita o centro: prop gira parado no lugar
+  }
+});
+scene.add(gizmo);
+
+// ============================== estado ==============================
+let xmlDoc = null, xmlDecl = "", fileName = "map.xml";
+let generation = 0; // invalida instanciações async de props após rebuild
+const layers = {};
+for (const n of ["prop", "col", "spawn", "flags", "dom", "bonus", "kill"]) { layers[n] = new THREE.Group(); scene.add(layers[n]); }
+const pickables = [];        // meshes clicáveis; a entidade fica em root.userData
+let selection = [];          // [{ el, kind, obj }]
+const undoStack = [], redoStack = [];
+
+// ============================== XML helpers ==============================
+const num = (el, tag, d = 0) => { const c = el?.querySelector(`:scope > ${tag}`); return c ? parseFloat(c.textContent) : d; };
+const vec = (el, tag) => { const c = el?.querySelector(`:scope > ${tag}`); return { x: num(c, "x"), y: num(c, "y"), z: num(c, "z") }; };
+const eulerZYX = (r) => new THREE.Euler(r.x, r.y, r.z, "ZYX");
+const fmtN = (n) => (Math.round(n * 1000) / 1000).toFixed(3);
+function ensureChild(el, tag) {
+  let c = el.querySelector(`:scope > ${tag}`);
+  if (!c) { c = xmlDoc.createElement(tag); el.appendChild(c); }
+  return c;
+}
+function writeVec(el, tag, v, only = null) {
+  const c = ensureChild(el, tag);
+  for (const a of ["x", "y", "z"]) {
+    if (only && !only.includes(a)) continue;
+    ensureChild(c, a).textContent = fmtN(v[a]);
+  }
+}
+function writeNum(el, tag, v) { ensureChild(el, tag).textContent = fmtN(v); }
+
+// ============================== undo/redo (snapshot do XML) ==============================
+function serialize() {
+  let out = new XMLSerializer().serializeToString(xmlDoc);
+  if (xmlDecl && !out.startsWith("<?xml")) out = xmlDecl + "\n" + out;
+  return out;
+}
+function pushUndo() { undoStack.push(serialize()); if (undoStack.length > 100) undoStack.shift(); redoStack.length = 0; }
+function restore(snapshot) {
+  xmlDoc = new DOMParser().parseFromString(snapshot, "text/xml");
+  clearSelection();
+  buildScene();
+}
+function undo() { if (!undoStack.length) return; redoStack.push(serialize()); restore(undoStack.pop()); }
+function redo() { if (!redoStack.length) return; undoStack.push(serialize()); restore(redoStack.pop()); }
+/** Toda mutação passa por aqui: snapshot p/ undo, aplica, reconstrói a cena. */
+function mutate(fn, rebuild = true) { pushUndo(); fn(); if (rebuild) buildScene(); }
+
+// ============================== bibliotecas (.tara) ==============================
+// libsByName: nome de exibição (library.xml name=) -> { xml: Document, entries: Map(nomeArquivo->Uint8Array) }
+const libsByName = new Map();
+const templateCache = new Map(); // `${lib}|${group}|${prop}|${tex}` -> Promise<THREE.Object3D>
+
+function parseTara(buf) {
+  const dv = new DataView(buf);
+  let off = 0;
+  const count = dv.getUint32(off); off += 4;
+  const toc = [];
+  const dec = new TextDecoder();
+  for (let i = 0; i < count; i++) {
+    const tagLen = dv.getUint16(off); off += 2;
+    const tag = dec.decode(new Uint8Array(buf, off, tagLen)); off += tagLen;
+    const len = dv.getUint32(off); off += 4;
+    toc.push({ tag, len });
+  }
+  const entries = new Map();
+  for (const { tag, len } of toc) { entries.set(tag.toLowerCase(), new Uint8Array(buf, off, len)); off += len; }
+  return entries;
+}
+
+/**
+ * Vínculos de material por objeto, direto do .3ds: byObject (objeto → nomes de material do 0x4130)
+ * e matTex (material → arquivo de textura do 0xA300, ou null p/ "Default" sem textura). É a base
+ * da política de visibilidade/variante — validada contra todos os props problemáticos reais.
+ */
+function parse3dsBindings(buf) {
+  const dv = new DataView(buf);
+  const dec = new TextDecoder();
+  const byObject = new Map(), matTex = new Map();
+  let cur = null, curMat = null;
+  const cstr = (q, end) => { let s = q; while (s < end && dv.getUint8(s) !== 0) s++; return [dec.decode(new Uint8Array(buf, q, s - q)), s + 1]; };
+  (function walk(s, e) {
+    let p = s;
+    while (p + 6 <= e) {
+      const id = dv.getUint16(p, true), len = dv.getUint32(p + 2, true);
+      if (len < 6 || p + len > e) break;
+      const b = p + 6;
+      if (id === 0x4d4d || id === 0x3d3d || id === 0x4100 || id === 0xa200) walk(b, p + len);
+      else if (id === 0xafff) { curMat = { name: "", tex: null }; walk(b, p + len); matTex.set(curMat.name, curMat.tex); }
+      else if (id === 0xa000 && curMat) curMat.name = cstr(b, p + len)[0];
+      else if (id === 0xa300 && curMat) curMat.tex = cstr(b, p + len)[0];
+      else if (id === 0x4000) { const [name, q] = cstr(b, p + len); cur = []; byObject.set(name, cur); walk(q, p + len); }
+      else if (id === 0x4120 && cur) walk(b + 2 + dv.getUint16(b, true) * 8, p + len);
+      else if (id === 0x4130 && cur) cur.push(cstr(b, p + len)[0]);
+      p += len;
+    }
+  })(0, buf.byteLength);
+  return { byObject, matTex };
+}
+
+/** Pivô do PRIMEIRO objeto do .3ds (translação do chunk 0x4160) — a âncora do prop, ou null. */
+function parsePivot(buf) {
+  const dv = new DataView(buf);
+  let firstObj = true, pivot = null;
+  (function walk(s, e) {
+    let p = s;
+    while (p + 6 <= e && !pivot) {
+      const id = dv.getUint16(p, true), len = dv.getUint32(p + 2, true);
+      if (len < 6 || p + len > e) break;
+      const b = p + 6;
+      if (id === 0x4d4d || id === 0x3d3d || id === 0x4100) walk(b, p + len);
+      else if (id === 0x4000) {
+        if (!firstObj) return; // só o primeiro objeto
+        firstObj = false;
+        let q = b;
+        while (q < p + len && dv.getUint8(q) !== 0) q++;
+        walk(q + 1, p + len);
+      } else if (id === 0x4160) {
+        pivot = [dv.getFloat32(b + 36, true), dv.getFloat32(b + 40, true), dv.getFloat32(b + 44, true)];
+      }
+      p += len;
+    }
+  })(0, buf.byteLength);
+  return pivot;
+}
+
+document.getElementById("libdir").addEventListener("change", async (e) => {
+  // pega a MAIOR versão (vN) de cada pasta de lib
+  const best = new Map(); // folder -> {v, file}
+  for (const f of e.target.files) {
+    if (f.name !== "library.tara") continue;
+    const m = (f.webkitRelativePath || "").match(/([^/]+)\/v(\d+)\/library\.tara$/);
+    if (!m) continue;
+    const cur = best.get(m[1]);
+    if (!cur || +m[2] > cur.v) best.set(m[1], { v: +m[2], file: f });
+  }
+  let ok = 0;
+  for (const [folder, { file }] of best) {
+    try {
+      const entries = parseTara(await file.arrayBuffer());
+      const xmlBytes = entries.get("library.xml");
+      if (!xmlBytes) continue;
+      const libXml = new DOMParser().parseFromString(new TextDecoder().decode(xmlBytes), "text/xml");
+      const name = libXml.documentElement.getAttribute("name") || folder;
+      libsByName.set(name, { xml: libXml, entries });
+      ok++;
+    } catch (err) { console.warn("lib falhou:", folder, err); }
+  }
+  document.getElementById("libstats").textContent = `${ok} bibliotecas carregadas`;
+  fillPalette();
+  if (xmlDoc) buildScene(); // re-renderiza props agora com meshes
+});
+
+function findPropDef(libName, groupName, propName) {
+  const lib = libsByName.get(libName);
+  if (!lib) return null;
+  for (const g of lib.xml.querySelectorAll("prop-group")) {
+    if (g.getAttribute("name") !== groupName) continue;
+    for (const p of g.querySelectorAll(":scope > prop")) if (p.getAttribute("name") === propName) return { lib, def: p };
+  }
+  return null;
+}
+// Texturas resolvem SÓ dentro da lib do próprio prop, como o cliente (que carrega apenas as libs
+// do mapa). Mesh cuja textura não existe (ex.: slope_1.3ds pede GRASS.JPG, ausente no tara de
+// slopes_rises) fica OCULTO — é o que o jogo faz. Um índice global entre todas as libs foi testado
+// e descartado: acha o arquivo errado (o "grass.jpg" da terrain é asfalto).
+function blobUrl(lib, fileName) {
+  const bytes = lib.entries.get((fileName || "").toLowerCase());
+  return bytes ? URL.createObjectURL(new Blob([bytes])) : null;
+}
+/** Object3D do prop (mesh .3ds + textura diffuse escolhida) — cacheado; clona pra cada instância. */
+function getPropTemplate(libName, groupName, propName, texName) {
+  const key = `${libName}|${groupName}|${propName}|${texName}`;
+  if (templateCache.has(key)) return templateCache.get(key);
+  const promise = (async () => {
+    const found = findPropDef(libName, groupName, propName);
+    if (!found) return null;
+    const mesh = found.def.querySelector(":scope > mesh");
+    if (!mesh) {
+      // Prop <sprite>: billboard que sempre encara a câmera (árvores/arbustos/minas) — igual ao jogo.
+      // Tamanho = pixels da imagem × scale; origin-y ancora a base (0.99 ≈ pé na posição do prop).
+      const spriteEl = found.def.querySelector(":scope > sprite");
+      if (!spriteEl) return null;
+      const url = blobUrl(found.lib, spriteEl.getAttribute("file"));
+      if (!url) return null;
+      const stex = await new Promise((res) => new THREE.TextureLoader().load(url, res, undefined, () => res(null)));
+      if (!stex) return null;
+      stex.colorSpace = THREE.SRGBColorSpace;
+      const scl = parseFloat(spriteEl.getAttribute("scale") || "1");
+      const originY = parseFloat(spriteEl.getAttribute("origin-y") || "0.5");
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: stex, transparent: true, alphaTest: 0.1 }));
+      spr.center.set(0.5, 1 - originY);
+      spr.scale.set(stex.image.width * scl, stex.image.height * scl, 1);
+      const g = new THREE.Group();
+      g.add(spr);
+      return g;
+    }
+    const meshUrl = blobUrl(found.lib, mesh.getAttribute("file"));
+    if (!meshUrl) return null;
+    const meshBuf = await (await fetch(meshUrl)).arrayBuffer();
+    // Muitos props NÃO têm <texture> no library.xml: a textura vem dos materiais internos do .3ds
+    // (chunk 0xA300 = nome do arquivo). O manager redireciona esses pedidos para os blobs do tara.
+    const manager = new THREE.LoadingManager();
+    manager.setURLModifier((url) => blobUrl(found.lib, url.split(/[\\/]/).pop()) ?? url);
+    manager.onLoad = () => group?.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        // Textura não encontrada/falhou: o cliente não renderiza essas faces — esconde. material
+        // .visible propaga para TODOS os clones já instanciados (material é compartilhado).
+        if (m.map && !m.map.image) { m.visible = false; continue; }
+        if (m.map) { m.map.colorSpace = THREE.SRGBColorSpace; m.needsUpdate = true; }
+      }
+    });
+    let group;
+    try { group = new TDSLoader(manager).parse(meshBuf, ""); }
+    catch (err) { console.warn(`3ds falhou: ${libName}/${propName}`, err); URL.revokeObjectURL(meshUrl); return null; }
+    URL.revokeObjectURL(meshUrl);
+    // Interpretação do .3ds (toggle "Props: modo pivô"):
+    //  LIGADO — vértices CRUS menos a TRANSLAÇÃO do pivô (0x4160). É como o pipeline dos hulls
+    //  (que funciona) trata o pivô: recentrar sem aplicar a base de rotação. O TDSLoader aplica a
+    //  inversa da matriz COMPLETA na geometria (o que roda/espelha props cuja base não é identidade
+    //  — as "placas viradas"); reaplicamos só a parte de rotação para cancelar isso, sobrando
+    //  geometria = cru - origem do pivô.
+    //  DESLIGADO — coordenadas cruas do arquivo (transform do TDSLoader mantido).
+    // Convenção MEDIDA nos .3ds reais (todas as libs do polygon): mundo = vértices CRUS − pivô do
+    // PRIMEIRO objeto (chunk 0x4160; ≈ centro XY do bbox, Z na base; pontes têm offset Z proposital).
+    // Não confiamos na interpretação de matriz do TDSLoader (transposições históricas quebram meshes
+    // de base não-identidade — as construções "flutuando"): desfazemos o transform dele por completo
+    // (volta ao cru) e subtraímos o pivô parseado por NÓS.
+    {
+      const pivot = parsePivot(meshBuf);
+      const meshes = [];
+      group.traverse((o) => { if (o.isMesh) meshes.push(o); });
+      for (const o of meshes) {
+        o.updateMatrix();
+        o.geometry.applyMatrix4(o.matrix); // desfaz TDSLoader: geometria = cru
+        o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1);
+      }
+      let a = pivot;
+      if (!a) { // sem chunk de pivô: centro XY do bbox, base Z (mesma convenção)
+        const bb = new THREE.Box3().setFromObject(group);
+        if (isFinite(bb.min.x)) { const c = bb.getCenter(new THREE.Vector3()); a = [c.x, c.y, bb.min.z]; }
+      }
+      if (a) for (const o of meshes) o.position.set(-a[0], -a[1], -a[2]);
+    }
+    // Textura: se o library.xml define variantes (<texture>), aplica a variante `texture-name` do
+    // mapa (ou a primeira) nos meshes visíveis; senão, MANTÉM os materiais do próprio .3ds (as
+    // texturas internas chegam via manager). Meshes "occl*" são geometria de oclusão do cliente —
+    // invisíveis no jogo, ficam ocultos aqui (aplicar textura neles envelopava o prédio errado).
+    const texs = [...mesh.querySelectorAll(":scope > texture")];
+    const tex = texs.find((t) => t.getAttribute("name") === texName) ?? texs[0];
+    let variantMap = null;
+    const texUrl = tex ? blobUrl(found.lib, tex.getAttribute("diffuse-map")) : null;
+    if (texUrl) {
+      variantMap = await new Promise((res) => new THREE.TextureLoader().load(texUrl, res, undefined, () => res(null)));
+      if (variantMap) { variantMap.colorSpace = THREE.SRGBColorSpace; variantMap.wrapS = variantMap.wrapT = THREE.RepeatWrapping; }
+    }
+    // Política POR OBJETO, decidida pelos vínculos de material do próprio .3ds (validada contra
+    // todos os props problemáticos reais — Grass/Pave 3x3, NuBu 12, SmHouse2, slope_1, land01):
+    //   • objeto SEM vínculo de material  → é o alvo da textura de variante (ex.: Plane27 dos tiles);
+    //   • material vinculado sem textura ("Default") → caixa auxiliar → oculto (Box121/Box25);
+    //   • material com textura AUSENTE na lib → oculto, como o cliente (tile3_3, sombra do slope_1);
+    //   • material com textura existente → visível (a variante substitui, quando houver).
+    // DUAS PASSADAS. 1ª: objetos COM vínculo de material (0x4130) — material sem textura
+    // ("Default") = helper oculto (Box121/Box25); textura AUSENTE na lib = oculto, como o cliente
+    // (sombra do slope_1); textura existente = visível (variante substitui, quando houver).
+    // 2ª: objetos SEM vínculo — são helpers ocultos (Plane35/Box17 do wall_st, Box113/114 do
+    // bilboard)... EXCETO quando NENHUM objeto vinculado sobreviveu: aí o sem-vínculo é a
+    // superfície de fallback que recebe a variante (Plane27 do tile3_3, cujo único objeto
+    // vinculado aponta GRASS.JPG ausente). Validado contra todos os casos reais.
+    const binds = parse3dsBindings(meshBuf);
+    const allMeshes = [];
+    group.traverse((o) => { if (o.isMesh) allMeshes.push(o); });
+    const hasTex = (o) => (Array.isArray(o.material) ? o.material : [o.material]).some((m) => m.map);
+    const anyTextured = allMeshes.some(hasTex);
+    const unbound = [];
+    let boundVisible = 0;
+    const applyVariant = (o) => { o.material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: variantMap, side: THREE.DoubleSide }); };
+    const applyNative = (o) => {
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        m.side = THREE.DoubleSide;
+        // os Phong do TDSLoader herdam especular alto E cor difusa escura dos .3ds: specular preto
+        // (sem reflexo estourado) + cor BRANCA nos texturizados (three multiplica textura × cor —
+        // com a cor escura do arquivo a textura ficava "na sombra"; o cliente mostra a textura pura)
+        if (m.specular) m.specular.setRGB(0, 0, 0);
+        if (m.map) { m.color.setRGB(1, 1, 1); m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping; m.map.colorSpace = THREE.SRGBColorSpace; }
+        m.needsUpdate = true;
+      }
+    };
+    for (const o of allMeshes) {
+      const bound = binds.byObject.get(o.name);
+      if (/^occl/i.test(o.name)) { o.visible = false; continue; }
+      if (bound === undefined) { // nome não casou com o .3ds: heurística antiga
+        if (anyTextured && !hasTex(o)) o.visible = false;
+        else if (variantMap) { applyVariant(o); boundVisible++; }
+        else { applyNative(o); boundVisible++; }
+        continue;
+      }
+      if (bound.length === 0) { unbound.push(o); continue; } // decide na 2ª passada
+      const texFiles = bound.map((n) => binds.matTex.get(n));
+      if (texFiles.every((t) => !t) || texFiles.some((t) => t && !found.lib.entries.has(t.toLowerCase()))) {
+        o.visible = false; // helper "Default" ou textura ausente
+        continue;
+      }
+      if (variantMap) applyVariant(o); else applyNative(o);
+      boundVisible++;
+    }
+    for (const o of unbound) {
+      if (boundVisible === 0 && variantMap) applyVariant(o); // fallback do tile3_3 (Plane27)
+      else if (boundVisible === 0) applyNative(o);           // nada mais sobrou: mantém visível
+      else o.visible = false;                                // helpers (Plane35/Box17/Box113...)
+    }
+    return group;
+  })();
+  templateCache.set(key, promise);
+  return promise;
+}
+
+// paleta
+function fillPalette() {
+  const sel = (id) => document.getElementById(id);
+  sel("palLib").innerHTML = [...libsByName.keys()].sort().map((n) => `<option>${n}</option>`).join("");
+  const refreshGroups = () => {
+    const lib = libsByName.get(sel("palLib").value);
+    sel("palGroup").innerHTML = lib ? [...lib.xml.querySelectorAll("prop-group")].map((g) => `<option>${g.getAttribute("name")}</option>`).join("") : "";
+    refreshProps();
+  };
+  const refreshProps = () => {
+    const lib = libsByName.get(sel("palLib").value);
+    const g = lib && [...lib.xml.querySelectorAll("prop-group")].find((x) => x.getAttribute("name") === sel("palGroup").value);
+    sel("palProp").innerHTML = g ? [...g.querySelectorAll(":scope > prop")].map((p) => `<option>${p.getAttribute("name")}</option>`).join("") : "";
+    refreshTex();
+  };
+  const refreshTex = () => {
+    const found = findPropDef(sel("palLib").value, sel("palGroup").value, sel("palProp").value);
+    const texs = found ? [...found.def.querySelectorAll("texture")] : [];
+    sel("palTex").innerHTML = `<option value=""></option>` + texs.map((t) => `<option>${t.getAttribute("name")}</option>`).join("");
+  };
+  sel("palLib").onchange = refreshGroups;
+  sel("palGroup").onchange = refreshProps;
+  sel("palProp").onchange = refreshTex;
+  refreshGroups();
+}
+
+// ============================== materiais / marcadores ==============================
+const MAT = {
+  plane: new THREE.MeshLambertMaterial({ color: 0x9aa0ab, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
+  box: new THREE.MeshLambertMaterial({ color: 0x4d8dff, transparent: true, opacity: 0.55 }),
+  tri: new THREE.MeshLambertMaterial({ color: 0xff9f40, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
+  bonus: new THREE.MeshLambertMaterial({ color: 0x57d977, transparent: true, opacity: 0.45 }),
+  kill: new THREE.MeshLambertMaterial({ color: 0xff2222, transparent: true, opacity: 0.35 }),
+  kick: new THREE.MeshLambertMaterial({ color: 0xff8c22, transparent: true, opacity: 0.35 }),
+  ph: new THREE.MeshLambertMaterial({ color: 0xc9b28a, transparent: true, opacity: 0.5 }),
+};
+const SPAWN_COLORS = { dm: 0xffd24d, red: 0xff4d4d, blue: 0x4d8dff, "dom/red": 0xff4d4d, "dom/blue": 0x4d8dff, "dom/free": 0xb26bff, "dom/": 0xb26bff };
+const fmtV = (v) => `(${(+v.x).toFixed(0)}, ${(+v.y).toFixed(0)}, ${(+v.z).toFixed(0)})`;
+
+function register(layer, obj, entity, pickable = true) {
+  obj.userData.entity = entity;
+  entity.obj = obj;
+  layers[layer].add(obj);
+  if (pickable) obj.traverse((o) => { if (o.isMesh) pickables.push(o); });
+}
+function spawnArrow(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(28, 28, 220, 10), new THREE.MeshLambertMaterial({ color }));
+  body.rotation.z = Math.PI / 2;
+  body.position.set(0, 0, 60);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(70, 160, 12), new THREE.MeshLambertMaterial({ color }));
+  tip.rotation.z = -Math.PI / 2;
+  tip.position.set(190, 0, 60);
+  g.add(body, tip);
+  return g;
+}
+function flagMarker(color) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 500, 8), new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+  pole.rotation.x = Math.PI / 2;
+  pole.position.z = 250;
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(220, 130), new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+  flag.rotation.x = Math.PI / 2;
+  flag.position.set(110, 0, 430);
+  g.add(pole, flag);
+  return g;
+}
+function letterSprite(text) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d");
+  ctx.font = "bold 96px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, 64, 68);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+  s.scale.set(400, 400, 1);
+  return s;
+}
+function boxBetween(min, max, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(max.x - min.x, 1), Math.max(max.y - min.y, 1), Math.max(max.z - min.z, 1)), mat);
+  m.position.set((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2);
+  return m;
+}
+
+// ============================== build da cena (lê o DOM) ==============================
+function buildScene() {
+  generation++;
+  const gen = generation;
+  gizmo.detach();
+  for (const g of Object.values(layers)) g.clear();
+  pickables.length = 0;
+  if (!xmlDoc) return;
+  const root = xmlDoc.documentElement;
+  const bb = new THREE.Box3();
+
+  // --- colisão (cada elemento é selecionável) ---
+  for (const el of root.querySelectorAll("collision-geometry > collision-plane")) {
+    const w = num(el, "width"), l = num(el, "length"), pos = vec(el, "position"), rot = vec(el, "rotation");
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), MAT.plane);
+    m.rotation.copy(eulerZYX(rot));
+    m.position.set(pos.x, pos.y, pos.z);
+    register("col", m, { el, kind: "cplane", info: () => `collision-plane ${w}x${l}\npos ${fmtV(pos)}` }, false); // colisão: só visualização
+    bb.expandByObject(m);
+  }
+  for (const el of root.querySelectorAll("collision-geometry > collision-box")) {
+    const size = vec(el, "size"), pos = vec(el, "position"), rot = vec(el, "rotation");
+    const m = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), MAT.box);
+    m.rotation.copy(eulerZYX(rot));
+    m.position.set(pos.x, pos.y, pos.z);
+    register("col", m, { el, kind: "cbox", info: () => `collision-box ${fmtV(size)}\npos ${fmtV(pos)}` }, false);
+    bb.expandByObject(m);
+  }
+  for (const el of root.querySelectorAll("collision-geometry > collision-triangle")) {
+    const pos = vec(el, "position"), rot = vec(el, "rotation"), e = eulerZYX(rot);
+    const pts = ["v0", "v1", "v2"].map((t) => { const v = vec(el, t); return new THREE.Vector3(v.x, v.y, v.z); });
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    g.setIndex([0, 1, 2]);
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, MAT.tri);
+    m.rotation.copy(e);
+    m.position.set(pos.x, pos.y, pos.z);
+    register("col", m, { el, kind: "ctri", info: () => `collision-triangle\npos ${fmtV(pos)}` }, false);
+    bb.expandByObject(m);
+  }
+
+  // --- props (placeholder já; mesh real chega async se a lib estiver carregada) ---
+  for (const el of root.querySelectorAll("static-geometry > prop")) {
+    const lib = el.getAttribute("library-name"), grp = el.getAttribute("group-name"), name = el.getAttribute("name");
+    const texName = el.querySelector(":scope > texture-name")?.textContent || "";
+    const pos = vec(el, "position"), rot = vec(el, "rotation");
+    const holder = new THREE.Group();
+    holder.position.set(pos.x, pos.y, pos.z);
+    holder.rotation.copy(eulerZYX(rot));
+    const ph = new THREE.Mesh(new THREE.BoxGeometry(250, 250, 250), MAT.ph);
+    ph.position.z = 125;
+    holder.add(ph);
+    register("prop", holder, { el, kind: "prop", info: () => `prop "${name}" (${lib} / ${grp})\ntex "${texName}" pos ${fmtV(pos)} rotZ ${rot.z.toFixed(3)}` });
+    if (libsByName.has(lib)) {
+      getPropTemplate(lib, grp, name, texName).then((tpl) => {
+        if (gen !== generation || !tpl) return;
+        holder.remove(ph);
+        const inst = tpl.clone();
+        holder.add(inst);
+        inst.traverse((o) => { if ((o.isMesh || o.isSprite) && o.visible) pickables.push(o); }); // ignora caixas auxiliares ocultas
+      });
+    }
+  }
+
+  // --- spawns ---
+  for (const el of root.querySelectorAll("spawn-points > spawn-point")) {
+    const type = el.getAttribute("type") || "dm", team = el.getAttribute("team") || "";
+    const key = type === "dom" ? `dom/${team}` : type;
+    const pos = vec(el, "position"), rot = vec(el, "rotation");
+    const arrow = spawnArrow(SPAWN_COLORS[key] ?? 0xffffff);
+    arrow.position.set(pos.x, pos.y, pos.z);
+    arrow.rotation.z = rot.z;
+    register("spawn", arrow, { el, kind: "spawn", info: () => `spawn type=${type}${team ? ` team=${team}` : ""}\npos ${fmtV(pos)} rotZ ${rot.z.toFixed(3)}` });
+  }
+
+  // --- ctf flags ---
+  for (const [tag, color] of [["flag-red", 0xff4d4d], ["flag-blue", 0x4d8dff]]) {
+    const el = root.querySelector(`ctf-flags > ${tag}`);
+    if (!el) continue;
+    const pos = { x: num(el, "x"), y: num(el, "y"), z: num(el, "z") };
+    const m = flagMarker(color);
+    m.position.set(pos.x, pos.y, pos.z);
+    register("flags", m, { el, kind: "flag", info: () => `${tag} pos ${fmtV(pos)}` });
+  }
+
+  // --- dom ---
+  for (const el of root.querySelectorAll("dom-keypoints > dom-keypoint")) {
+    const name = el.getAttribute("name") || "?", dist = parseFloat(el.getAttribute("distance") || "1000");
+    const pos = vec(el, "position");
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.TorusGeometry(dist, 18, 8, 64), new THREE.MeshBasicMaterial({ color: 0xb26bff })));
+    const label = letterSprite(name);
+    label.position.z = 500;
+    g.add(label);
+    g.position.set(pos.x, pos.y, pos.z + 30);
+    register("dom", g, { el, kind: "dom", info: () => `dom-keypoint "${name}" raio=${dist}\npos ${fmtV(pos)}` });
+  }
+
+  // --- bonus ---
+  for (const el of root.querySelectorAll("bonus-regions > bonus-region")) {
+    const min = vec(el, "min"), max = vec(el, "max");
+    const types = [...el.querySelectorAll("bonus-type")].map((t) => t.textContent).join(",");
+    const m = boxBetween(min, max, MAT.bonus);
+    register("bonus", m, { el, kind: "bonus", info: () => `bonus "${el.getAttribute("name")}" [${types}]\n[${fmtV(min)}]..[${fmtV(max)}]` });
+  }
+
+  // --- kill/kick ---
+  for (const el of root.querySelectorAll("special-box")) {
+    const action = el.querySelector("action")?.textContent || "kill";
+    const min = { x: num(el, "minX"), y: num(el, "minY"), z: num(el, "minZ") };
+    const max = { x: num(el, "maxX"), y: num(el, "maxY"), z: num(el, "maxZ") };
+    const m = boxBetween(min, max, action === "kick" ? MAT.kick : MAT.kill);
+    register("kill", m, { el, kind: "special", info: () => `special-box ${action}\n[${fmtV(min)}]..[${fmtV(max)}]` });
+  }
+
+  if (!bb.isEmpty() && !buildScene._framed) {
+    buildScene._framed = true;
+    const c = bb.getCenter(new THREE.Vector3()), size = bb.getSize(new THREE.Vector3());
+    controls.target.copy(c);
+    camera.position.set(c.x, c.y - size.y * 0.9 - 2000, c.z + size.z * 2 + 3000);
+    for (const [id, v] of [["zmin", bb.min.z - 1], ["zmax", bb.max.z + 501]]) {
+      const s = document.getElementById(id);
+      s.min = Math.floor(bb.min.z - 1); s.max = Math.ceil(bb.max.z + 501); s.step = 10; s.value = v;
+    }
+    applyZ();
+  }
+  refreshStats();
+}
+function refreshStats() {
+  const q = (s) => xmlDoc.querySelectorAll(s).length;
+  document.getElementById("stats").textContent =
+    `props ${q("static-geometry > prop")} · colisão ${q("collision-plane")}p/${q("collision-box")}b/${q("collision-triangle")}t\n` +
+    `spawns ${q("spawn-point")} · dom ${q("dom-keypoint")} · bonus ${q("bonus-region")} · kill/kick ${q("special-box")}`;
+}
+
+// ============================== carga / salvar ==============================
+function loadXml(text, name) {
+  xmlDecl = (text.match(/^<\?xml[^?]*\?>/) || [""])[0];
+  const doc = new DOMParser().parseFromString(text, "text/xml");
+  if (doc.querySelector("parsererror")) { alert("XML inválido"); return; }
+  xmlDoc = doc;
+  fileName = name;
+  document.title = `LT map editor — ${name}`;
+  undoStack.length = redoStack.length = 0;
+  buildScene._framed = false;
+  clearSelection();
+  buildScene();
+  document.getElementById("saveBtn").disabled = false;
+  document.getElementById("validateBtn").disabled = false;
+}
+document.getElementById("file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) f.text().then((t) => loadXml(t, f.name)); });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f && f.name.endsWith(".xml")) f.text().then((t) => loadXml(t, f.name)); });
+document.getElementById("saveBtn").addEventListener("click", () => {
+  const blob = new Blob([serialize()], { type: "application/xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// ============================== seleção ==============================
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true, depthTest: false });
+const outlines = new THREE.Group();
+scene.add(outlines);
+function clearSelection() {
+  selection = [];
+  gizmo.detach();
+  outlines.clear();
+  renderSelPanel();
+}
+function select(entity, additive) {
+  if (!additive) { selection = []; outlines.clear(); }
+  if (!selection.includes(entity)) selection.push(entity);
+  outlines.clear();
+  for (const s of selection) {
+    // BoxHelper dinâmico (atualizado no loop de render): acompanha o prop durante o arrasto e
+    // quando o mesh real substitui o placeholder async — um Box3 estático virava um cubinho.
+    outlines.add(new THREE.BoxHelper(s.obj, 0x00ffcc));
+  }
+  const primary = selection[selection.length - 1];
+  // gizmo apenas em entidades móveis; modo scale só vale para zonas redimensionáveis
+  if (gizmo.mode === "scale" && primary.kind !== "bonus" && primary.kind !== "special") gizmo.setMode("translate");
+  if (primary.kind === "prop") {
+    // proxy no centro do bbox (recentrado a cada frame — o mesh chega async)
+    const bb = new THREE.Box3().setFromObject(primary.obj);
+    gizmoProxy.position.copy(bb.isEmpty() ? primary.obj.position : bb.getCenter(new THREE.Vector3()));
+    gizmoProxy.rotation.set(0, 0, primary.obj.rotation.z);
+    gizmoProxy.scale.set(1, 1, 1);
+    gizmo.attach(gizmoProxy);
+  } else if (["spawn", "flag", "dom", "bonus", "special"].includes(primary.kind)) {
+    gizmo.attach(primary.obj);
+  }
+  renderSelPanel();
+}
+
+// ============================== vínculo prop ↔ colisão ==============================
+// O map.xml NÃO liga colisão a prop; o editor original as criava juntas. O vínculo aqui é
+// ESPACIAL: colisões cujo <position> cai dentro do bbox do prop (com folga) andam com ele.
+function rotAroundZ(p, c, ang) {
+  const s = Math.sin(ang), co = Math.cos(ang), dx = p.x - c.x, dy = p.y - c.y;
+  return { x: c.x + dx * co - dy * s, y: c.y + dx * s + dy * co, z: p.z };
+}
+/** AABB mundial de um elemento de colisão (cantos rotacionados pela mesma Euler ZYX do cliente). */
+function elementAabb(el) {
+  const bb = new THREE.Box3();
+  const pos = vec(el, "position"), rot = vec(el, "rotation");
+  const e = eulerZYX(rot), P = new THREE.Vector3(pos.x, pos.y, pos.z);
+  const add = (x, y, z) => bb.expandByPoint(new THREE.Vector3(x, y, z).applyEuler(e).add(P));
+  if (el.tagName === "collision-plane") {
+    const hw = num(el, "width") / 2, hl = num(el, "length") / 2;
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) add(hw * sx, hl * sy, 0);
+  } else if (el.tagName === "collision-box") {
+    const s = vec(el, "size");
+    for (let i = 0; i < 8; i++) add((s.x / 2) * (i & 1 ? 1 : -1), (s.y / 2) * (i & 2 ? 1 : -1), (s.z / 2) * (i & 4 ? 1 : -1));
+  } else if (el.tagName === "collision-triangle") {
+    for (const t of ["v0", "v1", "v2"]) { const v = vec(el, t); add(v.x, v.y, v.z); }
+  } else return null;
+  return bb;
+}
+function linkedCollision(box) {
+  if (!box) return [];
+  // vinculada = colisão cujo AABB mundial cabe INTEIRO no bbox do prop + margem — a placa alta do
+  // billboard entra; o plano de chão gigante sob a casa (que extrapola o prop) fica de fora.
+  const outer = box.clone();
+  outer.min.add(new THREE.Vector3(-150, -150, -400));
+  outer.max.add(new THREE.Vector3(150, 150, 400));
+  const out = [];
+  for (const el of xmlDoc.querySelectorAll("collision-geometry > *")) {
+    const ebb = elementAabb(el);
+    if (ebb && outer.containsBox(ebb)) out.push(el);
+  }
+  return out;
+}
+/** Aplica aos elementos de colisão o mesmo movimento do prop: rotação drot em torno de `anchor` + delta. */
+function moveLinked(els, anchor, delta, drot) {
+  for (const el of els) {
+    const p = vec(el, "position");
+    const r = Math.abs(drot) > 1e-6 ? rotAroundZ(p, anchor, drot) : p;
+    writeVec(el, "position", { x: r.x + delta.x, y: r.y + delta.y, z: r.z + delta.z });
+    if (Math.abs(drot) > 1e-6) {
+      const rot = vec(el, "rotation");
+      writeVec(el, "rotation", { x: rot.x, y: rot.y, z: rot.z + drot }, ["z"]);
+    }
+  }
+}
+
+// ============================== gizmo -> DOM ==============================
+let dragStart = null;
+function beginDrag() {
+  const p = selection[selection.length - 1];
+  if (!p || !gizmo.object) return;
+  // pos/rotZ = estado do OBJETO real; gpos/grotZ = estado do que o gizmo manipula (proxy p/ props)
+  dragStart = {
+    pos: p.obj.position.clone(), rotZ: p.obj.rotation.z,
+    gpos: gizmo.object.position.clone(), grotZ: gizmo.object.rotation.z,
+  };
+  if (p.kind === "prop") dragStart.box = new THREE.Box3().setFromObject(p.obj); // p/ vínculo de colisão
+  pushUndo();
+}
+function endDrag() {
+  const p = selection[selection.length - 1];
+  if (!p || !dragStart) return;
+  const el = p.el, o = p.obj;
+  const g = gizmo.object ?? o; // proxy (props) ou o próprio objeto
+  const delta = g.position.clone().sub(dragStart.gpos);
+  const drot = gizmo.mode === "rotate" ? g.rotation.z - dragStart.grotZ : 0;
+  if (p.kind === "flag") {
+    for (const [a, v] of [["x", o.position.x], ["y", o.position.y], ["z", o.position.z]]) ensureChild(el, a).textContent = fmtN(v);
+  } else if (p.kind === "bonus" || p.kind === "special") {
+    let min = p.kind === "bonus" ? vec(el, "min") : { x: num(el, "minX"), y: num(el, "minY"), z: num(el, "minZ") };
+    let max = p.kind === "bonus" ? vec(el, "max") : { x: num(el, "maxX"), y: num(el, "maxY"), z: num(el, "maxZ") };
+    if (gizmo.mode === "scale") {
+      // redimensiona em torno do centro pelo fator do gizmo (modo S)
+      const k = o.scale, c = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 };
+      min = { x: c.x - (c.x - min.x) * k.x, y: c.y - (c.y - min.y) * k.y, z: c.z - (c.z - min.z) * k.z };
+      max = { x: c.x + (max.x - c.x) * k.x, y: c.y + (max.y - c.y) * k.y, z: c.z + (max.z - c.z) * k.z };
+    } else {
+      min = { x: min.x + delta.x, y: min.y + delta.y, z: min.z + delta.z };
+      max = { x: max.x + delta.x, y: max.y + delta.y, z: max.z + delta.z };
+    }
+    if (p.kind === "bonus") {
+      writeVec(el, "min", min);
+      writeVec(el, "max", max);
+      if (el.querySelector(":scope > position")) writeVec(el, "position", min); // convenção: position == min
+    } else {
+      for (const [tag, v] of [["minX", min.x], ["minY", min.y], ["minZ", min.z], ["maxX", max.x], ["maxY", max.y], ["maxZ", max.z]]) ensureChild(el, tag).textContent = fmtN(v);
+    }
+  } else {
+    let newPos = { x: dragStart.pos.x + delta.x, y: dragStart.pos.y + delta.y, z: dragStart.pos.z + delta.z };
+    if (p.kind === "prop" && dragStart.box) {
+      if (drot) {
+        // rotação EM TORNO DO CENTRO (posição do proxy): a âncora orbita o centro e o prop gira
+        // parado no lugar; a colisão vinculada gira pelo mesmo centro.
+        const c = { x: dragStart.gpos.x, y: dragStart.gpos.y };
+        moveLinked(linkedCollision(dragStart.box), c, delta, drot);
+        const rp = rotAroundZ({ x: dragStart.pos.x, y: dragStart.pos.y, z: dragStart.pos.z }, c, drot);
+        newPos = { x: rp.x + delta.x, y: rp.y + delta.y, z: rp.z + delta.z };
+      } else {
+        moveLinked(linkedCollision(dragStart.box), { x: dragStart.pos.x, y: dragStart.pos.y, z: dragStart.pos.z }, delta, 0);
+      }
+    }
+    const off = p.kind === "dom" ? -30 : 0; // marcador dom flutua +30
+    writeVec(el, "position", { x: newPos.x, y: newPos.y, z: newPos.z + off });
+    if (gizmo.mode === "rotate") writeVec(el, "rotation", { x: 0, y: 0, z: dragStart.rotZ + drot }, ["z"]);
+  }
+  dragStart = null;
+  buildScene();
+  reselectByEl(selection.map((s) => s.el));
+}
+function reselectByEl(els) {
+  selection = [];
+  outlines.clear();
+  for (const [, layer] of Object.entries(layers)) {
+    layer.traverse((o) => {
+      const e = o.userData.entity;
+      if (e && els.includes(e.el)) select(e, true);
+    });
+  }
+}
+
+// ============================== painel de propriedades ==============================
+const propsDiv = document.getElementById("props");
+function field(label, id, value, step = 1) { return `<div class="row"><b>${label}</b><input type="number" id="${id}" value="${value}" step="${step}" /></div>`; }
+function renderSelPanel() {
+  const p = selection[selection.length - 1];
+  document.getElementById("selbtns").style.display = p ? "block" : "none";
+  document.getElementById("colBtns").style.display = p?.kind === "prop" ? "block" : "none";
+  document.getElementById("selinfo").textContent = p ? `${p.kind}${selection.length > 1 ? ` (+${selection.length - 1} selecionados)` : ""}` : "nada selecionado";
+  if (!p) { propsDiv.innerHTML = ""; return; }
+  const el = p.el;
+  let html = "";
+  if (p.kind === "flag") {
+    html += field("x", "f_x", num(el, "x")) + field("y", "f_y", num(el, "y")) + field("z", "f_z", num(el, "z"));
+  } else if (p.kind === "special") {
+    html += `<div class="row"><b>action</b><select id="f_action"><option>kill</option><option>kick</option></select></div>`;
+    for (const t of ["minX", "minY", "minZ", "maxX", "maxY", "maxZ"]) html += field(t, `f_${t}`, num(el, t));
+  } else if (p.kind === "bonus") {
+    html += `<div class="row"><b>name</b><input type="text" id="f_name" value="${el.getAttribute("name") || ""}" /></div>`;
+    html += `<div class="row"><b>tipos</b><input type="text" id="f_types" value="${[...el.querySelectorAll("bonus-type")].map((t) => t.textContent).join(",")}" /></div>`;
+    html += `<div class="row"><b>parachute</b><input type="text" id="f_par" value="${el.getAttribute("parachute") || "true"}" /></div>`;
+    const min = vec(el, "min"), max = vec(el, "max");
+    for (const [t, v] of [["min.x", min.x], ["min.y", min.y], ["min.z", min.z], ["max.x", max.x], ["max.y", max.y], ["max.z", max.z]]) html += field(t, `f_${t.replace(".", "_")}`, v);
+  } else {
+    const pos = vec(el, "position"), rot = vec(el, "rotation");
+    html += field("pos.x", "f_px", pos.x) + field("pos.y", "f_py", pos.y) + field("pos.z", "f_pz", pos.z) + field("rot.z", "f_rz", rot.z, 0.1);
+    if (p.kind === "spawn") {
+      html += `<div class="row"><b>type</b><select id="f_type">${["dm", "red", "blue", "dom"].map((t) => `<option${t === el.getAttribute("type") ? " selected" : ""}>${t}</option>`).join("")}</select></div>`;
+      html += `<div class="row"><b>team</b><select id="f_team">${["", "red", "blue", "free"].map((t) => `<option${t === (el.getAttribute("team") || "") ? " selected" : ""}>${t}</option>`).join("")}</select></div>`;
+    }
+    if (p.kind === "dom") {
+      html += `<div class="row"><b>name</b><input type="text" id="f_name" value="${el.getAttribute("name") || ""}" /></div>`;
+      html += field("distance", "f_dist", parseFloat(el.getAttribute("distance") || "1000"));
+    }
+    if (p.kind === "prop") {
+      html += `<div class="row"><b>lib</b><span class="muted">${el.getAttribute("library-name")}</span></div>`;
+      html += `<div class="row"><b>prop</b><span class="muted">${el.getAttribute("group-name")} / ${el.getAttribute("name")}</span></div>`;
+      html += `<div class="row"><b>texture</b><input type="text" id="f_tex" value="${el.querySelector(":scope > texture-name")?.textContent || ""}" /></div>`;
+    }
+    if (p.kind === "cplane") html += field("width", "f_w", num(el, "width")) + field("length", "f_l", num(el, "length"));
+    if (p.kind === "cbox") { const s = vec(el, "size"); html += field("size.x", "f_sx", s.x) + field("size.y", "f_sy", s.y) + field("size.z", "f_sz", s.z); }
+    if (p.kind === "ctri") for (const t of ["v0", "v1", "v2"]) { const v = vec(el, t); html += field(`${t}.x`, `f_${t}x`, v.x) + field(`${t}.y`, `f_${t}y`, v.y) + field(`${t}.z`, `f_${t}z`, v.z); }
+  }
+  propsDiv.innerHTML = html;
+}
+const gv = (id) => { const e = document.getElementById(id); return e ? (e.type === "number" ? parseFloat(e.value) || 0 : e.value) : null; };
+document.getElementById("applyBtn").addEventListener("click", () => {
+  const p = selection[selection.length - 1];
+  if (!p) return;
+  const el = p.el;
+  mutate(() => {
+    if (p.kind === "flag") for (const a of ["x", "y", "z"]) ensureChild(el, a).textContent = fmtN(gv(`f_${a}`));
+    else if (p.kind === "special") {
+      ensureChild(el, "action").textContent = gv("f_action");
+      for (const t of ["minX", "minY", "minZ", "maxX", "maxY", "maxZ"]) ensureChild(el, t).textContent = fmtN(gv(`f_${t}`));
+    } else if (p.kind === "bonus") {
+      el.setAttribute("name", gv("f_name"));
+      el.setAttribute("parachute", gv("f_par"));
+      writeVec(el, "min", { x: gv("f_min_x"), y: gv("f_min_y"), z: gv("f_min_z") });
+      writeVec(el, "max", { x: gv("f_max_x"), y: gv("f_max_y"), z: gv("f_max_z") });
+      writeVec(el, "position", { x: gv("f_min_x"), y: gv("f_min_y"), z: gv("f_min_z") });
+      for (const t of [...el.querySelectorAll("bonus-type")]) t.remove();
+      for (const name of String(gv("f_types")).split(",").map((s) => s.trim()).filter(Boolean)) {
+        const t = xmlDoc.createElement("bonus-type");
+        t.textContent = name;
+        el.appendChild(t);
+      }
+    } else {
+      if (p.kind === "prop") {
+        const oldPos = vec(el, "position"), oldRot = vec(el, "rotation");
+        const delta = { x: gv("f_px") - oldPos.x, y: gv("f_py") - oldPos.y, z: gv("f_pz") - oldPos.z };
+        const drot = gv("f_rz") - oldRot.z;
+        if (delta.x || delta.y || delta.z || drot) moveLinked(linkedCollision(new THREE.Box3().setFromObject(p.obj)), oldPos, delta, drot);
+      }
+      writeVec(el, "position", { x: gv("f_px"), y: gv("f_py"), z: gv("f_pz") });
+      writeVec(el, "rotation", { x: 0, y: 0, z: gv("f_rz") }, ["z"]);
+      if (p.kind === "spawn") {
+        el.setAttribute("type", gv("f_type"));
+        const team = gv("f_team");
+        team ? el.setAttribute("team", team) : el.removeAttribute("team");
+      }
+      if (p.kind === "dom") { el.setAttribute("name", gv("f_name")); el.setAttribute("distance", String(gv("f_dist"))); }
+      if (p.kind === "prop") ensureChild(el, "texture-name").textContent = gv("f_tex");
+      if (p.kind === "cplane") { writeNum(el, "width", gv("f_w")); writeNum(el, "length", gv("f_l")); }
+      if (p.kind === "cbox") writeVec(el, "size", { x: gv("f_sx"), y: gv("f_sy"), z: gv("f_sz") });
+      if (p.kind === "ctri") for (const t of ["v0", "v1", "v2"]) writeVec(el, t, { x: gv(`f_${t}x`), y: gv(`f_${t}y`), z: gv(`f_${t}z`) });
+    }
+  });
+  reselectByEl([el]);
+});
+
+// ============================== adicionar / duplicar / apagar ==============================
+function sectionEl(tag) {
+  let s = xmlDoc.documentElement.querySelector(`:scope > ${tag}`);
+  if (!s) { s = xmlDoc.createElement(tag); xmlDoc.documentElement.appendChild(s); }
+  return s;
+}
+function makeEl(tag, inner) {
+  const frag = new DOMParser().parseFromString(`<${tag}>${inner}</${tag}>`, "text/xml");
+  return xmlDoc.importNode(frag.documentElement, true);
+}
+const T = controls.target; // fallback: alvo da câmera (kill zone)
+document.querySelectorAll("[data-add]").forEach((btn) => btn.addEventListener("click", () => {
+  if (!xmlDoc) return;
+  const kind = btn.dataset.add;
+  // spawn/dom/bonus/flag nascem SOBRE a prop selecionada (posição dela, no topo do seu bbox) —
+  // muito mais previsível que o alvo da câmera. Kill zone continua no alvo da câmera.
+  let spot = { x: T.x, y: T.y, z: T.z };
+  if (kind !== "special") {
+    const prim = selection[selection.length - 1];
+    if (!prim || prim.kind !== "prop") { alert("Selecione uma prop — a entidade será criada sobre ela."); return; }
+    const pos = vec(prim.el, "position");
+    const bb = new THREE.Box3().setFromObject(prim.obj);
+    spot = { x: pos.x, y: pos.y, z: isFinite(bb.max.z) ? bb.max.z : pos.z };
+  }
+  mutate(() => {
+    const P = () => `<position><x>${fmtN(spot.x)}</x><y>${fmtN(spot.y)}</y><z>${fmtN(spot.z)}</z></position>`;
+    if (kind === "spawn") sectionEl("spawn-points").appendChild(makeEl("spawn-point", `<rotation><z>0.000</z></rotation>${P()}`)).setAttribute("type", "dm");
+    if (kind === "dom") {
+      const el = sectionEl("dom-keypoints").appendChild(makeEl("dom-keypoint", P()));
+      el.setAttribute("free", "false"); el.setAttribute("name", "A"); el.setAttribute("distance", "1000");
+    }
+    if (kind === "bonus") {
+      const el = sectionEl("bonus-regions").appendChild(makeEl("bonus-region",
+        `<rotation><z>0.000</z></rotation><min><x>${fmtN(spot.x - 250)}</x><y>${fmtN(spot.y - 250)}</y><z>${fmtN(spot.z)}</z></min>` +
+        `<max><x>${fmtN(spot.x + 250)}</x><y>${fmtN(spot.y + 250)}</y><z>${fmtN(spot.z + 300)}</z></max>` +
+        `<position><x>${fmtN(spot.x - 250)}</x><y>${fmtN(spot.y - 250)}</y><z>${fmtN(spot.z)}</z></position><bonus-type>crystal</bonus-type>`));
+      el.setAttribute("name", "region"); el.setAttribute("parachute", "true"); el.setAttribute("free", "true");
+    }
+    if (kind === "special") {
+      const el = sectionEl("special-geometry").appendChild(makeEl("special-box",
+        `<minX>${fmtN(spot.x)}</minX><minY>${fmtN(spot.y)}</minY><minZ>${fmtN(spot.z - 300)}</minZ>` +
+        `<maxX>${fmtN(spot.x + 1000)}</maxX><maxY>${fmtN(spot.y + 1000)}</maxY><maxZ>${fmtN(spot.z)}</maxZ><action>kill</action>`));
+      el.setAttribute("type", "special-geometry");
+    }
+    if (kind === "flag-red" || kind === "flag-blue") {
+      const flags = sectionEl("ctf-flags");
+      if (!flags.querySelector(`:scope > ${kind}`)) flags.appendChild(makeEl(kind, `<x>${fmtN(spot.x)}</x><y>${fmtN(spot.y)}</y><z>${fmtN(spot.z)}</z>`));
+    }
+  });
+}));
+// Colisão autorada do prop: as caixas auxiliares SEM textura do .3ds (ocultas na renderização) —
+// cada uma vira um <collision-box>. Sem auxiliares, usa o bbox do prop inteiro. Coords LOCAIS.
+async function helperBoxesFor(lib, grp, prop, tex) {
+  const tpl = await getPropTemplate(lib, grp, prop, tex);
+  if (!tpl) return [];
+  const helpers = [];
+  tpl.traverse((o) => { if (o.isMesh && !o.visible) helpers.push(o); });
+  const out = [];
+  for (const h of helpers.length ? helpers : [tpl]) {
+    const bb = new THREE.Box3().setFromObject(h);
+    if (isFinite(bb.min.x)) out.push(bb);
+  }
+  return out;
+}
+/** Cria os <collision-box> no mundo: origem do prop + offset local rotacionado por rotZ. */
+function appendCollisionBoxes(boxes, origin, rotZ = 0) {
+  for (const bb of boxes) {
+    const c = bb.getCenter(new THREE.Vector3()), s = bb.getSize(new THREE.Vector3());
+    const rc = rotAroundZ({ x: c.x, y: c.y, z: c.z }, { x: 0, y: 0 }, rotZ);
+    sectionEl("collision-geometry").appendChild(makeEl("collision-box",
+      `<size><x>${fmtN(Math.max(s.x, 1))}</x><y>${fmtN(Math.max(s.y, 1))}</y><z>${fmtN(Math.max(s.z, 1))}</z></size>` +
+      `<rotation><x>0.000</x><y>0.000</y><z>${fmtN(rotZ)}</z></rotation>` +
+      `<position><x>${fmtN(origin.x + rc.x)}</x><y>${fmtN(origin.y + rc.y)}</y><z>${fmtN(origin.z + rc.z)}</z></position>`));
+  }
+}
+
+document.getElementById("addPropBtn").addEventListener("click", async () => {
+  if (!xmlDoc || !libsByName.size) return;
+  const g = (id) => document.getElementById(id).value;
+  const colBoxes = await helperBoxesFor(g("palLib"), g("palGroup"), g("palProp"), g("palTex"));
+  mutate(() => {
+    const el = sectionEl("static-geometry").appendChild(makeEl("prop",
+      `<rotation><z>0.000</z></rotation><texture-name>${g("palTex")}</texture-name>` +
+      `<position><x>${fmtN(T.x)}</x><y>${fmtN(T.y)}</y><z>${fmtN(T.z)}</z></position>`));
+    el.setAttribute("library-name", g("palLib"));
+    el.setAttribute("group-name", g("palGroup"));
+    el.setAttribute("name", g("palProp"));
+    appendCollisionBoxes(colBoxes, { x: T.x, y: T.y, z: T.z }, 0);
+  });
+});
+
+// --- botões de colisão da prop selecionada ---
+document.getElementById("colDelBtn").addEventListener("click", () => {
+  const p = selection[selection.length - 1];
+  if (!p || p.kind !== "prop") return;
+  const els = linkedCollision(new THREE.Box3().setFromObject(p.obj));
+  if (!els.length) return;
+  mutate(() => els.forEach((el) => el.remove()));
+  reselectByEl([p.el]);
+});
+document.getElementById("colGenBtn").addEventListener("click", async () => {
+  const p = selection[selection.length - 1];
+  if (!p || p.kind !== "prop") return;
+  const el = p.el;
+  const boxes = await helperBoxesFor(el.getAttribute("library-name"), el.getAttribute("group-name"),
+    el.getAttribute("name"), el.querySelector(":scope > texture-name")?.textContent || "");
+  if (!boxes.length) return;
+  const pos = vec(el, "position"), rot = vec(el, "rotation");
+  mutate(() => appendCollisionBoxes(boxes, pos, rot.z));
+  reselectByEl([el]);
+});
+function duplicateSel() {
+  if (!selection.length) return;
+  const clones = [];
+  mutate(() => {
+    for (const s of selection) {
+      if (s.kind === "flag") continue; // flags são únicas
+      const c = s.el.cloneNode(true);
+      s.el.parentNode.insertBefore(c, s.el.nextSibling);
+      const pc = c.querySelector(":scope > position");
+      if (pc) ensureChild(pc, "x").textContent = fmtN(num(pc, "x") + 250);
+      clones.push(c);
+      // prop: duplica também a colisão vinculada, com o mesmo deslocamento
+      if (s.kind === "prop") {
+        for (const cel of linkedCollision(new THREE.Box3().setFromObject(s.obj))) {
+          const cc = cel.cloneNode(true);
+          cel.parentNode.insertBefore(cc, cel.nextSibling);
+          const cp = cc.querySelector(":scope > position");
+          if (cp) ensureChild(cp, "x").textContent = fmtN(num(cp, "x") + 250);
+        }
+      }
+    }
+  });
+  reselectByEl(clones);
+}
+function deleteSel() {
+  if (!selection.length) return;
+  mutate(() => { for (const s of selection) s.el.remove(); });
+  clearSelection();
+}
+document.getElementById("dupBtn").addEventListener("click", duplicateSel);
+document.getElementById("delBtn").addEventListener("click", deleteSel);
+
+/** Move (dx,dy,dz) e/ou gira (drot, rad) toda a seleção via teclado — props levam a colisão junto. */
+function nudgeSelection(dx, dy, dz, drot = 0) {
+  if (!selection.length) return;
+  const els = selection.map((s) => s.el);
+  mutate(() => {
+    for (const s of selection) {
+      const el = s.el;
+      if (s.kind === "flag") {
+        for (const [a, d] of [["x", dx], ["y", dy], ["z", dz]]) ensureChild(el, a).textContent = fmtN(num(el, a) + d);
+      } else if (s.kind === "special") {
+        for (const [t, d] of [["minX", dx], ["maxX", dx], ["minY", dy], ["maxY", dy], ["minZ", dz], ["maxZ", dz]]) {
+          const c = ensureChild(el, t);
+          c.textContent = fmtN(parseFloat(c.textContent || "0") + d);
+        }
+      } else if (s.kind === "bonus") {
+        for (const tag of ["min", "max", "position"]) {
+          const c = el.querySelector(`:scope > ${tag}`);
+          if (c) writeVec(el, tag, { x: num(c, "x") + dx, y: num(c, "y") + dy, z: num(c, "z") + dz });
+        }
+      } else {
+        const pos = vec(el, "position");
+        let newPos = { x: pos.x + dx, y: pos.y + dy, z: pos.z + dz };
+        if (s.kind === "prop") {
+          const bb = new THREE.Box3().setFromObject(s.obj);
+          if (drot) {
+            // gira EM TORNO DO CENTRO do prop (a âncora do XML pode ser na ponta): a posição orbita
+            // o centro e o prop fica no lugar; a colisão vinculada gira junto pelo mesmo centro.
+            const c = bb.getCenter(new THREE.Vector3());
+            moveLinked(linkedCollision(bb), c, { x: dx, y: dy, z: dz }, drot);
+            const rp = rotAroundZ(pos, c, drot);
+            newPos = { x: rp.x + dx, y: rp.y + dy, z: rp.z + dz };
+          } else {
+            moveLinked(linkedCollision(bb), pos, { x: dx, y: dy, z: dz }, 0);
+          }
+        }
+        writeVec(el, "position", newPos);
+        if (drot) {
+          const r = vec(el, "rotation");
+          writeVec(el, "rotation", { x: 0, y: 0, z: r.z + drot }, ["z"]);
+        }
+      }
+    }
+  });
+  reselectByEl(els);
+}
+
+// ============================== validação ==============================
+document.getElementById("validateBtn").addEventListener("click", () => {
+  const out = [];
+  const specials = [...xmlDoc.querySelectorAll("special-box")].map((el) => ({
+    action: el.querySelector("action")?.textContent,
+    min: { x: num(el, "minX"), y: num(el, "minY"), z: num(el, "minZ") },
+    max: { x: num(el, "maxX"), y: num(el, "maxY"), z: num(el, "maxZ") },
+  }));
+  const inside = (p, b) => p.x >= b.min.x && p.x <= b.max.x && p.y >= b.min.y && p.y <= b.max.y && p.z >= b.min.z - 1 && p.z <= b.max.z + 1;
+  xmlDoc.querySelectorAll("spawn-point").forEach((el, i) => {
+    const pos = vec(el, "position");
+    if (specials.some((b) => inside(pos, b))) out.push(`spawn #${i} (${el.getAttribute("type")}) dentro de kill/kick zone ${fmtV(pos)}`);
+  });
+  for (const el of xmlDoc.querySelectorAll("bonus-region")) {
+    const min = vec(el, "min"), max = vec(el, "max");
+    if (min.x > max.x || min.y > max.y || min.z > max.z) out.push(`bonus "${el.getAttribute("name")}" com min > max`);
+  }
+  const domSpawns = xmlDoc.querySelectorAll('spawn-point[type="dom"]').length;
+  const domPoints = xmlDoc.querySelectorAll("dom-keypoint").length;
+  if (domPoints && !domSpawns) out.push("dom-keypoints sem spawns type=dom");
+  const teamSpawns = xmlDoc.querySelectorAll('spawn-point[type="red"], spawn-point[type="blue"]').length;
+  if ((xmlDoc.querySelector("ctf-flags flag-red") || xmlDoc.querySelector("ctf-flags flag-blue")) && !teamSpawns) out.push("ctf-flags sem spawns red/blue");
+  document.getElementById("valid").innerHTML = out.length ? out.map((s) => `<div class="warn">⚠ ${s}</div>`).join("") : "✓ sem problemas";
+});
+
+// ============================== UI: camadas / z / snap / teclado / hover / clique ==============================
+const LAYER_IDS = { L_prop: "prop", L_col: "col", L_spawn: "spawn", L_flags: "flags", L_dom: "dom", L_bonus: "bonus", L_kill: "kill" };
+for (const [id, layer] of Object.entries(LAYER_IDS)) document.getElementById(id).addEventListener("change", (e) => { layers[layer].visible = e.target.checked; });
+document.getElementById("wireframe").addEventListener("change", (e) => { for (const m of [MAT.plane, MAT.box, MAT.tri]) { m.wireframe = e.target.checked; m.needsUpdate = true; } });
+function applyZ() {
+  const zmin = +document.getElementById("zmin").value, zmax = +document.getElementById("zmax").value;
+  clipLow.constant = -zmin;
+  clipHigh.constant = zmax*10;
+  document.getElementById("zminLabel").textContent = zmin;
+  document.getElementById("zmaxLabel").textContent = zmax;
+}
+for (const id of ["zmin", "zmax"]) document.getElementById(id).addEventListener("input", applyZ);
+/** Passo do snap definido pelo usuário (padrão 25u); também é o passo das setas do teclado. */
+function snapStep() {
+  const v = parseFloat(document.getElementById("snapStep").value);
+  return Number.isFinite(v) && v > 0 ? v : 25;
+}
+function applySnap() {
+  const on = document.getElementById("snap").checked;
+  gizmo.setTranslationSnap(on ? snapStep() : null); // snap absoluto no grid do mundo
+  gizmo.setRotationSnap(on ? Math.PI / 4 : null);
+}
+document.getElementById("snap").addEventListener("change", applySnap);
+document.getElementById("snapStep").addEventListener("input", applySnap);
+applySnap();
+
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "w" || e.key === "W") gizmo.setMode("translate");
+  if (e.key === "e" || e.key === "E") gizmo.setMode("rotate");
+  if (e.key === "s" || e.key === "S") {
+    const prim = selection[selection.length - 1];
+    if (prim && (prim.kind === "bonus" || prim.kind === "special")) gizmo.setMode("scale"); // redimensionar zonas
+  }
+  if (e.key === "Escape") clearSelection();
+  if (e.key === "Delete") deleteSel();
+  if ((e.key === "r" || e.key === "R") && !e.ctrlKey && selection.length) {
+    e.preventDefault();
+    nudgeSelection(0, 0, 0, e.shiftKey ? -Math.PI / 2 : Math.PI / 2); // girar 90°
+  }
+  const st = snapStep(); // setas movem 1 passo do snap
+  const arrow = { ArrowRight: [st, 0, 0], ArrowLeft: [-st, 0, 0], ArrowUp: [0, st, 0], ArrowDown: [0, -st, 0], PageUp: [0, 0, st], PageDown: [0, 0, -st] }[e.key];
+  if (arrow && selection.length) { e.preventDefault(); nudgeSelection(...arrow); }
+  if (e.ctrlKey && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSel(); }
+  if (e.ctrlKey && (e.key === "z" || e.key === "Z")) { e.preventDefault(); undo(); }
+  if (e.ctrlKey && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
+});
+
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+function pickEntity(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  for (const hit of ray.intersectObjects(pickables, false)) {
+    let o = hit.object;
+    while (o && !o.userData.entity) o = o.parent;
+    if (o && o.parent?.visible !== false) return { entity: o.userData.entity, point: hit.point };
+  }
+  return null;
+}
+renderer.domElement.addEventListener("mousemove", (e) => {
+  if (!xmlDoc) return;
+  const p = pickEntity(e);
+  document.getElementById("hover").textContent = p ? `${p.entity.info()}\nponto: ${p.point.x.toFixed(0)}, ${p.point.y.toFixed(0)}, ${p.point.z.toFixed(0)}` : "—";
+});
+let downAt = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!xmlDoc || !downAt || gizmo.dragging) return;
+  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return; // arrasto de câmera
+  const p = pickEntity(e);
+  if (p) select(p.entity, e.ctrlKey);
+  else if (!e.ctrlKey) clearSelection();
+});
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  for (const h of outlines.children) h.update(); // contornos seguem o objeto (drag do gizmo / mesh async)
+  // proxy do gizmo gruda no centro do bbox do prop (o mesh real chega async e muda o centro)
+  if (gizmo.object === gizmoProxy && !gizmo.dragging && selection.length) {
+    const prim = selection[selection.length - 1];
+    const bb = new THREE.Box3().setFromObject(prim.obj);
+    if (!bb.isEmpty()) {
+      gizmoProxy.position.copy(bb.getCenter(new THREE.Vector3()));
+      gizmoProxy.rotation.set(0, 0, prim.obj.rotation.z);
+    }
+  }
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
