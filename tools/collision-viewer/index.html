@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>LT collision viewer</title>
+<!--
+  Visualizador dos JSONs de colisão do servidor (src/generated/collision/<map>.json).
+  Abra este arquivo direto no navegador (file:// funciona; Three.js vem de CDN) e selecione um JSON
+  pelo botão ou arraste-o para a janela.
+
+  Cores: cinza = boxes vindos de collision-plane horizontal (lajes/pisos, 80u de espessura);
+  azul = obstacles (collision-box: paredes/estruturas sólidas); laranja = triangles (rampas e
+  planos inclinados/verticais). O testador de linha de tiro desenha um segmento A->B e lista tudo
+  que ele cruza — útil para conferir se a geometria do servidor bloqueia um tiro (splash do trovão).
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 13px/1.4 system-ui, sans-serif; background: #14161a; color: #d7dae0; }
+  #panel { position: fixed; top: 0; left: 0; bottom: 0; width: 300px; overflow-y: auto; background: #1c1f26; padding: 12px; box-sizing: border-box; z-index: 2; }
+  #panel h1 { font-size: 15px; margin: 0 0 10px; }
+  #panel section { margin-bottom: 14px; border-top: 1px solid #30343d; padding-top: 10px; }
+  #panel label { display: block; margin: 4px 0; cursor: pointer; }
+  #panel input[type=number] { width: 64px; background: #0f1114; color: #d7dae0; border: 1px solid #3a3f4a; border-radius: 3px; padding: 2px 4px; }
+  #panel button { background: #2f6fed; color: #fff; border: 0; border-radius: 4px; padding: 5px 10px; cursor: pointer; margin: 2px 2px 2px 0; }
+  #panel button.sec { background: #3a3f4a; }
+  #stats, #hitlist, #hover { font-family: Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+  #hitlist .blocked { color: #ff7a7a; }
+  #hitlist .free { color: #7aff9c; }
+  .legend span { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; }
+  #canvas-wrap { position: absolute; inset: 0 0 0 300px; }
+  input[type=range] { width: 100%; }
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  } }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>LT collision viewer</h1>
+  <input type="file" id="file" accept=".json" />
+  <div id="stats">nenhum mapa carregado — selecione um JSON de src/generated/collision/</div>
+
+  <section>
+    <b>Camadas</b>
+    <label class="legend"><span style="background:#9aa0ab"></span><input type="checkbox" id="showPlanes" checked /> Lajes/pisos (plane slabs)</label>
+    <label class="legend"><span style="background:#4d8dff"></span><input type="checkbox" id="showObstacles" checked /> Obstáculos (collision-box)</label>
+    <label class="legend"><span style="background:#ff9f40"></span><input type="checkbox" id="showTris" checked /> Triângulos (rampas/planos inclinados)</label>
+    <label><input type="checkbox" id="wireframe" /> Wireframe</label>
+    <label><input type="checkbox" id="transparent" checked /> Transparência</label>
+  </section>
+
+  <section>
+    <b>Filtro de altura (Z)</b>
+    <div>min <span id="zminLabel"></span></div><input type="range" id="zmin" />
+    <div>max <span id="zmaxLabel"></span></div><input type="range" id="zmax" />
+  </section>
+
+  <section>
+    <b>Linha de tiro (A → B)</b>
+    <div>A: x <input type="number" id="ax" value="0" /> y <input type="number" id="ay" value="0" /> z <input type="number" id="az" value="100" /></div>
+    <div>B: x <input type="number" id="bx" value="1000" /> y <input type="number" id="by" value="0" /> z <input type="number" id="bz" value="100" /></div>
+    <button id="traceBtn">Traçar</button>
+    <button id="clearTraceBtn" class="sec">Limpar</button>
+    <div>Dica: shift+clique no mapa define A; ctrl+clique define B (no ponto da superfície clicada).</div>
+    <div id="hitlist"></div>
+  </section>
+
+  <section>
+    <b>Sob o cursor</b>
+    <div id="hover">—</div>
+  </section>
+</div>
+<div id="canvas-wrap"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const wrap = document.getElementById("canvas-wrap");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.localClippingEnabled = true;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14161a);
+const camera = new THREE.PerspectiveCamera(60, 1, 10, 500000);
+camera.up.set(0, 0, 1); // Tanki é Z-up
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(1, 2, 3);
+scene.add(sun);
+
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+resize();
+
+// clipping planes do filtro de Z (aplicados globalmente)
+const clipLow = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);   // z >= zmin
+const clipHigh = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0); // z <= zmax
+renderer.clippingPlanes = [clipLow, clipHigh];
+
+const COLORS = { plane: 0x9aa0ab, obstacle: 0x4d8dff, tri: 0xff9f40, hit: 0xff4d4d };
+let data = null;           // JSON cru { boxes, triangles, obstacles }
+let boxKinds = [];         // "plane" | "obstacle" por índice de boxes
+let planeMesh = null, obstacleMesh = null, triMesh = null;
+let meshInfo = new Map();  // mesh -> { kind, indices[] } (índice no array original por instanceId)
+let traceGroup = new THREE.Group();
+scene.add(traceGroup);
+
+function disposeMeshes() {
+  for (const m of [planeMesh, obstacleMesh, triMesh]) {
+    if (!m) continue;
+    scene.remove(m);
+    m.geometry.dispose();
+    m.material.dispose();
+  }
+  planeMesh = obstacleMesh = triMesh = null;
+  meshInfo.clear();
+}
+
+function makeInstanced(boxes, indices, color) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.65 });
+  const mesh = new THREE.InstancedMesh(geo, mat, indices.length);
+  const m = new THREE.Matrix4();
+  indices.forEach((bi, i) => {
+    const b = boxes[bi];
+    m.makeScale(Math.max(b.maxX - b.minX, 1), Math.max(b.maxY - b.minY, 1), Math.max(b.maxZ - b.minZ, 1));
+    m.setPosition((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  return mesh;
+}
+
+function build() {
+  disposeMeshes();
+  // obstacles ⊆ boxes: separa por valor para colorir diferente
+  const obstacleSet = new Set(data.obstacles.map((b) => JSON.stringify(b)));
+  boxKinds = data.boxes.map((b) => (obstacleSet.has(JSON.stringify(b)) ? "obstacle" : "plane"));
+  const planeIdx = [], obstacleIdx = [];
+  boxKinds.forEach((k, i) => (k === "plane" ? planeIdx : obstacleIdx).push(i));
+
+  planeMesh = makeInstanced(data.boxes, planeIdx, COLORS.plane);
+  obstacleMesh = makeInstanced(data.boxes, obstacleIdx, COLORS.obstacle);
+  meshInfo.set(planeMesh, { kind: "plane", indices: planeIdx });
+  meshInfo.set(obstacleMesh, { kind: "obstacle", indices: obstacleIdx });
+  scene.add(planeMesh, obstacleMesh);
+
+  const tris = data.triangles;
+  const pos = new Float32Array(tris.length * 9);
+  tris.forEach((t, i) => pos.set([t.ax, t.ay, t.az, t.bx, t.by, t.bz, t.cx, t.cy, t.cz], i * 9));
+  const tgeo = new THREE.BufferGeometry();
+  tgeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  tgeo.computeVertexNormals();
+  triMesh = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({ color: COLORS.tri, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
+  meshInfo.set(triMesh, { kind: "tri" });
+  scene.add(triMesh);
+
+  // enquadra a câmera e configura os sliders de Z
+  const bb = new THREE.Box3();
+  data.boxes.forEach((b) => { bb.expandByPoint(new THREE.Vector3(b.minX, b.minY, b.minZ)); bb.expandByPoint(new THREE.Vector3(b.maxX, b.maxY, b.maxZ)); });
+  tris.forEach((t) => { bb.expandByPoint(new THREE.Vector3(t.ax, t.ay, t.az)); bb.expandByPoint(new THREE.Vector3(t.bx, t.by, t.bz)); bb.expandByPoint(new THREE.Vector3(t.cx, t.cy, t.cz)); });
+  const c = bb.getCenter(new THREE.Vector3()), size = bb.getSize(new THREE.Vector3());
+  controls.target.copy(c);
+  camera.position.set(c.x, c.y - size.y * 0.9 - 2000, c.z + size.z * 2 + 3000);
+  camera.updateProjectionMatrix();
+
+  for (const [el, v] of [["zmin", bb.min.z - 1], ["zmax", bb.max.z + 1]]) {
+    const s = document.getElementById(el);
+    s.min = Math.floor(bb.min.z - 1); s.max = Math.ceil(bb.max.z + 1); s.step = 10; s.value = v;
+  }
+  applyZ();
+  applyLayers();
+  document.getElementById("stats").textContent =
+    `boxes: ${data.boxes.length} (lajes ${planeIdx.length} + obstáculos ${obstacleIdx.length})\ntriangles: ${tris.length}\nX ${bb.min.x}..${bb.max.x}  Y ${bb.min.y}..${bb.max.y}  Z ${bb.min.z}..${bb.max.z}`;
+}
+
+// --- UI: camadas / wireframe / z ---
+function applyLayers() {
+  if (!data) return;
+  planeMesh.visible = document.getElementById("showPlanes").checked;
+  obstacleMesh.visible = document.getElementById("showObstacles").checked;
+  triMesh.visible = document.getElementById("showTris").checked;
+  const wf = document.getElementById("wireframe").checked;
+  const tr = document.getElementById("transparent").checked;
+  for (const m of [planeMesh, obstacleMesh, triMesh]) {
+    m.material.wireframe = wf;
+    m.material.transparent = tr;
+    m.material.opacity = tr ? (m === triMesh ? 0.85 : 0.65) : 1;
+    m.material.needsUpdate = true;
+  }
+}
+function applyZ() {
+  const zmin = +document.getElementById("zmin").value, zmax = +document.getElementById("zmax").value;
+  clipLow.constant = -zmin;
+  clipHigh.constant = zmax;
+  document.getElementById("zminLabel").textContent = zmin;
+  document.getElementById("zmaxLabel").textContent = zmax;
+}
+for (const id of ["showPlanes", "showObstacles", "showTris", "wireframe", "transparent"]) document.getElementById(id).addEventListener("change", applyLayers);
+for (const id of ["zmin", "zmax"]) document.getElementById(id).addEventListener("input", applyZ);
+
+// --- carregamento do JSON ---
+function loadFile(file) {
+  file.text().then((txt) => {
+    data = JSON.parse(txt);
+    document.title = `LT collision viewer — ${file.name}`;
+    clearTrace();
+    build();
+  });
+}
+document.getElementById("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); });
+
+// --- linha de tiro: interseção segmento×AABB (slab) e segmento×triângulo (Möller–Trumbore) ---
+function segBox(a, d, b) { // a=origem, d=B-A; retorna t de entrada em [0,1] ou null
+  let t0 = 0, t1 = 1;
+  for (const [lo, hi, o, dd] of [[b.minX, b.maxX, a.x, d.x], [b.minY, b.maxY, a.y, d.y], [b.minZ, b.maxZ, a.z, d.z]]) {
+    if (Math.abs(dd) < 1e-9) { if (o < lo || o > hi) return null; continue; }
+    let ta = (lo - o) / dd, tb = (hi - o) / dd;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+    if (t0 > t1) return null;
+  }
+  return t0;
+}
+function segTri(a, d, t) {
+  const e1 = { x: t.bx - t.ax, y: t.by - t.ay, z: t.bz - t.az };
+  const e2 = { x: t.cx - t.ax, y: t.cy - t.ay, z: t.cz - t.az };
+  const p = { x: d.y * e2.z - d.z * e2.y, y: d.z * e2.x - d.x * e2.z, z: d.x * e2.y - d.y * e2.x };
+  const det = e1.x * p.x + e1.y * p.y + e1.z * p.z;
+  if (Math.abs(det) < 1e-9) return null;
+  const inv = 1 / det;
+  const s = { x: a.x - t.ax, y: a.y - t.ay, z: a.z - t.az };
+  const u = (s.x * p.x + s.y * p.y + s.z * p.z) * inv;
+  if (u < 0 || u > 1) return null;
+  const q = { x: s.y * e1.z - s.z * e1.y, y: s.z * e1.x - s.x * e1.z, z: s.x * e1.y - s.y * e1.x };
+  const v = (d.x * q.x + d.y * q.y + d.z * q.z) * inv;
+  if (v < 0 || u + v > 1) return null;
+  const tt = (e2.x * q.x + e2.y * q.y + e2.z * q.z) * inv;
+  return tt >= 0 && tt <= 1 ? tt : null;
+}
+
+function clearTrace() {
+  traceGroup.clear();
+  document.getElementById("hitlist").innerHTML = "";
+}
+function trace() {
+  if (!data) return;
+  clearTrace();
+  const g = (id) => +document.getElementById(id).value;
+  const a = { x: g("ax"), y: g("ay"), z: g("az") }, b = { x: g("bx"), y: g("by"), z: g("bz") };
+  const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+
+  const hits = [];
+  data.boxes.forEach((box, i) => {
+    const t = segBox(a, d, box);
+    if (t !== null) hits.push({ t, kind: boxKinds[i], label: `box#${i} [${box.minX}..${box.maxX}, ${box.minY}..${box.maxY}, z ${box.minZ}..${box.maxZ}]` });
+  });
+  data.triangles.forEach((tri, i) => {
+    const t = segTri(a, d, tri);
+    if (t !== null) hits.push({ t, kind: "tri", label: `tri#${i} (${tri.ax},${tri.ay},${tri.az})-(${tri.bx},${tri.by},${tri.bz})-(${tri.cx},${tri.cy},${tri.cz})` });
+  });
+  hits.sort((x, y) => x.t - y.t);
+
+  // desenha o segmento + marcadores nas interseções
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x, a.y, a.z), new THREE.Vector3(b.x, b.y, b.z)]);
+  traceGroup.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: hits.length ? 0xff4d4d : 0x7aff9c })));
+  for (const p of [a, b]) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(30), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    s.position.set(p.x, p.y, p.z);
+    traceGroup.add(s);
+  }
+  for (const h of hits) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(22), new THREE.MeshBasicMaterial({ color: COLORS.hit }));
+    s.position.set(a.x + d.x * h.t, a.y + d.y * h.t, a.z + d.z * h.t);
+    traceGroup.add(s);
+  }
+
+  const list = document.getElementById("hitlist");
+  list.innerHTML = hits.length
+    ? `<div class="blocked">BLOQUEADO — ${hits.length} interseção(ões):</div>` + hits.map((h) => `t=${h.t.toFixed(3)} ${h.kind} ${h.label}`).join("\n")
+    : `<div class="free">LIVRE — nada entre A e B</div>`;
+}
+document.getElementById("traceBtn").addEventListener("click", trace);
+document.getElementById("clearTraceBtn").addEventListener("click", clearTrace);
+
+// --- hover: identifica a geometria sob o cursor; shift/ctrl+clique define A/B ---
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const targets = [planeMesh, obstacleMesh, triMesh].filter((m) => m && m.visible);
+  const hit = ray.intersectObjects(targets, false)[0];
+  if (!hit) return null;
+  const info = meshInfo.get(hit.object);
+  let label;
+  if (info.kind === "tri") label = `tri#${Math.floor(hit.faceIndex)}`;
+  else {
+    const bi = info.indices[hit.instanceId];
+    const b = data.boxes[bi];
+    label = `${info.kind} box#${bi} [${b.minX}..${b.maxX}, ${b.minY}..${b.maxY}, z ${b.minZ}..${b.maxZ}]`;
+  }
+  return { point: hit.point, label };
+}
+renderer.domElement.addEventListener("mousemove", (e) => {
+  if (!data) return;
+  const p = pick(e);
+  document.getElementById("hover").textContent = p ? `${p.label}\nponto: ${p.point.x.toFixed(0)}, ${p.point.y.toFixed(0)}, ${p.point.z.toFixed(0)}` : "—";
+});
+renderer.domElement.addEventListener("click", (e) => {
+  if (!data || (!e.shiftKey && !e.ctrlKey)) return;
+  const p = pick(e);
+  if (!p) return;
+  const pre = e.shiftKey ? "a" : "b";
+  for (const [axis, v] of [["x", p.point.x], ["y", p.point.y], ["z", p.point.z + 50]]) document.getElementById(pre + axis).value = v.toFixed(0);
+});
+
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
