@@ -8,8 +8,9 @@
   Uso: abra este arquivo no navegador (Chrome recomendado).
     1. "Bibliotecas": selecione a pasta resources/library (uma vez; fica em memória).
     2. "map.xml": selecione/arraste um resources/map/<mapa>/<tema>/xml/v1/map.xml.
-    3. Edite: clique seleciona (ctrl+clique adiciona à seleção); W move, E rotaciona, Del apaga,
-       Ctrl+D duplica, Ctrl+Z/Ctrl+Y desfaz/refaz, Esc deseleciona. Painel direito edita propriedades.
+    3. Câmera espectador: WASD voa, Q sobe / E desce, Shift acelera, ARRASTAR o mouse gira
+       (esquerdo ou direito). Edite: clique parado seleciona (ctrl+clique adiciona); gizmo 1 move /
+       2 rotaciona / 3 redimensiona, Del apaga, Ctrl+D duplica, Ctrl+Z/Y desfaz/refaz, Esc deseleciona.
     4. "Salvar XML" baixa o map.xml. Depois: npm run build:maps para o servidor usar.
   O Document XML parseado é a FONTE DA VERDADE: renderização lê dele, edição escreve nele —
   seções desconhecidas (lights, way-points...) sobrevivem intactas ao round-trip.
@@ -88,7 +89,8 @@
   <section>
     <b>Edição</b>
     <label><input type="checkbox" id="snap" checked /> Snap <input type="number" id="snapStep" value="25" min="1" step="25" style="width:56px" />u / 45°</label>
-    <div class="muted">W mover · E rotacionar · S redimensionar (bonus/kill) · R girar 90° (Shift inverte)<br/>
+    <div class="muted"><b>Câmera</b>: WASD voa · Q sobe / E desce · Shift acelera · ARRASTAR o mouse gira (clique parado = selecionar)<br/>
+    <b>Gizmo</b>: 1 mover · 2 rotacionar · 3 redimensionar (bonus/kill) · R girar 90° (Shift inverte)<br/>
     Setas movem 1 passo do snap (PgUp/PgDn = Z) · Del apagar · Ctrl+D duplicar · Ctrl+Z/Y undo/redo</div>
   </section>
 
@@ -114,7 +116,6 @@
 
 <script type="module">
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { TDSLoader } from "three/addons/loaders/TDSLoader.js";
 
@@ -128,7 +129,58 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14161a);
 const camera = new THREE.PerspectiveCamera(60, 1, 10, 500000);
 camera.up.set(0, 0, 1);
-const controls = new OrbitControls(camera, renderer.domElement);
+
+// ===================== câmera espectador (voo livre, como o cliente) =====================
+// WASD move no plano do olhar, Q sobe / E desce, Shift acelera; segurar o BOTÃO DIREITO gira a
+// câmera a partir dela mesma (mouse-look). O clique esquerdo continua sendo seleção.
+let camYaw = Math.PI / 2, camPitch = -0.6;
+const camKeys = new Set();
+const camClock = new THREE.Clock();
+const T = new THREE.Vector3(); // "alvo da câmera" (ponto à frente) — usado p/ adicionar kill zone
+let lookPrev = null; // [x,y] do mouse enquanto o botão direito está pressionado
+camera.position.set(0, -6000, 5000);
+renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+// ARRASTAR com o botão esquerdo gira a câmera (clique parado <5px continua sendo seleção);
+// botão direito também gira. Não inicia o giro se o mouse está sobre uma alça do gizmo.
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (e.button === 2) e.preventDefault();
+  if ((e.button === 0 && !gizmo.axis && !gizmo.dragging) || e.button === 2) lookPrev = [e.clientX, e.clientY];
+});
+// move/up na JANELA (não no canvas): delta manual em clientX/Y — movementX chega zerado em
+// alguns ambientes, e assim o giro continua mesmo se o cursor sair do canvas durante o arrasto.
+addEventListener("pointermove", (e) => {
+  if (!lookPrev) return;
+  camYaw -= (e.clientX - lookPrev[0]) * 0.003;
+  camPitch = Math.max(-1.55, Math.min(1.55, camPitch - (e.clientY - lookPrev[1]) * 0.003));
+  lookPrev = [e.clientX, e.clientY];
+});
+addEventListener("pointerup", () => { lookPrev = null; });
+function camForward() {
+  return new THREE.Vector3(Math.cos(camPitch) * Math.cos(camYaw), Math.cos(camPitch) * Math.sin(camYaw), Math.sin(camPitch));
+}
+function updateCamera() {
+  const dt = Math.min(camClock.getDelta(), 0.1);
+  const fwd = camForward();
+  const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+  const speed = (camKeys.has("shift") ? 9000 : 2000) * dt;
+  const mv = new THREE.Vector3();
+  if (camKeys.has("w")) mv.add(fwd);
+  if (camKeys.has("s")) mv.sub(fwd);
+  if (camKeys.has("d")) mv.add(right);
+  if (camKeys.has("a")) mv.sub(right);
+  if (camKeys.has("q")) mv.z += 1;
+  if (camKeys.has("e")) mv.z -= 1;
+  if (mv.lengthSq()) camera.position.addScaledVector(mv.normalize(), speed);
+  camera.lookAt(camera.position.clone().add(fwd));
+  T.copy(camera.position).addScaledVector(fwd, 2500);
+}
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const k = e.key.toLowerCase();
+  if (["w", "a", "s", "d", "q", "e", "shift"].includes(k) && !e.ctrlKey) camKeys.add(k);
+});
+addEventListener("keyup", (e) => camKeys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => camKeys.clear());
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 const sun = new THREE.DirectionalLight(0xffffff, 1.0);
 sun.position.set(1, 2, 3);
@@ -150,7 +202,6 @@ const gizmo = new TransformControls(camera, renderer.domElement);
 const gizmoProxy = new THREE.Object3D();
 scene.add(gizmoProxy);
 gizmo.addEventListener("dragging-changed", (e) => {
-  controls.enabled = !e.value;
   if (e.value) beginDrag(); else endDrag();
 });
 gizmo.addEventListener("objectChange", () => {
@@ -687,8 +738,10 @@ function buildScene() {
   if (!bb.isEmpty() && !buildScene._framed) {
     buildScene._framed = true;
     const c = bb.getCenter(new THREE.Vector3()), size = bb.getSize(new THREE.Vector3());
-    controls.target.copy(c);
     camera.position.set(c.x, c.y - size.y * 0.9 - 2000, c.z + size.z * 2 + 3000);
+    const d = c.clone().sub(camera.position).normalize(); // aponta a câmera-espectador p/ o centro
+    camYaw = Math.atan2(d.y, d.x);
+    camPitch = Math.asin(d.z);
     for (const [id, v] of [["zmin", bb.min.z - 1], ["zmax", bb.max.z + 501]]) {
       const s = document.getElementById(id);
       s.min = Math.floor(bb.min.z - 1); s.max = Math.ceil(bb.max.z + 501); s.step = 10; s.value = v;
@@ -991,7 +1044,7 @@ function makeEl(tag, inner) {
   const frag = new DOMParser().parseFromString(`<${tag}>${inner}</${tag}>`, "text/xml");
   return xmlDoc.importNode(frag.documentElement, true);
 }
-const T = controls.target; // fallback: alvo da câmera (kill zone)
+// T (alvo da câmera) é atualizado por updateCamera() — ponto 2500u à frente do espectador
 document.querySelectorAll("[data-add]").forEach((btn) => btn.addEventListener("click", () => {
   if (!xmlDoc) return;
   const kind = btn.dataset.add;
@@ -1223,9 +1276,9 @@ applySnap();
 
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-  if (e.key === "w" || e.key === "W") gizmo.setMode("translate");
-  if (e.key === "e" || e.key === "E") gizmo.setMode("rotate");
-  if (e.key === "s" || e.key === "S") {
+  if (e.key === "1") gizmo.setMode("translate");
+  if (e.key === "2") gizmo.setMode("rotate");
+  if (e.key === "3") {
     const prim = selection[selection.length - 1];
     if (prim && (prim.kind === "bonus" || prim.kind === "special")) gizmo.setMode("scale"); // redimensionar zonas
   }
@@ -1262,17 +1315,17 @@ renderer.domElement.addEventListener("mousemove", (e) => {
   document.getElementById("hover").textContent = p ? `${p.entity.info()}\nponto: ${p.point.x.toFixed(0)}, ${p.point.y.toFixed(0)}, ${p.point.z.toFixed(0)}` : "—";
 });
 let downAt = null;
-renderer.domElement.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerdown", (e) => { if (e.button === 0) downAt = [e.clientX, e.clientY]; });
 renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!xmlDoc || !downAt || gizmo.dragging) return;
-  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return; // arrasto de câmera
+  if (e.button !== 0 || !xmlDoc || !downAt || gizmo.dragging) return; // seleção só no botão esquerdo
+  if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
   const p = pickEntity(e);
   if (p) select(p.entity, e.ctrlKey);
   else if (!e.ctrlKey) clearSelection();
 });
 
 renderer.setAnimationLoop(() => {
-  controls.update();
+  updateCamera();
   for (const h of outlines.children) h.update(); // contornos seguem o objeto (drag do gizmo / mesh async)
   // proxy do gizmo gruda no centro do bbox do prop (o mesh real chega async e muda o centro)
   if (gizmo.object === gizmoProxy && !gizmo.dragging && selection.length) {
