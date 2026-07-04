@@ -115,8 +115,8 @@ export class BattleService {
      * distance is scaled by SPLASH_WORLD_SCALE so a direct hit (~150u from center) stays inside
      * maxRadius and the splash reaches ~nearby tanks — calibrate this if the radius feels off.
      */
-    public applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
-        return this.combat.applySplashDamage(battle, shooterClient, center, baseDamage, maxRadius, minRadius, minPercent);
+    public applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number, losOrigin?: IVector3): Promise<void> {
+        return this.combat.applySplashDamage(battle, shooterClient, center, baseDamage, maxRadius, minRadius, minPercent, losOrigin);
     }
 
     /** A death with no killer (self-destruct, void). Delegates to CombatService. */

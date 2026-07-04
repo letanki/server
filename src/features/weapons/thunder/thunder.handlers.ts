@@ -17,6 +17,23 @@ import * as ThunderPackets from "./thunder.packets";
 // Base damage is a UNIFORM RANDOM roll in [DAMAGE_FROM, DAMAGE_TO], rolled ONCE per explosion.
 const THUNDER_WORLD_SCALE = 100; // world units per "metre" (same as the shotgun's distance falloff)
 
+// The client reports the explosion exactly ON the surface it hit. A zero-thickness wall (vertical
+// collision-plane triangle — e.g. most polygon buildings) then falls inside isBlockedBetween's
+// 40u end-trim and stops blocking: tanks BEHIND the wall took splash. This point — the impact
+// pulled back toward the shooter by more than the 40u trim — is used ONLY as the occlusion-test
+// origin (applySplashDamage `losOrigin`): the wall stays genuinely between the explosion and the
+// far side, while every damage distance is still measured from the true impact point.
+const IMPACT_NUDGE = 60;
+function nudgeTowardShooter(client: GameClient, pos: IVector3 | null): IVector3 | null {
+    const s = client.battlePosition;
+    if (!pos || !s) return pos;
+    const dx = s.x - pos.x, dy = s.y - pos.y, dz = s.z - pos.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-3) return pos;
+    const k = Math.min(IMPACT_NUDGE, len) / len;
+    return { x: pos.x + dx * k, y: pos.y + dy * k, z: pos.z + dz * k };
+}
+
 function getThunderParams(user: UserDocument) {
     const mod = user.turrets.get(user.equippedTurret) ?? 0;
     const w = weaponPhysicsData.weapons.find((x) => x.id === `${user.equippedTurret}_m${mod}`) as any;
@@ -35,7 +52,7 @@ function getThunderParams(user: UserDocument) {
     };
 }
 
-async function detonateThunder(server: GameServer, client: GameClient, center: IVector3 | null): Promise<void> {
+async function detonateThunder(server: GameServer, client: GameClient, center: IVector3 | null, losOrigin?: IVector3 | null): Promise<void> {
     const { user, currentBattle } = client;
     if (!user || !currentBattle || !center || client.battleState !== "active") return;
     const p = getThunderParams(user);
@@ -50,7 +67,7 @@ async function detonateThunder(server: GameServer, client: GameClient, center: I
     }
 
     logger.info(`Thunder explosion by ${user.username} at (${center.x | 0},${center.y | 0},${center.z | 0}) — base ${base.toFixed(1)}, splash ${p.maxSplash}-${p.minSplash}m@${p.splashPercent}%`);
-    await server.battleService.applySplashDamage(currentBattle, client, center, base, p.maxSplash, p.minSplash, p.splashPercent);
+    await server.battleService.applySplashDamage(currentBattle, client, center, base, p.maxSplash, p.minSplash, p.splashPercent, losOrigin ?? undefined);
 }
 
 export class ThunderShotNoTargetCommandHandler implements IPacketHandler<ThunderPackets.ThunderShotNoTargetCommandPacket> {
@@ -83,11 +100,12 @@ export class ThunderStaticShotCommandHandler implements IPacketHandler<ThunderPa
             logger.warn("ThunderStaticShotCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        // Relay the explosion visual, then deal splash damage at the impact point (ground/wall).
+        // Relay the explosion visual, then deal splash damage at the true impact point — with the
+        // occlusion test anchored at the nudged point so the surface hit still blocks the far side.
         const shotPacket = new ThunderPackets.ThunderStaticShotPacket({ nickname: user.username, position: packet.position });
         currentBattle.broadcastRaw(shotPacket.write(), shotPacket.getId(), user.id);
 
-        await detonateThunder(server, client, packet.position);
+        await detonateThunder(server, client, packet.position, nudgeTowardShooter(client, packet.position));
     }
 }
 
@@ -105,9 +123,11 @@ export class ThunderTargetShotCommandHandler implements IPacketHandler<ThunderPa
 
         // Direct hit: centre the explosion on the TARGET's position so it sits at distance 0 (splash
         // factor 1 → full damage), and nearby tanks take the splash falloff from there. Fall back to the
-        // reported world/target hit point if the target isn't resolvable.
+        // reported world/target hit point if the target isn't resolvable — a surface point, so its
+        // occlusion test gets the same anti-leak nudge as the static shot (damage stays at the point).
         const directTarget = packet.nicknameTarget ? server.findClientByUsername(packet.nicknameTarget) : null;
-        const center = directTarget?.battlePosition ?? packet.positionInWorld ?? packet.positionTarget ?? null;
-        await detonateThunder(server, client, center);
+        const fallback = packet.positionInWorld ?? packet.positionTarget ?? null;
+        const center = directTarget?.battlePosition ?? fallback;
+        await detonateThunder(server, client, center, directTarget ? null : nudgeTowardShooter(client, fallback));
     }
 }

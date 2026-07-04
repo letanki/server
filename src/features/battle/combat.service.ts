@@ -121,8 +121,13 @@ export class CombatService {
      * Area (splash) damage from an explosion at `center`. Every active tank — including the shooter —
      * within `minRadius` takes damage: full to `maxRadius`, then linearly down to `minPercent`% at
      * `minRadius`. World distance is scaled by SPLASH_WORLD_SCALE.
+     *
+     * `losOrigin` (default: `center`) is used ONLY for the wall-occlusion test, never for distances.
+     * A surface explosion (thunder hitting a wall) passes a point nudged toward the shooter here, so
+     * the zero-thickness wall it hit still blocks the far side — while every damage falloff stays
+     * measured from the true impact point.
      */
-    public async applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number): Promise<void> {
+    public async applySplashDamage(battle: Battle, shooterClient: GameClient, center: IVector3, baseDamage: number, maxRadius: number, minRadius: number, minPercent: number, losOrigin: IVector3 = center): Promise<void> {
         const SPLASH_WORLD_SCALE = 100; // world units per "metre" — radii are in metres (thunder splash 0..12m)
         for (const targetClient of [...battle.clients]) {
             if (targetClient.isDestroyed || targetClient.battleState !== "active" || !targetClient.battlePosition) continue;
@@ -140,7 +145,7 @@ export class CombatService {
             // damage through walls. (Checked only for tanks already in range, so it's cheap. The trim in
             // isBlockedBetween means the surface at the impact / floor under the tank don't count; a tank
             // AT the impact centre — the direct hit — has a zero-length line and is never blocked.)
-            if (this.collision.isBlockedBetween(battle.mapResourceId, center, targetClient.battlePosition)) continue;
+            if (this.collision.isBlockedBetween(battle.mapResourceId, losOrigin, targetClient.battlePosition)) continue;
 
             await this.applyDamage(battle, shooterClient, targetClient, baseDamage * factor);
         }
