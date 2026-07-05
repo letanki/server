@@ -75,11 +75,30 @@ export class ShaftAimTrackPacket extends BasePacket {
     public static getId(): number { return 11992250; }
 }
 
-/** C→S: shaft entered aiming mode (the charge starts here). Body = clientTime. */
+/** C→S: shaft entered aiming mode — the damage CHARGE starts here (body = clientTime). Sent the instant
+ *  the player holds aim; the zoom/laser is not yet engaged, so this is NOT relayed (see ShaftAimEngaged). */
 export class ShaftEnterAimingPacket extends BasePacket {
     public read(_buffer: Buffer): void {}
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
     public static getId(): number { return -367760678; }
+}
+
+/** C→S: shaft aiming fully ENGAGED (empty body) — sent ~0.5s after ShaftEnterAiming, when the zoom
+ *  animation completes and the laser turns on. THIS is what the official server relays as the aim-enter
+ *  event (so others start the laser at the right moment); relaying on ShaftEnterAiming instead makes the
+ *  remote laser appear ~0.5s early. Verified by clock-aligned timing in 2026-07-04_23-56_s6-54824.ndjson. */
+export class ShaftAimEngagedPacket extends BasePacket {
+    public read(_buffer: Buffer): void {}
+    public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
+    public static getId(): number { return -1487306515; }
+}
+
+/** C→S: shaft LEFT aiming mode (empty body). The client sends this right after firing an aiming shot (or
+ *  on cancel); the official server responds by broadcasting the exit relay so others stop the laser. */
+export class ShaftExitAimingPacket extends BasePacket {
+    public read(_buffer: Buffer): void {}
+    public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
+    public static getId(): number { return 843751647; }
 }
 
 /** S→C: a player ENTERED aiming mode — others render it as aiming (turret-only) and start the laser.
@@ -114,17 +133,25 @@ export class ShaftShotPacket extends BasePacket {
     ) { super(); }
     public read(_buffer: Buffer): void {}
     public write(): Buffer {
-        return new BufferWriter()
+        const w = new BufferWriter()
             .writeOptionalString(this.nickname)
-            .writeOptionalVector3(this.origin)
-            .writeInt32BE(0)
-            .writeInt8(1)
-            .writeOptionalString(this.target)
-            .writeInt8(0)
-            .writeInt32BE(1)
-            .writeOptionalVector3(this.hit)
-            .writeFloatBE(this.power)
-            .getBuffer();
+            .writeOptionalVector3(this.origin);
+        // A HIT carries the full target block (int/byte framing + target + hit vec); a MISS (wall/void,
+        // target=null) collapses to just two null markers — matching the official relay byte-for-byte
+        // (miss = 31B, hit = 60B, verified against 2026-07-04_23-56 capture). Emitting the full block with
+        // null placeholders on a miss produced a 41B packet the client can't parse, which desynced the
+        // shaft aim/beam rendering on the other players (misses are frequent while aiming at cover).
+        if (this.target !== null) {
+            w.writeInt32BE(0)
+                .writeInt8(1)
+                .writeOptionalString(this.target)
+                .writeInt8(0)
+                .writeInt32BE(1)
+                .writeOptionalVector3(this.hit);
+        } else {
+            w.writeOptionalString(null).writeOptionalVector3(null);
+        }
+        return w.writeFloatBE(this.power).getBuffer();
     }
     public static getId(): number { return 1184835319; }
 }

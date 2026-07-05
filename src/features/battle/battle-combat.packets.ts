@@ -359,6 +359,31 @@ export class TurretRotationPacket extends BasePacket implements BattleTypes.IRot
     static getId(): number { return 1927704181; }
 }
 
+// C->S: the continuous turret-direction stream (bare angle, no control). The client sends this every
+// frame while the turret turns, IN ADDITION to the discrete RotateTurretCommand (start/stop). Without
+// relaying it, remote turrets only update on the sparse control commands → jerky/stuck aim on others.
+export class TurretDirectionCommandPacket extends BasePacket {
+    static readonly schema: PacketSchema = [{ name: "angle", type: "f32" }];
+    angle: number = 0;
+    read(buffer: Buffer): void { readSchema(this, TurretDirectionCommandPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, TurretDirectionCommandPacket.schema); }
+    static getId(): number { return 1224288585; }
+}
+
+// S->C: relays the continuous turret direction to the other players (nickname + angle). Pairs with
+// TurretDirectionCommandPacket, exactly like TurretRotationPacket pairs with RotateTurretCommandPacket.
+export class TurretDirectionPacket extends BasePacket {
+    static readonly schema: PacketSchema = [
+        { name: "nickname", type: "string" },
+        { name: "angle", type: "f32" },
+    ];
+    nickname: string | null = null; angle: number = 0;
+    constructor(data?: Partial<TurretDirectionPacket>) { super(); if (data) Object.assign(this, data); }
+    read(buffer: Buffer): void { readSchema(this, TurretDirectionPacket.schema, buffer); }
+    write(): Buffer { return writeSchema(this, TurretDirectionPacket.schema); }
+    static getId(): number { return -534192254; }
+}
+
 export class SelfDestructScheduledPacket extends BasePacket implements BattleTypes.ISelfDestructScheduled {
     time: number;
     constructor(time: number = 0) { super(); this.time = time; }

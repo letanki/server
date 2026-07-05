@@ -22,16 +22,37 @@ function turretDamage(user: GameClient["user"]): { from: number; to: number; aim
     return { from, to, aimMax };
 }
 
-/** Shaft entered aiming mode → start the sniper charge timer. */
+/** Shaft entered aiming mode → start the sniper charge timer. This is NOT relayed: the laser is only
+ *  engaged ~0.5s later (ShaftAimEngaged), which is what drives the aim-enter relay. */
 export class ShaftEnterAimingHandler implements IPacketHandler<ShaftPackets.ShaftEnterAimingPacket> {
     public readonly packetId = ShaftPackets.ShaftEnterAimingPacket.getId();
-    public execute(client: GameClient, server: GameServer): void {
+    public execute(client: GameClient): void {
         client.shaftAimStart = Date.now();
-        // Tell the other players this tank entered aiming mode (so they render the laser + don't read the
-        // aim-track as the tank itself rotating).
+    }
+}
+
+/** Shaft aiming fully engaged (zoom complete, laser on) → NOW tell the others so their laser starts at
+ *  the right moment (~0.5s after enter, matching the official server — relaying on enter showed it early)
+ *  and they render aiming as turret-only rotation instead of reading the aim-track as the tank spinning. */
+export class ShaftAimEngagedHandler implements IPacketHandler<ShaftPackets.ShaftAimEngagedPacket> {
+    public readonly packetId = ShaftPackets.ShaftAimEngagedPacket.getId();
+    public execute(client: GameClient): void {
         const { user, currentBattle } = client;
         if (!user || !currentBattle) return;
         const relay = new ShaftPackets.ShaftAimEnterRelayPacket(user.username);
+        currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
+    }
+}
+
+/** Shaft left aiming mode (after firing or on cancel) → tell the others so they stop the laser. The
+ *  official server drives the exit relay from THIS command (~0.4s after the aim shot), not from the shot
+ *  itself — verified in 2026-07-04_23-56_s6-54824.ndjson. */
+export class ShaftExitAimingHandler implements IPacketHandler<ShaftPackets.ShaftExitAimingPacket> {
+    public readonly packetId = ShaftPackets.ShaftExitAimingPacket.getId();
+    public execute(client: GameClient): void {
+        const { user, currentBattle } = client;
+        if (!user || !currentBattle) return;
+        const relay = new ShaftPackets.ShaftAimExitRelayPacket(user.username);
         currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
     }
 }
@@ -79,12 +100,10 @@ export class ShaftAimingShotCommandHandler implements IPacketHandler<ShaftPacket
         client.shaftAimStart = 0;
         const ratio = Math.max(0, Math.min(1, elapsed / SHAFT_FULL_CHARGE_MS));
 
-        // Relay the beam (hit or miss), then exit aiming for everyone — firing ALWAYS leaves aim mode, so
-        // the laser must clear even when the shot missed a wall / the void (else it lingers on others).
+        // Relay the beam (hit or miss). The aim-EXIT relay is sent separately, driven by the client's
+        // ShaftExitAiming (843751647) command that follows the shot — matching the official ordering.
         const relay = new ShaftPackets.ShaftShotPacket(user.username, packet.origin, packet.target, packet.hit, SHAFT_AIMING_POWER);
         currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
-        const exit = new ShaftPackets.ShaftAimExitRelayPacket(user.username);
-        currentBattle.broadcastRaw(exit.write(), exit.getId(), user.id);
 
         // Damage only when an actual tank was hit.
         const targetClient = packet.target ? server.findClientByUsername(packet.target) : undefined;

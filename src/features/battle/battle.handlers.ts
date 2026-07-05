@@ -306,6 +306,20 @@ export class RotateTurretCommandHandler implements IPacketHandler<BattlePackets.
     }
 }
 
+// Relays the continuous turret-direction stream (bare angle) the client sends every frame while turning,
+// alongside the discrete RotateTurretCommand. Without it, remote turrets only move on the sparse control
+// commands → jerky/stuck aim on other players (notably visible with the shaft's slow aim sweep).
+export class TurretDirectionCommandHandler implements IPacketHandler<BattlePackets.TurretDirectionCommandPacket> {
+    public readonly packetId = BattlePackets.TurretDirectionCommandPacket.getId();
+
+    public execute(client: GameClient, server: GameServer, packet: BattlePackets.TurretDirectionCommandPacket): void {
+        if (!client.user || !client.currentBattle) return;
+        client.turretAngle = packet.angle;
+        const relay = new BattlePackets.TurretDirectionPacket({ nickname: client.user.username, angle: packet.angle });
+        client.currentBattle.broadcastRaw(relay.write(), relay.getId(), client.user.id);
+    }
+}
+
 export class SendBattleChatMessageHandler implements IPacketHandler<BattlePackets.SendBattleChatMessagePacket> {
     public readonly packetId = BattlePackets.SendBattleChatMessagePacket.getId();
 
