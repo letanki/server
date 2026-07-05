@@ -168,8 +168,8 @@ function updateCamera() {
   if (camKeys.has("s")) mv.sub(fwd);
   if (camKeys.has("d")) mv.add(right);
   if (camKeys.has("a")) mv.sub(right);
-  if (camKeys.has("q")) mv.z += 1;
-  if (camKeys.has("e")) mv.z -= 1;
+  if (camKeys.has("e")) mv.z += 1;
+  if (camKeys.has("q")) mv.z -= 1;
   if (mv.lengthSq()) camera.position.addScaledVector(mv.normalize(), speed);
   camera.lookAt(camera.position.clone().add(fwd));
   T.copy(camera.position).addScaledVector(fwd, 2500);
@@ -268,6 +268,10 @@ function mutate(fn, rebuild = true) { pushUndo(); fn(); if (rebuild) buildScene(
 // libsByName: nome de exibição (library.xml name=) -> { xml: Document, entries: Map(nomeArquivo->Uint8Array) }
 const libsByName = new Map();
 const templateCache = new Map(); // `${lib}|${group}|${prop}|${tex}` -> Promise<THREE.Object3D>
+// Overrides manuais de visibilidade por objeto interno do .3ds (inspetor do painel de seleção):
+// `${lib}|${group}|${prop}` -> Map(nomeDoObjeto -> bool). Ferramenta de diagnóstico p/ props
+// problemáticos (pontes) — o gabarito descoberto vira regra depois.
+const objOverrides = new Map();
 
 function parseTara(buf) {
   const dv = new DataView(buf);
@@ -294,8 +298,8 @@ function parseTara(buf) {
 function parse3dsBindings(buf) {
   const dv = new DataView(buf);
   const dec = new TextDecoder();
-  const byObject = new Map(), matTex = new Map();
-  let cur = null, curMat = null;
+  const byObject = new Map(), matTex = new Map(), uvFull = new Map(), bbox = new Map();
+  let cur = null, curMat = null, curUV = null, curBB = null;
   const cstr = (q, end) => { let s = q; while (s < end && dv.getUint8(s) !== 0) s++; return [dec.decode(new Uint8Array(buf, q, s - q)), s + 1]; };
   (function walk(s, e) {
     let p = s;
@@ -307,13 +311,40 @@ function parse3dsBindings(buf) {
       else if (id === 0xafff) { curMat = { name: "", tex: null }; walk(b, p + len); matTex.set(curMat.name, curMat.tex); }
       else if (id === 0xa000 && curMat) curMat.name = cstr(b, p + len)[0];
       else if (id === 0xa300 && curMat) curMat.tex = cstr(b, p + len)[0];
-      else if (id === 0x4000) { const [name, q] = cstr(b, p + len); cur = []; byObject.set(name, cur); walk(q, p + len); }
+      else if (id === 0x4000) {
+        const [name, q] = cstr(b, p + len);
+        cur = []; byObject.set(name, cur);
+        curUV = { minU: 9, maxU: -9, minV: 9, maxV: -9 };
+        curBB = { min: [9e9, 9e9, 9e9], max: [-9e9, -9e9, -9e9] };
+        bbox.set(name, curBB);
+        walk(q, p + len);
+        uvFull.set(name, curUV.minU <= 0.005 && curUV.maxU >= 0.995 && curUV.minV <= 0.005 && curUV.maxV >= 0.995);
+      }
+      else if (id === 0x4110 && curBB) {
+        const n = dv.getUint16(b, true);
+        let q = b + 2;
+        for (let i = 0; i < n; i++) for (let a = 0; a < 3; a++) {
+          const v = dv.getFloat32(q, true); q += 4;
+          if (v < curBB.min[a]) curBB.min[a] = v;
+          if (v > curBB.max[a]) curBB.max[a] = v;
+        }
+      }
+      else if (id === 0x4140 && curUV) {
+        const n = dv.getUint16(b, true);
+        let q = b + 2;
+        for (let i = 0; i < n; i++) {
+          const u = dv.getFloat32(q, true); q += 4;
+          const vv = dv.getFloat32(q, true); q += 4;
+          if (u < curUV.minU) curUV.minU = u; if (u > curUV.maxU) curUV.maxU = u;
+          if (vv < curUV.minV) curUV.minV = vv; if (vv > curUV.maxV) curUV.maxV = vv;
+        }
+      }
       else if (id === 0x4120 && cur) walk(b + 2 + dv.getUint16(b, true) * 8, p + len);
       else if (id === 0x4130 && cur) cur.push(cstr(b, p + len)[0]);
       p += len;
     }
   })(0, buf.byteLength);
-  return { byObject, matTex };
+  return { byObject, matTex, uvFull, bbox };
 }
 
 /** Pivô do PRIMEIRO objeto do .3ds (translação do chunk 0x4160) — a âncora do prop, ou null. */
@@ -491,7 +522,7 @@ function getPropTemplate(libName, groupName, propName, texName) {
     group.traverse((o) => { if (o.isMesh) allMeshes.push(o); });
     const hasTex = (o) => (Array.isArray(o.material) ? o.material : [o.material]).some((m) => m.map);
     const anyTextured = allMeshes.some(hasTex);
-    const unbound = [];
+    const unbound = [], fullUVok = [], okObjs = [];
     let boundVisible = 0;
     const applyVariant = (o) => { o.material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: variantMap, side: THREE.DoubleSide }); };
     const applyNative = (o) => {
@@ -520,13 +551,113 @@ function getPropTemplate(libName, groupName, propName, texName) {
         o.visible = false; // helper "Default" ou textura ausente
         continue;
       }
+      if (binds.uvFull.get(o.name)) { fullUVok.push(o); continue; } // UV 0..1 exato: decide depois
+      okObjs.push(o);
+    }
+    // Objeto ISOLADO: bbox XY que não SOBREPÕE (folga 10u) nenhum outro objeto do arquivo — é
+    // cópia de autoria numa célula deslocada (o "bridge_1_1" do Bridge rise pro, que só encosta
+    // na borda da rampa real). Oculto apenas quando é minoria E resta outra geometria para
+    // representar o prop — pontes segmentadas (partes que só se encostam) viram maioria e ficam.
+    const overlapsAny = (name) => {
+      const a = binds.bbox.get(name);
+      if (!a) return true;
+      for (const [n2, c] of binds.bbox) {
+        if (n2 === name) continue;
+        if (a.min[0] < c.max[0] - 10 && a.max[0] > c.min[0] + 10 && a.min[1] < c.max[1] - 10 && a.max[1] > c.min[1] + 10) return true;
+      }
+      return false;
+    };
+    const isolated = new Set(okObjs.filter((o) => !overlapsAny(o.name)));
+    const totalRenderable = okObjs.length + fullUVok.length + unbound.length;
+    // MOLDES DE POSICIONAMENTO (Bridge rise pro / Tunnel 1): a geometria texturizada é desenhada
+    // NO LUGAR marcado pelos objetos sem vínculo cujo centro XY cai FORA dela (os "moldes" — a
+    // estrutura na célula verdadeira). O deslocamento pode ser parcial (túnel: meia célula, a
+    // cópia SOBREPÕE o molde — por isso o critério de isolamento não bastava). Delta = centro da
+    // união dos moldes − centro da união texturizada (ponte: +1000,0; túnel: 0,−250). Guardas:
+    // ≥3 moldes e delta >50u; moldes continuam ocultos na 2ª passada.
+    let isoShift = null;
+    if (okObjs.length && unbound.length) {
+      const uni = (list) => {
+        const acc = { min: [9e9, 9e9], max: [-9e9, -9e9] };
+        for (const o of list) {
+          const c = binds.bbox.get(o.name);
+          if (!c) continue;
+          for (let a = 0; a < 2; a++) { acc.min[a] = Math.min(acc.min[a], c.min[a]); acc.max[a] = Math.max(acc.max[a], c.max[a]); }
+        }
+        return acc;
+      };
+      const tex = uni(okObjs);
+      if (tex.min[0] < 9e9) {
+        const molds = unbound.filter((o) => {
+          const c = binds.bbox.get(o.name);
+          if (!c) return false;
+          // molde precisa ter CORPO: linhas degeneradas (largura 0 — os tri02_* nas bordas do
+          // Bridge 6) têm centro na fronteira e disparavam shift indevido de +250
+          if (c.max[0] - c.min[0] <= 20 || c.max[1] - c.min[1] <= 20) return false;
+          const cx = (c.min[0] + c.max[0]) / 2, cy = (c.min[1] + c.max[1]) / 2;
+          return !(cx > tex.min[0] + 1 && cx < tex.max[0] - 1 && cy > tex.min[1] + 1 && cy < tex.max[1] - 1);
+        });
+        if (molds.length >= 2) { // Tubes têm só 2 moldes (caixa da célula + lajinha)
+          // XY: âncora = o MAIOR molde por área (a laje/piso da célula verdadeira) — a média de
+          // todos era poluída por peças soltas em terceiras células (arco do Tunnel 2: +375 errado
+          // em vez de +250). Maior molde: Box11 (túneis) / plane_14 (ponte) / Box43 (tubes).
+          let biggest = null, bArea = -1, moldZmin = 9e9, texZmin = 9e9;
+          for (const o of molds) {
+            const c = binds.bbox.get(o.name);
+            const area = (c.max[0] - c.min[0]) * (c.max[1] - c.min[1]);
+            if (area > bArea) { bArea = area; biggest = c; }
+            moldZmin = Math.min(moldZmin, c.min[2]);
+          }
+          for (const o of okObjs) { const c = binds.bbox.get(o.name); if (c) texZmin = Math.min(texZmin, c.min[2]); }
+          const dx = (biggest.min[0] + biggest.max[0]) / 2 - (tex.min[0] + tex.max[0]) / 2;
+          const dy = (biggest.min[1] + biggest.max[1]) / 2 - (tex.min[1] + tex.max[1]) / 2;
+          // Z: alinha a BASE do corpo texturizado à base da UNIÃO dos moldes (não do maior — no
+          // túnel o maior é a laje do TETO). Tubes: cano autorado meio enterrado (z −150) sobe
+          // +150 até a base do molde; túneis/pontes: dz = 0 (bases já coincidem).
+          const dz = moldZmin < 9e9 && texZmin < 9e9 ? moldZmin - texZmin : 0;
+          if (Math.hypot(dx, dy, dz) > 50) isoShift = [dx, dy, dz];
+        }
+      }
+    }
+    for (const o of okObjs) {
+      if (isolated.has(o) && isolated.size * 2 < totalRenderable && !isoShift) { o.visible = false; continue; } // cópia de autoria sem molde
+      if (isoShift) { o.position.x += isoShift[0]; o.position.y += isoShift[1]; o.position.z += isoShift[2]; }
       if (variantMap) applyVariant(o); else applyNative(o);
       boundVisible++;
     }
+    // Objetos vinculados com UV EXATAMENTE 0..1 nos dois eixos = lixo de autoria (o atlas inteiro
+    // esmagado num plano — Plane39/42/110 do bridge_1; e reidentifica os helpers Box121/Box25).
+    // Só escondemos quando sobrou geometria real; um prop cujo ÚNICO objeto é full-UV (decal
+    // legítimo, ex. tile 1x1) permanece visível.
+    for (const o of fullUVok) {
+      if (boundVisible > 0) o.visible = false;
+      else { if (variantMap) applyVariant(o); else applyNative(o); boundVisible++; }
+    }
+    // Fallback dos SEM-vínculo quando nada mais sobrou: variante se houver; senão a PRIMEIRA
+    // textura existente dos materiais do próprio .3ds (a rampa do Bridge rise pro herda
+    // BRIDGE_1.JPG — sem isso renderizava branca, como o usuário viu no inspetor).
+    let fallbackMat = null;
+    const fallbackFor = () => {
+      if (variantMap) return new THREE.MeshLambertMaterial({ color: 0xffffff, map: variantMap, side: THREE.DoubleSide });
+      if (!fallbackMat) {
+        fallbackMat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        for (const [, tex] of binds.matTex) {
+          const url = tex && found.lib.entries.has(tex.toLowerCase()) ? blobUrl(found.lib, tex) : null;
+          if (!url) continue;
+          new THREE.TextureLoader().load(url, (t) => {
+            t.colorSpace = THREE.SRGBColorSpace;
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+            fallbackMat.map = t;
+            fallbackMat.needsUpdate = true;
+          });
+          break;
+        }
+      }
+      return fallbackMat;
+    };
     for (const o of unbound) {
-      if (boundVisible === 0 && variantMap) applyVariant(o); // fallback do tile3_3 (Plane27)
-      else if (boundVisible === 0) applyNative(o);           // nada mais sobrou: mantém visível
-      else o.visible = false;                                // helpers (Plane35/Box17/Box113...)
+      if (boundVisible === 0) o.material = fallbackFor(); // fallback (Plane27 do tile, rampa do pro)
+      else o.visible = false;                             // helpers (Plane35/Box17/Box113...)
     }
     return group;
   })();
@@ -679,6 +810,8 @@ function buildScene() {
         holder.remove(ph);
         const inst = tpl.clone();
         holder.add(inst);
+        const ov = objOverrides.get(`${lib}|${grp}|${name}`);
+        if (ov) inst.traverse((o) => { if (o.isMesh && ov.has(o.name)) o.visible = ov.get(o.name); });
         inst.traverse((o) => { if ((o.isMesh || o.isSprite) && o.visible) pickables.push(o); }); // ignora caixas auxiliares ocultas
       });
     }
@@ -981,12 +1114,35 @@ function renderSelPanel() {
       html += `<div class="row"><b>lib</b><span class="muted">${el.getAttribute("library-name")}</span></div>`;
       html += `<div class="row"><b>prop</b><span class="muted">${el.getAttribute("group-name")} / ${el.getAttribute("name")}</span></div>`;
       html += `<div class="row"><b>texture</b><input type="text" id="f_tex" value="${el.querySelector(":scope > texture-name")?.textContent || ""}" /></div>`;
+      // inspetor: objetos internos do .3ds com visibilidade individual (diagnóstico de props
+      // problemáticos — o gabarito que você descobrir aqui vira regra permanente depois)
+      const objs = [];
+      p.obj.traverse((o) => { if (o.isMesh && o.name) objs.push(o); });
+      if (objs.length) {
+        html += `<div class="row"><b>objetos</b><span class="muted">(marque = visível)</span></div>` +
+          objs.map((o) => `<label style="margin-left:8px"><input type="checkbox" class="objvis" data-obj="${o.name}" ${o.visible ? "checked" : ""}/> ${o.name}</label>`).join("");
+      }
     }
     if (p.kind === "cplane") html += field("width", "f_w", num(el, "width")) + field("length", "f_l", num(el, "length"));
     if (p.kind === "cbox") { const s = vec(el, "size"); html += field("size.x", "f_sx", s.x) + field("size.y", "f_sy", s.y) + field("size.z", "f_sz", s.z); }
     if (p.kind === "ctri") for (const t of ["v0", "v1", "v2"]) { const v = vec(el, t); html += field(`${t}.x`, `f_${t}x`, v.x) + field(`${t}.y`, `f_${t}y`, v.y) + field(`${t}.z`, `f_${t}z`, v.z); }
   }
   propsDiv.innerHTML = html;
+  // inspetor de objetos: aplica o toggle ao vivo em TODAS as instâncias do mesmo prop e guarda o
+  // override p/ sobreviver aos rebuilds (undo/mover/etc.) desta sessão
+  propsDiv.querySelectorAll(".objvis").forEach((cb) => cb.addEventListener("change", () => {
+    const key = `${el.getAttribute("library-name")}|${el.getAttribute("group-name")}|${el.getAttribute("name")}`;
+    let ov = objOverrides.get(key);
+    if (!ov) { ov = new Map(); objOverrides.set(key, ov); }
+    ov.set(cb.dataset.obj, cb.checked);
+    for (const holder of layers.prop.children) {
+      const hel = holder.userData.entity?.el;
+      if (!hel || hel.getAttribute("library-name") !== el.getAttribute("library-name") ||
+          hel.getAttribute("group-name") !== el.getAttribute("group-name") ||
+          hel.getAttribute("name") !== el.getAttribute("name")) continue;
+      holder.traverse((o) => { if (o.isMesh && o.name === cb.dataset.obj) o.visible = cb.checked; });
+    }
+  }));
 }
 const gv = (id) => { const e = document.getElementById(id); return e ? (e.type === "number" ? parseFloat(e.value) || 0 : e.value) : null; };
 document.getElementById("applyBtn").addEventListener("click", () => {
