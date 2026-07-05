@@ -2,9 +2,9 @@ import { suppliesData } from "@/config/supplies.data";
 import { GameClient } from "@/server/game.client";
 import { ItemUtils } from "@/utils/item.utils";
 import { relieveBurn } from "@/features/weapons/flamethrower/flamethrower.handlers";
-import { relieveFreeze } from "@/features/weapons/freeze/freeze.handlers";
+import { relieveFreeze, broadcastMovementSpec } from "@/features/weapons/freeze/freeze.handlers";
 import { Battle } from "./battle.model";
-import { EffectStartedPacket, EffectStoppedPacket, SetHealthPacket, TankSpecificationPacket } from "./battle.packets";
+import { EffectStartedPacket, EffectStoppedPacket, SetHealthPacket } from "./battle.packets";
 
 // Supply slot ids (from supplies.data) read elsewhere — combat applies the damage/armor multipliers
 // by checking the tank's active effect for these slots.
@@ -46,17 +46,15 @@ export class SupplyService {
             : (supply.itemEffectTime + supply.itemRestSec) * 1000;
         if (durationMs <= 0) return cooldownMs; // health/mine have no timed buff here
 
-        let onEnd: (() => void) | undefined;
-        if (supplyId === "n2o") {
-            // Nitro: speed x1.3 + acceleration +0.5, real only because we re-send the tank spec; reverted at end.
-            const baseSpecs = ItemUtils.getTankSpecifications(user);
-            const sendSpec = (specs: typeof baseSpecs) => battle.broadcast(new TankSpecificationPacket({ ...specs, nickname: user.username, sequence: ++client.specSequence }));
-            sendSpec({ ...baseSpecs, speed: baseSpecs.speed * 1.3, acceleration: baseSpecs.acceleration + 0.5 });
-            onEnd = () => sendSpec(baseSpecs);
-        }
+        // Nitro: speed x1.3 + acceleration +0.5. The buff is real only because we re-send the tank spec via
+        // broadcastMovementSpec, which COMBINES nitro with any active freeze slowdown — so freezing a nitro'd
+        // tank no longer wipes the boost, and it's restored (not lost) when the tank thaws. Both apply (after
+        // _startEffect registers the NITRO effect) and end (after it's cleared) recompute the combined spec.
+        const onEnd: (() => void) | undefined = supplyId === "n2o" ? () => broadcastMovementSpec(battle, client) : undefined;
         // double_damage / armor: no spec change — CombatService reads the active effect slot and scales damage.
 
         this._startEffect(client, battle, supply.slotId, durationMs, onEnd);
+        if (supplyId === "n2o") broadcastMovementSpec(battle, client);
         return cooldownMs;
     }
 

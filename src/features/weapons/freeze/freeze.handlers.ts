@@ -5,6 +5,7 @@ import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { TankSpecificationPacket, TankTemperaturePacket } from "@/features/battle/battle.packets";
+import { SupplyService, SUPPLY_SLOT } from "@/features/battle/supply.service";
 import * as FreezePackets from "./freeze.packets";
 
 // Freeze cooling/thaw model, calibrated from the 2026-07-01 captures (s4/s5/s6, Temperature packet 581377054 +
@@ -34,17 +35,27 @@ function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number
     return dist >= minR ? minPct : 1 - (1 - minPct) * ((dist - maxR) / (minR - maxR));
 }
 
-/** Resends the target's movement spec scaled by its freeze temperature (1 = normal). Acceleration is left
- *  at base — only top speed and turn rates slow down. The bumped sequence makes the client apply the newer one. */
-function broadcastFreezeSpec(battle: NonNullable<GameClient["currentBattle"]>, target: GameClient, factor: number): void {
+// Nitro (n2o) movement buff — kept alongside the freeze factor so the combined spec has ONE source of truth.
+const NITRO_SPEED_MULT = 1.3;
+const NITRO_ACCEL_BONUS = 0.5;
+
+/** Broadcasts the target's EFFECTIVE movement spec, combining every active movement modifier: the nitro
+ *  buff (speed×1.3 + acceleration) and the freeze slowdown (speed + turn rates × the temperature factor,
+ *  1 = normal). Both nitro and freeze funnel through here so neither clobbers the other — previously freeze
+ *  re-sent the raw BASE spec, which wiped an active nitro (the tank stayed at base speed after thawing, as
+ *  if the nitro had ended). Acceleration only gets the nitro bonus — freeze doesn't touch it. The bumped
+ *  sequence makes the client apply the newer spec. */
+export function broadcastMovementSpec(battle: NonNullable<GameClient["currentBattle"]>, target: GameClient): void {
     if (!target.user) return;
     const base = ItemUtils.getTankSpecifications(target.user);
+    const nitro = SupplyService.hasEffect(target, SUPPLY_SLOT.NITRO);
+    const freeze = slowFactor(target.freezeTemperature); // 1 when not cold
     battle.broadcast(new TankSpecificationPacket({
         nickname: target.user.username,
-        speed: base.speed * factor,
-        maxTurnSpeed: base.maxTurnSpeed * factor,
-        turretTurnSpeed: base.turretTurnSpeed * factor,
-        acceleration: base.acceleration,
+        speed: base.speed * (nitro ? NITRO_SPEED_MULT : 1) * freeze,
+        maxTurnSpeed: base.maxTurnSpeed * freeze,
+        turretTurnSpeed: base.turretTurnSpeed * freeze,
+        acceleration: base.acceleration + (nitro ? NITRO_ACCEL_BONUS : 0),
         sequence: ++target.specSequence,
     }));
 }
@@ -61,7 +72,7 @@ function scheduleThaw(server: GameServer, battle: NonNullable<GameClient["curren
 
         tc.freezeTemperature = Math.min(0, tc.freezeTemperature + FREEZE_RECOVERY_STEP);
         battle.broadcast(new TankTemperaturePacket(targetName, tc.freezeTemperature));
-        broadcastFreezeSpec(battle, tc, slowFactor(tc.freezeTemperature));
+        broadcastMovementSpec(battle, tc);
         if (tc.freezeTemperature < 0) scheduleThaw(server, battle, targetName); // else fully thawed: base spec already sent
     });
 }
@@ -73,7 +84,7 @@ export function relieveFreeze(battle: NonNullable<GameClient["currentBattle"]>, 
     if (!client.user || client.freezeTemperature >= 0) return;
     client.freezeTemperature = Math.min(0, client.freezeTemperature + FREEZE_RELIEF_STEP);
     battle.broadcast(new TankTemperaturePacket(client.user.username, client.freezeTemperature));
-    broadcastFreezeSpec(battle, client, slowFactor(client.freezeTemperature));
+    broadcastMovementSpec(battle, client);
 }
 
 /**
@@ -106,7 +117,7 @@ export class FreezeHitCommandHandler implements IPacketHandler<FreezePackets.Fre
             targetClient.freezeTemperature = Math.max(FREEZE_TEMP_CAP, targetClient.freezeTemperature - FREEZE_STEP * factor);
             targetClient.lastFreezeHit = Date.now();
             currentBattle.broadcast(new TankTemperaturePacket(targetName, targetClient.freezeTemperature));
-            broadcastFreezeSpec(currentBattle, targetClient, slowFactor(targetClient.freezeTemperature));
+            broadcastMovementSpec(currentBattle, targetClient);
             if (!currentBattle.timers.has(`freeze:${targetName}`)) scheduleThaw(server, currentBattle, targetName);
         }
     }
