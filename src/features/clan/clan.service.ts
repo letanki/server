@@ -38,7 +38,7 @@ export class ClanService {
     /** Founds a new clan led by `user`, charging the creation cost. Throws on validation failure. */
     public async createClan(user: UserDocument, name: string, tag: string, description: string): Promise<ClanDocument> {
         if (user.clanId) throw new Error("Você já está em um clã.");
-        if (this.clanCooldownSeconds(user) > 0) throw new Error("Você precisa esperar antes de entrar em outro clã.");
+        // The 24h post-leave cooldown only blocks JOINING another clan, not creating one.
         const cleanName = name.trim();
         const cleanTag = tag.trim();
         if (cleanName.length < 3) throw new Error("Nome do clã muito curto.");
@@ -250,7 +250,7 @@ export class ClanService {
         return clan;
     }
 
-    public static readonly LEAVE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h before you can create/join again
+    public static readonly LEAVE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h before you can JOIN another clan (creating is allowed)
 
     /** Seconds left on a user's post-leave clan cooldown (0 if none). */
     public clanCooldownSeconds(user: UserDocument): number {

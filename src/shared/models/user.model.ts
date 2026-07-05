@@ -74,7 +74,7 @@ export interface UserAttributes {
     crystals: number;
     experience: number;
     clanId: import("mongoose").Types.ObjectId | null; // the clan this user belongs to (null = no clan)
-    clanCooldownUntil: Date | null; // after leaving a clan, can't create/join another until this time
+    clanCooldownUntil: Date | null; // after leaving a clan, can't JOIN another until this time (creating is allowed)
     isActive: boolean;
     isPunished: boolean;
     punishmentExpiresAt: Date | null;
