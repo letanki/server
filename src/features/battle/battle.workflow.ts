@@ -347,6 +347,11 @@ export class BattleWorkflow {
                 client.sendPacket(new BattlePackets.TankModelDataPacket(existingTankJson));
             }
 
+            // Now that this client has the existing tanks, (re)attach any carried flag to its carrier —
+            // InitCtfFlags went out before the tanks existed, so a flag in someone's hands would otherwise
+            // render detached on the ground for this one client.
+            this._sendCarriedFlagAttachments(client, battle);
+
             if (establishedClients.length === 0) {
                 logger.info(`Battle has no established players. Spawning ${user.username} immediately.`);
                 const joiningUserTankJson = this.getTankModelDataJson(client, battle);
@@ -380,11 +385,22 @@ export class BattleWorkflow {
                     client.sendPacket(new BattlePackets.TankModelDataPacket(playerTankJson));
                 }
             }
+            this._sendCarriedFlagAttachments(client, battle);
             this._sendFinalBattlePackets(client, battle);
         } catch (error: any) {
             logger.error(`Error initializing spectator view for ${client.user?.username}.`, { error: error.message });
             setTimeout(() => client.closeConnection(), 500);
         }
+    }
+
+    /** (Re)attaches any CARRIED flag to its carrier for a freshly-initialized client, via TakeFlag —
+     *  called AFTER the existing tanks have been sent. InitCtfFlags is part of the common data sent before
+     *  the tanks exist, so a flag held at join time can't attach there (the carrier tank is unknown yet) and
+     *  the client leaves it lying detached on the ground. RED = team 0, BLUE = team 1 (as in CtfService). */
+    private static _sendCarriedFlagAttachments(client: GameClient, battle: Battle): void {
+        if (battle.settings.battleMode !== BattleMode.CTF) return;
+        if (battle.flagCarrierRed) client.sendPacket(new BattlePackets.TakeFlagPacket(battle.flagCarrierRed.username, 0));
+        if (battle.flagCarrierBlue) client.sendPacket(new BattlePackets.TakeFlagPacket(battle.flagCarrierBlue.username, 1));
     }
 
     private static _sendCommonBattleData(client: GameClient, server: GameServer, battle: Battle): void {
@@ -500,8 +516,11 @@ export class BattleWorkflow {
             // flagPosition must be null when the flag sits on its base (client renders it
             // static); a non-null position makes the client show the "dropped" (slow-blink)
             // state. Only send a position when the flag is actually dropped away from base.
+            // Compare by VALUE, not reference: a flag can sit at its base as a distinct object (e.g. after
+            // some reset paths), and a reference check would then wrongly mark it "dropped" → the client
+            // shows it blinking away from base. Matches CtfService._isOwnFlagAtBase's x/y test.
             const droppedPosition = (pos: IVector3 | null, base: IVector3 | null): IVector3 | null => {
-                if (!pos || pos === base) return null;
+                if (!pos || (base && pos.x === base.x && pos.y === base.y)) return null;
                 return adjustZ(pos);
             };
             const ctfPacket = new BattlePackets.InitCtfFlagsPacket({
