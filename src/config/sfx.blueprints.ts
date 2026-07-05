@@ -1670,7 +1670,7 @@ export const sfxBlueprints: { [key: string]: any } = {
 // XT turrets m0–m2 fire with the base turret's effects — confirmed by the captured official
 // machinegun_xt_m2 sfxData, which is byte-identical to the base one. Only m3 has the signature XT
 // look (dedicated entries below, synced verbatim from the official InitTank sfxData captures).
-for (const baseId of ["machinegun", "flamethrower", "railgun", "thunder"]) {
+for (const baseId of ["machinegun", "flamethrower", "railgun", "thunder", "ricochet"]) {
     for (let mod = 0; mod < 3; mod++) sfxBlueprints[`${baseId}_xt_m${mod}`] = sfxBlueprints[`${baseId}_m${mod}`];
 }
 
@@ -1685,6 +1685,21 @@ sfxBlueprints.railgun_xt_m3 = {
     bcsh: [
         { brightness: 255, contrast: 0, saturation: 0, hue: 0, key: "trail" },
         { brightness: 255, contrast: 0, saturation: 0, hue: 0, key: "charge" },
+    ],
+};
+
+// ricochet_xt m3: same textures as base; every light turns silver (15066597) and the shot/expl/trail
+// bcsh is blown to a desaturated silver — the classic silver XT ricochet (captured InitTank sfxData).
+sfxBlueprints.ricochet_xt_m3 = {
+    ...sfxBlueprints.ricochet_m3,
+    lighting: sfxBlueprints.ricochet_m3.lighting.map((l: any) => ({
+        name: l.name,
+        light: l.light.map((e: any) => ({ ...e, color: 15066597 })),
+    })),
+    bcsh: [
+        { brightness: 20.31, contrast: 3.5, saturation: -97.34, hue: 0, key: "shot" },
+        { brightness: 20.31, contrast: 3.5, saturation: -97.34, hue: 0, key: "expl" },
+        { brightness: 20.31, contrast: 3.5, saturation: -97.34, hue: 0, key: "trail" },
     ],
 };
 

@@ -194,6 +194,7 @@ turretsData.push(
     xtTurretVariant("flamethrower", "Lança-chamas XT", 70, "O exclusivo Lança-chamas XT. O acabamento especial das placas resiste ao calor extremo e dá à arma um brilho inconfundível no campo de batalha."),
     xtTurretVariant("railgun", "Canhão-elétrico XT", 80, "A versão XT de elite do Canhão-elétrico, com pintura exclusiva reservada aos atiradores que dispensam apresentações."),
     xtTurretVariant("thunder", "Trovão XT", 90, "O exclusivo Trovão XT. A pintura de cerimônia esconde um canhão idêntico ao original — a diferença está no medo que ele inspira."),
+    xtTurretVariant("ricochet", "Ricochete XT", 95, "O exclusivo Ricochete XT. O acabamento prateado de elite reveste um emissor de plasma idêntico ao original — a assinatura é só de quem já dominou o quique."),
 );
 
 const byId = new Map(turretsData.map((t) => [t.id, t]));
