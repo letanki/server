@@ -37,6 +37,16 @@ export class CommandService {
         logger.info(`Command registered: /${command.name}`);
     }
 
+    /** All registered commands (used by /help). */
+    public getCommands(): ICommand[] {
+        return Array.from(this.commands.values());
+    }
+
+    /** A single command by name (case-insensitive), or undefined. */
+    public getCommand(name: string): ICommand | undefined {
+        return this.commands.get(name.toLowerCase());
+    }
+
     public async process(rawMessage: string, context: CommandContext): Promise<void> {
         if (!rawMessage.startsWith("/")) return;
 

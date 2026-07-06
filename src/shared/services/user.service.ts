@@ -1,4 +1,5 @@
 import Invite from "@/features/invite/invite.model";
+import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import User, { UserDocument } from "@/shared/models/user.model";
 import { RankService } from "@/shared/services/rank.service";
 import logger from "@/utils/logger";
@@ -199,6 +200,17 @@ export class UserService {
             expiresAt: user.punishmentExpiresAt,
         });
 
+        return user;
+    }
+
+    public async setChatModeratorLevel(username: string, level: ChatModeratorLevel): Promise<UserDocument> {
+        const user = await this.findUserByUsername(username);
+        if (!user) {
+            throw new Error(`Usuário "${username}" não encontrado.`);
+        }
+        user.chatModeratorLevel = level;
+        await user.save();
+        logger.info(`Cargo (chatModeratorLevel) de ${user.username} definido para ${level}`);
         return user;
     }
 

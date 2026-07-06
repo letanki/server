@@ -16,7 +16,9 @@ import { ResourceManager } from "@/utils/resource.manager";
 export default class PaintCommand implements ICommand {
     name = "paint";
     description = "Equipa uma pintura de teste (padrão 'holiday') e aplica na batalha atual. Uso: /paint [paintId].";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "[paintId]";
+    example = "/paint spectrum";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

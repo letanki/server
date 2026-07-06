@@ -6,7 +6,9 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 export default class TpCommand implements ICommand {
     name = "tp";
     description = "Teleporta seu tanque para (x,y,z). Uso: /tp <x> <y> <z>.";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "<x> <y> <z>";
+    example = "/tp 100 0 200";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

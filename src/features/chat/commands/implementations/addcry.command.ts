@@ -4,8 +4,10 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 
 export default class AddCrystalsCommand implements ICommand {
     name: string = "addcry";
-    description: string = "Adiciona ou remove cristais da conta do usuário.";
+    description: string = "Adiciona ou remove cristais da sua conta. Uso: /addcry <quantidade> (negativo remove).";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
+    usage = "<quantidade>";
+    example = "/addcry 50000";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         if (args.length < 1) {

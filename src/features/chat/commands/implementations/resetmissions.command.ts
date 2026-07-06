@@ -5,8 +5,9 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 /** Debug: regenerates the caller's 3 daily missions (fresh/uncompleted) and reopens the window. */
 export default class ResetMissionsCommand implements ICommand {
     name: string = "resetmissions";
-    description: string = "Reseta as missões diárias para testar.";
-    permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
+    description: string = "Reseta as suas missões diárias (teste). Uso: /resetmissions.";
+    permissionLevel: ChatModeratorLevel = ChatModeratorLevel.ADMINISTRATOR;
+    example = "/resetmissions";
 
     async execute(context: CommandContext, _args: string[]): Promise<void> {
         const user = context.executor.user;

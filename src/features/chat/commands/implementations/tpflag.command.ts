@@ -7,7 +7,9 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 export default class TpFlagCommand implements ICommand {
     name = "tpflag";
     description = "Teleporta você até a posição da bandeira. Uso: /tpflag <red|blue>.";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "[red/blue]";
+    example = "/tpflag red";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

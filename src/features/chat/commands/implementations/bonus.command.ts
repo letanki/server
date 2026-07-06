@@ -8,7 +8,9 @@ const BONUS_TYPES = ["crystall", "gold", "health", "nitro", "damage", "armor", "
 export default class BonusCommand implements ICommand {
     name = "bonus";
     description = `Spawna um drop. Uso: /bonus <${BONUS_TYPES.join("|")}> [x y z].`;
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = `[${BONUS_TYPES.join("/")}] [x y z]`;
+    example = "/bonus gold";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

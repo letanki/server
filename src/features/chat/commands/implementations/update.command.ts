@@ -11,6 +11,8 @@ export default class UpdateCommand implements ICommand {
     name: string = "update";
     description: string = "Anuncia o reinício do servidor e bloqueia entrar/criar partidas. Uso: /update [segundos]";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.ADMINISTRATOR;
+    usage = "[segundos]";
+    example = "/update 60";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const parsed = parseInt(args[0], 10);

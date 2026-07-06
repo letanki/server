@@ -11,7 +11,9 @@ const PLACE_DELAY_MS = 100;                        // ~500 mines/s — chunked s
 export default class MineAroundCommand implements ICommand {
     name = "minar";
     description = "Coloca N minas em volta de você. Uso: /minar <quantidade> [raio].";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "<quantidade> [raio]";
+    example = "/minar 50 400";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

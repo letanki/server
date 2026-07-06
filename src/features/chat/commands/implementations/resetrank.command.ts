@@ -12,6 +12,7 @@ export default class ResetRankCommand implements ICommand {
     name: string = "resetrank";
     description: string = "Reseta o rank e a experiência de TODOS os usuários para o nível inicial. Uso: /resetrank";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.COMMUNITY_MANAGER;
+    example = "/resetrank";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const initial = context.server.rankService.getInitialRankData(); // rank 1, score 0, nextRankScore

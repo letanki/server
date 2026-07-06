@@ -5,8 +5,10 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 
 export default class AddScoreCommand implements ICommand {
     name: string = "addscore";
-    description: string = "Adiciona ou remove pontos de experiência da conta do usuário.";
+    description: string = "Adiciona ou remove experiência da sua conta. Uso: /addscore <quantidade> (negativo remove).";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
+    usage = "<quantidade>";
+    example = "/addscore 100000";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         if (args.length < 1) {

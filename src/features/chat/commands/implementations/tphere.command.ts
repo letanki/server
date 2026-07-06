@@ -6,7 +6,9 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 export default class TpHereCommand implements ICommand {
     name = "tphere";
     description = "Traz outro jogador até a sua posição. Uso: /tphere <username>.";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "<username>";
+    example = "/tphere Joao";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

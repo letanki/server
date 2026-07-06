@@ -7,7 +7,9 @@ import User from "@/shared/models/user.model";
 export default class BuyMinesCommand implements ICommand {
     name = "comprarminas";
     description = "Adiciona minas ao inventário, sem ir à garagem e sem limite. Uso: /comprarminas <quantidade>.";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "<quantidade>";
+    example = "/comprarminas 100";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;

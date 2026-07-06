@@ -7,6 +7,14 @@ import { ChatHistory, SendChatMessage } from "./chat.packets";
 import { IChatMessageData } from "./chat.types";
 import { CommandContext } from "./commands/command.types";
 
+/**
+ * The client renders chat messages as HTML, so `<...>` in a command reply (e.g. usage strings like
+ * "/minar <quantidade>") is swallowed as an unknown tag. Escape angle brackets/& so it shows literally.
+ */
+function escapeChatHtml(message: string): string {
+    return message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
     public readonly packetId = SendChatMessage.getId();
 
@@ -62,7 +70,7 @@ export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
         if (packet.message.startsWith("/")) {
             const replyFunction = (message: string) => {
                 const replyData: IChatMessageData = {
-                    message,
+                    message: escapeChatHtml(message),
                     isSystem: true,
                     isWarning: false,
                     source: null,

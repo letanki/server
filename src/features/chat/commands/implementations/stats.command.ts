@@ -8,8 +8,10 @@ const TYPES = ["normal", "xpbp", "parkour"] as const;
  *  for someone else. Read-only; shows the last flushed values (NOT the current in-progress round). */
 export default class StatsCommand implements ICommand {
     name: string = "stats";
-    description: string = "Mostra as estatísticas de longo prazo de um usuário (debug).";
+    description: string = "Mostra as estatísticas de longo prazo. Uso: /stats [usuário] (vazio = você).";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
+    usage = "[usuário]";
+    example = "/stats Joao";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const target = args.length >= 1

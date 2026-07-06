@@ -6,7 +6,9 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 export default class TpToCommand implements ICommand {
     name = "tpto";
     description = "Teleporta você até a posição de outro jogador. Uso: /tpto <username>.";
-    permissionLevel = ChatModeratorLevel.NONE;
+    permissionLevel = ChatModeratorLevel.MODERATOR;
+    usage = "<username>";
+    example = "/tpto Joao";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;
