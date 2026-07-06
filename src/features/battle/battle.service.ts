@@ -138,6 +138,11 @@ export class BattleService {
         this.round.restartRound(battle);
     }
 
+    /** Sets the round's remaining time (staff /time). */
+    public setRoundTimeLeft(battle: Battle, seconds: number): void {
+        this.round.setTimeLeft(battle, seconds);
+    }
+
     /** Force-destroys a player's active tank (mirrors the void-death path): returns any carried flag to
      *  base, marks the death, and broadcasts the explosion + respawn to the battle. Returns false if the
      *  target isn't an active tank in a battle. Used by the /destroy staff command. */

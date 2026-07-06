@@ -55,6 +55,15 @@ export class RoundService {
         }
     }
 
+    /** Staff /time: sets the round's REMAINING time. Re-broadcasts the clock, re-arms the time-up finish
+     *  and re-bases roundStartTime so late joiners compute the same remaining time. */
+    public setTimeLeft(battle: Battle, seconds: number): void {
+        battle.broadcast(new SetRoundTimePacket(seconds));
+        battle.timers.set("round", seconds * 1000, () => this.finishRound(battle));
+        const limit = battle.settings.timeLimitInSec;
+        if (limit > 0) battle.roundStartTime = Date.now() - (limit - seconds) * 1000;
+    }
+
     /** End the round (time or score limit): broadcast final standings, then restart after the pause. */
     public finishRound(battle: Battle): void {
         if (battle.roundState === BattleRoundState.FINISHED) return; // already finishing

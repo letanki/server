@@ -343,6 +343,43 @@ export class ClanService {
         return { clan, wasLeader, disbanded };
     }
 
+    /** STAFF moderation (/clan kick): removes a user from whatever clan they're in, bypassing the clan's
+     *  own permission checks. Refuses the leader ("leader" sentinel) — disband or let them transfer instead. */
+    public async staffRemoveMember(username: string): Promise<{ clan: ClanDocument; target: UserDocument } | "leader" | null> {
+        const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
+        if (!target?.clanId) return null;
+        const clan = await this.getClanById(target.clanId);
+        if (!clan) {
+            target.clanId = null;
+            await target.save();
+            return null;
+        }
+        if (String(clan.leaderId) === String(target._id)) return "leader";
+        clan.members = clan.members.filter((id) => String(id) !== String(target._id)) as any;
+        clan.positions.delete(String(target._id));
+        clan.memberSince.delete(String(target._id));
+        await clan.save();
+        target.clanId = null;
+        await target.save();
+        logger.info(`[staff] ${target.username} removed from clan [${clan.tag}].`);
+        return { clan, target };
+    }
+
+    /** STAFF moderation (/clan disband): deletes a clan by tag, clearing every member's clanId. Returns
+     *  the affected members so the caller can notify the online ones. */
+    public async staffDisbandClan(tag: string): Promise<{ tag: string; members: UserDocument[] } | null> {
+        const clan = await this.getClanByTag(tag);
+        if (!clan) return null;
+        const members = await this.getMembers(clan);
+        for (const m of members) {
+            m.clanId = null;
+            await m.save();
+        }
+        await Clan.deleteOne({ _id: clan._id }).exec();
+        logger.info(`[staff] clan [${clan.tag}] disbanded (${members.length} member(s) released).`);
+        return { tag: clan.tag, members };
+    }
+
     /** Seconds a member has been in the clan (since their join, or the clan's creation for legacy members
      *  that predate per-member join tracking). Drives the member-list "time in clan" display. */
     private secondsInClan(clan: ClanDocument, memberId: unknown): number {

@@ -343,8 +343,12 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
                     else if (battle.usersRed.some((p) => p.id === user.id)) senderTeamId = 0;
                 }
 
+                // SPECTATORS aren't in the client's scoreboard — a battle-chat line with their nickname
+                // crashes the receiving client resolving the sender (#1009, see spectator-chat). Route
+                // command replies to a spectator through the nickname-less system lane instead. This is
+                // read LIVE (not captured) so a /spectate transition mid-command picks up the new state.
                 const replyData = {
-                    nickname: user.username,
+                    nickname: client.isSpectator ? null : user.username,
                     message: message,
                     team: senderTeamId,
                 };
