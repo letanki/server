@@ -16,7 +16,7 @@
     "stress": "ts-node scripts/stress-test.ts",
     "targets": "ts-node scripts/target-bots.ts",
     "tara": "ts-node scripts/tara.ts",
-    "set-cargo": "ts-node -r tsconfig-paths/register scripts/setCargo.ts",
+    "set-role": "ts-node -r tsconfig-paths/register scripts/setRole.ts",
     "patch:list": "node scripts/patch-client.js --list",
     "patch:client": "node scripts/patch-client.js --all --deploy",
     "patch:deploy": "node scripts/patch-client.js --deploy-only"

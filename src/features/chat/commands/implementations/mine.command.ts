@@ -7,13 +7,13 @@ const PLACE_CHUNK = 50;                            // mines placed per tick (thr
 const PLACE_DELAY_MS = 100;                        // ~500 mines/s — chunked so it doesn't spike clients
 
 /** Debug: drops N mines spread in a disc around you. Throttled so a big count doesn't blast everyone's client
- *  with one broadcast burst. Uso: /minar <quantidade> [raio]. */
+ *  with one broadcast burst. Uso: /mine <quantidade> [raio]. */
 export default class MineAroundCommand implements ICommand {
-    name = "minar";
-    description = "Coloca N minas em volta de você. Uso: /minar <quantidade> [raio].";
+    name = "mine";
+    description = "Coloca N minas em volta de você. Uso: /mine <quantidade> [raio].";
     permissionLevel = ChatModeratorLevel.MODERATOR;
     usage = "<quantidade> [raio]";
-    example = "/minar 50 400";
+    example = "/mine 50 400";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;
@@ -30,7 +30,7 @@ export default class MineAroundCommand implements ICommand {
 
         const count = parseInt(args[0], 10);
         if (isNaN(count) || count <= 0) {
-            context.reply("Uso: /minar <quantidade> [raio].");
+            context.reply("Uso: /mine <quantidade> [raio].");
             return;
         }
         const radius = args[1] !== undefined ? Number(args[1]) : DEFAULT_RADIUS;

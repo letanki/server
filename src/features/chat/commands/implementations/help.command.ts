@@ -27,7 +27,7 @@ function whatItDoes(description: string): string {
     return description.replace(/\s*Uso:.*$/i, "").trim();
 }
 
-/** e.g. "/setcargo <nick> [none/candidato/...] — Define o cargo de staff de um usuário." */
+/** e.g. "/role <nick> [none/candidato/...] — Define o cargo de staff de um usuário." */
 function listLine(cmd: ICommand): string {
     const params = cmd.usage ? " " + cmd.usage : "";
     return `/${cmd.name}${params} — ${whatItDoes(cmd.description)}`;

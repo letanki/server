@@ -33,7 +33,7 @@ export function hasModeratorPower(userLevel: ChatModeratorLevel, requiredLevel: 
 
 /**
  * Parses a human-friendly cargo name (or the raw enum number) into a ChatModeratorLevel. Used by the
- * /setcargo command and the bootstrap script. Returns null if unrecognized.
+ * /role command and the bootstrap script. Returns null if unrecognized.
  */
 export function parseChatModeratorLevel(input: string): ChatModeratorLevel | null {
     switch (input.trim().toLowerCase()) {

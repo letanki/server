@@ -88,7 +88,7 @@ export class MineService {
      *  what checkTriggers compares against a passing tank's battlePosition.z), so we take the ground under the
      *  mine and add the PLACER's own height above its ground. For a normal drop (mine at the placer's exact
      *  position) this reproduces the placer's z unchanged; for a mine dropped over lower/higher terrain — the
-     *  /minar debug scatter, or a mine dropped mid-jump — it lands the mine at the height a tank driving there
+     *  /mine debug scatter, or a mine dropped mid-jump — it lands the mine at the height a tank driving there
      *  will actually have, instead of floating at the placer's flat z (which never matched, so it never fired).
      *  Over the void (no ground) the position is kept as given. */
     private _snapToGround(client: GameClient, battle: Battle, position: IVector3): IVector3 {

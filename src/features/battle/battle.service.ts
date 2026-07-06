@@ -124,6 +124,50 @@ export class BattleService {
         this.combat.registerSuicideDeath(battle, client);
     }
 
+    /** Force-ends the current round (results screen), like the natural round end. Returns false if the
+     *  round is already finishing. Used by the /finish staff command. */
+    public finishBattle(battle: Battle): boolean {
+        if (battle.roundState === BattleRoundState.FINISHED) return false;
+        this.round.finishRound(battle);
+        return true;
+    }
+
+    /** Force-destroys a player's active tank (mirrors the void-death path): returns any carried flag to
+     *  base, marks the death, and broadcasts the explosion + respawn to the battle. Returns false if the
+     *  target isn't an active tank in a battle. Used by the /destroy staff command. */
+    public forceDestroyTank(client: GameClient): boolean {
+        const user = client.user;
+        const battle = client.currentBattle;
+        if (!user || !battle || client.battleState !== "active") return false;
+
+        if (battle.flagCarrierRed?.id === user.id) this.ctf.returnFlagToBase(battle, "RED");
+        if (battle.flagCarrierBlue?.id === user.id) this.ctf.returnFlagToBase(battle, "BLUE");
+
+        client.battleState = "suicide";
+        client.battleIncarnation++;
+        this.registerSuicideDeath(battle, client);
+
+        const destroyPacket = new DestroyTankPacket(user.username, 3000);
+        for (const p of battle.getAllParticipants()) {
+            const pc = this.server.findClientByUsername(p.username);
+            if (pc && pc.currentBattle?.battleId === battle.battleId) pc.sendPacket(destroyPacket);
+        }
+        return true;
+    }
+
+    /** Drops any flag currently being carried in the battle, at the carrier's position. Returns how many
+     *  were dropped. Used by the /dropflag staff command. */
+    public dropCarriedFlags(battle: Battle): number {
+        let dropped = 0;
+        for (const carrier of [battle.flagCarrierRed, battle.flagCarrierBlue]) {
+            if (!carrier) continue;
+            const carrierClient = this.server.findClientByUsername(carrier.username);
+            this.ctf.dropFlag(carrier, battle, carrierClient?.battlePosition ?? null);
+            dropped++;
+        }
+        return dropped;
+    }
+
     public async checkPlayerPosition(client: GameClient): Promise<void> {
         const { user, currentBattle, battlePosition } = client;
         if (!user || !currentBattle || !battlePosition) return;

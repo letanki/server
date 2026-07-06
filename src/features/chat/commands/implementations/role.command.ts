@@ -6,28 +6,28 @@ import {
 } from "@/shared/models/enums/chat-moderator-level.enum";
 
 /**
- * /setcargo <usuário> <cargo> — assigns a staff cargo to a user. Restricted to Community Manager (the top
+ * /role <usuário> <cargo> — assigns a staff cargo to a user. Restricted to Community Manager (the top
  * cargo). Persists to the DB (works on offline users) and, if the target is online, updates their live
  * session immediately so command permissions and the chat tag reflect without a relogin. The very first
- * Community Manager is bootstrapped with `npm run set-cargo` (see scripts/setCargo.ts).
+ * Community Manager is bootstrapped with `npm run set-role` (see scripts/setRole.ts).
  */
-export default class SetCargoCommand implements ICommand {
-    name = "setcargo";
-    description = "Define o cargo de staff de um usuário. Uso: /setcargo <usuário> <cargo>.";
+export default class RoleCommand implements ICommand {
+    name = "role";
+    description = "Define o cargo de staff de um usuário. Uso: /role <usuário> <cargo>.";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.COMMUNITY_MANAGER;
-    usage = "<nick> [none/candidato/moderador/administrador/cm]";
-    example = "/setcargo Joao moderador";
+    usage = "<nick> [none/candidate/moderator/administrator/cm]";
+    example = "/role Joao moderator";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         if (args.length < 2) {
-            context.reply("Uso: /setcargo <usuário> <cargo>. Cargos: none, candidato, moderador, administrador, cm.");
+            context.reply("Uso: /role <usuário> <cargo>. Cargos: none, candidate, moderator, administrator, cm.");
             return;
         }
 
         const targetName = args[0];
         const level = parseChatModeratorLevel(args[1]);
         if (level === null) {
-            context.reply(`Cargo inválido "${args[1]}". Válidos: none, candidato, moderador, administrador, cm.`);
+            context.reply(`Cargo inválido "${args[1]}". Válidos: none, candidate, moderator, administrator, cm.`);
             return;
         }
 

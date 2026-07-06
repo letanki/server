@@ -3,13 +3,13 @@ import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import User from "@/shared/models/user.model";
 
-/** Debug: adds mines straight to your inventory (no garage, no cap). Uso: /comprarminas <quantidade>. */
+/** Debug: adds mines straight to your inventory (no garage, no cap). Uso: /buymines <quantidade>. */
 export default class BuyMinesCommand implements ICommand {
-    name = "comprarminas";
-    description = "Adiciona minas ao inventário, sem ir à garagem e sem limite. Uso: /comprarminas <quantidade>.";
+    name = "buymines";
+    description = "Adiciona minas ao inventário, sem ir à garagem e sem limite. Uso: /buymines <quantidade>.";
     permissionLevel = ChatModeratorLevel.MODERATOR;
     usage = "<quantidade>";
-    example = "/comprarminas 100";
+    example = "/buymines 100";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const client = context.executor;
@@ -21,7 +21,7 @@ export default class BuyMinesCommand implements ICommand {
 
         const amount = parseInt(args[0], 10);
         if (isNaN(amount) || amount <= 0) {
-            context.reply("Uso: /comprarminas <quantidade> (número positivo).");
+            context.reply("Uso: /buymines <quantidade> (número positivo).");
             return;
         }
 

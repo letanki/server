@@ -8,16 +8,16 @@ import User from "@/shared/models/user.model";
 
 /**
  * Bootstrap script to set a user's staff cargo directly in the DB — mainly to create the FIRST Community
- * Manager, who then manages everyone else's cargo in-game via /setcargo.
+ * Manager, who then manages everyone else's cargo in-game via /role.
  *
- *   npm run set-cargo -- <usuário> <cargo>
+ *   npm run set-role -- <usuário> <cargo>
  *   (cargos: none, candidato, moderador, administrador, cm)
  */
 async function main(): Promise<void> {
     const [username, cargoArg] = process.argv.slice(2);
 
     if (!username || !cargoArg) {
-        console.error("Uso: npm run set-cargo -- <usuário> <cargo>");
+        console.error("Uso: npm run set-role -- <usuário> <cargo>");
         console.error("Cargos: none, candidato, moderador, administrador, cm");
         process.exit(1);
     }

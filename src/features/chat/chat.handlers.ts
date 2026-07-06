@@ -9,7 +9,7 @@ import { CommandContext } from "./commands/command.types";
 
 /**
  * The client renders chat messages as HTML, so `<...>` in a command reply (e.g. usage strings like
- * "/minar <quantidade>") is swallowed as an unknown tag. Escape angle brackets/& so it shows literally.
+ * "/mine <quantidade>") is swallowed as an unknown tag. Escape angle brackets/& so it shows literally.
  */
 function escapeChatHtml(message: string): string {
     return message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

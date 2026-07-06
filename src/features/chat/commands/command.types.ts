@@ -18,7 +18,7 @@ export interface ICommand {
      * <obrigatório>, [opcional], and choice lists as [opt1/opt2/...]. Omit for no-parameter commands.
      */
     usage?: string;
-    /** A concrete example invocation shown by /help, e.g. "/setcargo Joao moderador". */
+    /** A concrete example invocation shown by /help, e.g. "/role Joao moderator". */
     example?: string;
 
     execute(context: CommandContext, args: string[]): Promise<void>;
