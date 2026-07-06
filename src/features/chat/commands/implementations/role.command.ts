@@ -6,21 +6,21 @@ import {
 } from "@/shared/models/enums/chat-moderator-level.enum";
 
 /**
- * /role <usuário> <cargo> — assigns a staff cargo to a user. Restricted to Community Manager (the top
+ * /role <username> <role> — assigns a staff cargo to a user. Restricted to Community Manager (the top
  * cargo). Persists to the DB (works on offline users) and, if the target is online, updates their live
  * session immediately so command permissions and the chat tag reflect without a relogin. The very first
  * Community Manager is bootstrapped with `npm run set-role` (see scripts/setRole.ts).
  */
 export default class RoleCommand implements ICommand {
     name = "role";
-    description = "Define o cargo de staff de um usuário. Uso: /role <usuário> <cargo>.";
+    description = "Define o cargo de staff de um usuário. Uso: /role <username> <role>.";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.COMMUNITY_MANAGER;
-    usage = "<nick> [none/candidate/moderator/administrator/cm]";
+    usage = "<username> [none/candidate/moderator/administrator/cm]";
     example = "/role Joao moderator";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         if (args.length < 2) {
-            context.reply("Uso: /role <usuário> <cargo>. Cargos: none, candidate, moderator, administrator, cm.");
+            context.reply("Uso: /role <username> <role>. Cargos: none, candidate, moderator, administrator, cm.");
             return;
         }
 

@@ -14,7 +14,7 @@ export interface ICommand {
     permissionLevel: ChatModeratorLevel;
 
     /**
-     * Parameter spec shown by /help, e.g. "<nick> [none/moderador/administrador/cm]". Convention:
+     * Parameter spec shown by /help, e.g. "<username> [none/moderator/administrator/cm]". Convention:
      * <obrigatório>, [opcional], and choice lists as [opt1/opt2/...]. Omit for no-parameter commands.
      */
     usage?: string;

@@ -25,8 +25,8 @@ export default class TpFlagCommand implements ICommand {
         }
 
         const which = (args[0] ?? "").toLowerCase();
-        const isRed = which === "red" || which === "r" || which === "vermelha" || which === "vermelho";
-        const isBlue = which === "blue" || which === "b" || which === "azul";
+        const isRed = which === "red" || which === "r";
+        const isBlue = which === "blue" || which === "b";
         if (!isRed && !isBlue) {
             context.reply("Uso: /tpflag <red|blue>.");
             return;

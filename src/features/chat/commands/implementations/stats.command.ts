@@ -4,13 +4,13 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 const MODES = ["dm", "tdm", "ctf", "cp", "as"] as const;
 const TYPES = ["normal", "xpbp", "parkour"] as const;
 
-/** Debug: dumps a user's persisted long-term stats (see StatsService). `/stats` for self, `/stats <nick>`
+/** Debug: dumps a user's persisted long-term stats (see StatsService). `/stats` for self, `/stats <username>`
  *  for someone else. Read-only; shows the last flushed values (NOT the current in-progress round). */
 export default class StatsCommand implements ICommand {
     name: string = "stats";
-    description: string = "Mostra as estatísticas de longo prazo. Uso: /stats [usuário] (vazio = você).";
+    description: string = "Mostra as estatísticas de longo prazo. Uso: /stats [username] (vazio = você).";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
-    usage = "[usuário]";
+    usage = "[username]";
     example = "/stats Joao";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {

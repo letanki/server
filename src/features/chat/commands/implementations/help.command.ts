@@ -27,7 +27,7 @@ function whatItDoes(description: string): string {
     return description.replace(/\s*Uso:.*$/i, "").trim();
 }
 
-/** e.g. "/role <nick> [none/candidato/...] — Define o cargo de staff de um usuário." */
+/** e.g. "/role <username> [none/candidate/...] — Define o cargo de staff de um usuário." */
 function listLine(cmd: ICommand): string {
     const params = cmd.usage ? " " + cmd.usage : "";
     return `/${cmd.name}${params} — ${whatItDoes(cmd.description)}`;
@@ -43,7 +43,7 @@ export default class HelpCommand implements ICommand {
     description = "Lista os comandos disponíveis. Uso: /help [comando].";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
     usage = "[comando]";
-    example = "/help setcargo";
+    example = "/help role";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const level = context.executor.user!.chatModeratorLevel;

@@ -5,13 +5,13 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 /**
  * Admin command: broadcasts the "server is restarting in N seconds" warning (HaltServerPacket) to
  * everyone and opens the restart window on the server. While the window is open, creating or joining
- * a battle is refused (handled in the create/enter battle handlers). Uso: /update [segundos]
+ * a battle is refused (handled in the create/enter battle handlers). Uso: /update [seconds]
  */
 export default class UpdateCommand implements ICommand {
     name: string = "update";
-    description: string = "Anuncia o reinício do servidor e bloqueia entrar/criar partidas. Uso: /update [segundos]";
+    description: string = "Anuncia o reinício do servidor e bloqueia entrar/criar partidas. Uso: /update [seconds]";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.ADMINISTRATOR;
-    usage = "[segundos]";
+    usage = "[seconds]";
     example = "/update 60";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {

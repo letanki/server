@@ -37,15 +37,15 @@ export function hasModeratorPower(userLevel: ChatModeratorLevel, requiredLevel: 
  */
 export function parseChatModeratorLevel(input: string): ChatModeratorLevel | null {
     switch (input.trim().toLowerCase()) {
-        case "0": case "none": case "nenhum": case "jogador": case "player":
+        case "0": case "none": case "player":
             return ChatModeratorLevel.NONE;
-        case "1": case "cm": case "community": case "community_manager": case "communitymanager": case "gerente":
+        case "1": case "cm": case "community": case "community_manager": case "communitymanager":
             return ChatModeratorLevel.COMMUNITY_MANAGER;
-        case "2": case "admin": case "administrador": case "administrator":
+        case "2": case "admin": case "administrator":
             return ChatModeratorLevel.ADMINISTRATOR;
-        case "3": case "mod": case "moderador": case "moderator":
+        case "3": case "mod": case "moderator":
             return ChatModeratorLevel.MODERATOR;
-        case "4": case "candidato": case "candidate": case "trainee":
+        case "4": case "candidate": case "trainee":
             return ChatModeratorLevel.CANDIDATE;
         default:
             return null;
