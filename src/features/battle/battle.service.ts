@@ -388,6 +388,32 @@ export class BattleService {
         await this.finalizeBattleExit(user, battle, undefined, isSpectator);
     }
 
+    /** Force-removes an OFFLINE user still held in a battle roster (closed the game / dropped and is
+     *  sitting in the 60s reconnect grace): cancels the grace timer and finalizes the exit immediately.
+     *  Returns the battleId they were removed from, or null if no roster holds them. Used by /kickbattle
+     *  for targets that aren't connected. */
+    public async kickOfflineFromBattle(username: string): Promise<string | null> {
+        const lower = username.toLowerCase();
+        for (const battle of this.lobbyService.getBattles()) {
+            const rosters: [UserDocument[], boolean][] = [
+                [battle.users, false], [battle.usersBlue, false], [battle.usersRed, false], [battle.spectators, true],
+            ];
+            for (const [roster, isSpectator] of rosters) {
+                const user = roster.find((u) => u.username.toLowerCase() === lower);
+                if (!user) continue;
+                const grace = this.disconnectedPlayers.get(user.id);
+                if (grace) {
+                    clearTimeout(grace.timeoutId);
+                    this.disconnectedPlayers.delete(user.id);
+                }
+                logger.info(`Force-removing offline user ${user.username} from battle ${battle.battleId} (staff kickbattle).`);
+                await this.finalizeDisconnection(user, battle, isSpectator);
+                return battle.battleId;
+            }
+        }
+        return null;
+    }
+
     /** Start the empty-battle removal countdown (a player-created battle nobody is in is removed after
      *  EMPTY_BATTLE_REMOVAL_MS). Called at creation (so a never-joined battle expires) and whenever a
      *  battle becomes empty. System battles ("Batalha para Novatos") are kept. Cancelled on join. */
