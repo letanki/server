@@ -134,9 +134,14 @@ export class InitBattleTeamPacket extends BasePacket implements BattleTypes.IIni
 }
 
 // Per-user fields shared by the battle user-list packets (no chatModeratorLevel on the wire).
+// Roster entry for InitBattleUsers (DM + team). MUST match the client's UserInfo codec — the SAME
+// layout as UserConnect's entry — including the leading ChatModeratorLevel, or the joining player's
+// registry has no cargo for anyone already in the room (nor for himself), so their staff badge never
+// shows to them or to anyone who joins after. deaths/kills are i16 here to match UserConnect.
 const BATTLE_USER_FIELDS: PacketSchema = [
-    { name: "deaths", type: "i32" },
-    { name: "kills", type: "i32" },
+    { name: "chatModeratorLevel", type: "i32" },
+    { name: "deaths", type: "i16" },
+    { name: "kills", type: "i16" },
     { name: "rank", type: "u8" },
     { name: "score", type: "i32" },
     { name: "uid", type: "string" },
