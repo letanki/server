@@ -391,10 +391,15 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
         //   lookup): fellow spectators see who spoke (name prefixed), players get the plain text.
         if (isSpectator) {
             if (packet.team) {
-                sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket(`${user.username}: ${packet.message}`, user.username));
+                // Message goes CLEAN — the spectator-name client patch renders the uid as the yellow
+                // name label ("nick: msg"); unpatched clients just show the generic "Espectador: msg".
+                sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket(packet.message, user.username));
                 return;
             }
-            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: null, message: `${user.username}: ${packet.message}`, team: senderTeamId }));
+            // Spectators' copy carries the sender as the "*nick" sentinel — the spectator-name client
+            // patch detects the marker, treats the line as spectator (no scoreboard lookup) and renders
+            // "nick: msg" (white). Players keep the plain nickname-null line → "Espectador: msg".
+            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: `*${user.username}`, message: packet.message, team: senderTeamId }));
             const players = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
             sendTo(players, new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId }));
             return;
