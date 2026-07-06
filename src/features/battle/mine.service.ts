@@ -153,12 +153,21 @@ export class MineService {
             const localY = mb * dx + mf * dy + mj * dz;   // along hull length  (model Y)
             const localZ = mc * dx + mg * dy + mk * dz;   // up through the hull (model Z; 0 = belly/origin)
             if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
-            // Vertical: the mine rests at the hull belly (zMin=0 at the origin) up through the body, plus a
-            // small margin each side. Because localZ is now measured in the TILTED hull frame, a tank with
-            // its nose/tail pitched down onto the mine still reads localZ≈0 and fires; a mine on the floor
-            // BELOW a tank up on a ramp maps to a large NEGATIVE localZ and is correctly ignored (the old
-            // "dies on the ramp without being on the ground" bug stays fixed).
-            if (localZ < hull.zMin - MINE_HEIGHT || localZ > hull.zMax + MINE_HEIGHT) continue;
+            // Vertical: the hull box is ASYMMETRIC — it spans [zMin=0 (belly at the origin), zMax (top)],
+            // i.e. only ABOVE the origin. `mk` (= cosY·cosX) is the world-up component of the hull's local
+            // up axis: 1 = upright, 0 = on its side, −1 = upside down.
+            // • Upright / on a ramp (mk ≥ 0.5): keep the tight belly→top window so a tank sitting ABOVE a
+            //   floor mine (up on a ramp) maps to a large NEGATIVE localZ and is correctly ignored (the old
+            //   "dies on the ramp without being on the ground" fix stays intact).
+            // • CAPSIZED / heavily tilted (mk < 0.5): the tank rests on its side/roof, so relative to the
+            //   belly-origin a mine it's physically sitting on can land BELOW zMin or ABOVE zMax (its top/
+            //   turret side is what's on the ground). Widen the window symmetrically by the hull height so
+            //   a flipped tank still sets mines off. The tight horizontal footprint still gates it.
+            const upright = mk >= 0.5;
+            const hullHeight = hull.zMax - hull.zMin;
+            const zLow = upright ? hull.zMin - MINE_HEIGHT : hull.zMin - hullHeight - MINE_HEIGHT;
+            const zHigh = upright ? hull.zMax + MINE_HEIGHT : hull.zMax + hullHeight + MINE_HEIGHT;
+            if (localZ < zLow || localZ > zHigh) continue;
             this._detonate(battle, mine.id, client);
             break;
         }
