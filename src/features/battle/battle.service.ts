@@ -132,6 +132,12 @@ export class BattleService {
         return true;
     }
 
+    /** Restarts the round immediately (skip the results pause): resets scores/flags/fund, swaps sides in
+     *  team modes and respawns everyone — same flow as the natural post-results restart. Used by /restart. */
+    public restartBattle(battle: Battle): void {
+        this.round.restartRound(battle);
+    }
+
     /** Force-destroys a player's active tank (mirrors the void-death path): returns any carried flag to
      *  base, marks the death, and broadcasts the explosion + respawn to the battle. Returns false if the
      *  target isn't an active tank in a battle. Used by the /destroy staff command. */
