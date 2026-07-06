@@ -52,6 +52,20 @@ export class LobbyWorkflow {
         const user = client.user!;
         server.indexAuthenticatedClient(client);
 
+        // Session takeover: if this account already has another live connection — a second PC/client, or a
+        // stale/dead socket from an abrupt drop (power/internet loss) that never fired TCP 'close' — drop it
+        // so only this newest session survives. Closing it runs the normal disconnect flow, which (if it was
+        // in a battle) starts that battle's 60s reconnect grace; the reconnect block below then pulls THIS
+        // session back into that battle. Without this the dead client kept the player stuck in the match and
+        // a returning player was treated as a brand-new login (never re-seated). removeClient's index guard
+        // makes the order safe even though we already indexed this client above.
+        for (const other of server.getClients()) {
+            if (other !== client && other.user?.id === user.id) {
+                logger.info(`User ${user.username} opened a new session; dropping the previous connection (${other.getRemoteAddress()}).`);
+                other.closeConnection();
+            }
+        }
+
         if (user.isPunished && user.punishmentExpiresAt && user.punishmentExpiresAt > new Date()) {
             const now = new Date();
             const timeLeftMs = user.punishmentExpiresAt.getTime() - now.getTime();

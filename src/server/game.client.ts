@@ -26,6 +26,14 @@ interface ISpawnPoint {
 
 export class GameClient {
   private static readonly HEADER_SIZE = 8;
+  /**
+   * Liveness (heartbeat) timeout. In battle the client answers the TimeChecker every ~1s, so any inbound
+   * packet keeps `lastDataReceivedAt` fresh. If NOTHING arrives for this long, the connection is dead (an
+   * abrupt drop — power/internet loss — that never fires TCP 'close'), so we close it and let the normal
+   * disconnect flow (60s reconnect grace → removal) run. Generous vs the 1s cadence to survive brief lag.
+   */
+  private static readonly IDLE_TIMEOUT_MS = 30000;
+  private static readonly LIVENESS_CHECK_INTERVAL_MS = 10000;
   private socket: net.Socket;
   private server: GameServer;
   private state: ClientState;
@@ -73,6 +81,20 @@ export class GameClient {
     this.statsFlushedForRound = false;
     // A pending self-destruct belongs to the incarnation that started it — leaving/joining cancels it.
     this.selfDestructIncarnation = null;
+
+    // Liveness watchdog is scoped to being IN a battle: there the client answers the TimeChecker ~every
+    // 1s, so a long silence reliably means a dead connection. In the lobby a client can legitimately sit
+    // idle, so we don't run it there (would false-positive). Reset the clock on entry so a stale lobby
+    // timestamp doesn't trip it immediately.
+    if (battle) {
+      this.lastDataReceivedAt = Date.now();
+      if (!this.livenessTimer) {
+        this.livenessTimer = setInterval(() => this.checkLiveness(), GameClient.LIVENESS_CHECK_INTERVAL_MS);
+      }
+    } else if (this.livenessTimer) {
+      clearInterval(this.livenessTimer);
+      this.livenessTimer = null;
+    }
   }
 
   public isInFlowMode: boolean = false;
@@ -84,6 +106,8 @@ export class GameClient {
   private timeCheckSentTimestamp: number = 0;
   private lastTimeCheckPing: number = 0;
   private timeCheckTimeout: NodeJS.Timeout | null = null;
+  private lastDataReceivedAt: number = Date.now();
+  private livenessTimer: NodeJS.Timeout | null = null;
 
   public battleState: "newcome" | "active" | "suicide" = "suicide";
   public pendingResourceAcks: Set<string> = new Set<string>();
@@ -185,6 +209,10 @@ export class GameClient {
     // Disable Nagle's algorithm: the game sends many small packets (movement, turret),
     // and Nagle + delayed-ACK can add up to ~40ms of latency to those bursts.
     this.socket.setNoDelay(true);
+    // OS-level backstop for dead peers (half-open connections after an abrupt power/internet drop that
+    // never fire 'close'). The app-level liveness watchdog (checkLiveness) is the timely detector in
+    // battle; keepalive covers idle lobby connections too, just more slowly.
+    this.socket.setKeepAlive(true, 30000);
     this.socket.on("data", this.handleData.bind(this));
     this.socket.on("close", this.handleClose.bind(this));
     this.socket.on("error", (err) => {
@@ -200,6 +228,9 @@ export class GameClient {
       logger.warn("Received empty data", { client: this.getRemoteAddress() });
       return;
     }
+
+    // Any inbound byte marks the connection as alive (drives the liveness watchdog).
+    this.lastDataReceivedAt = Date.now();
 
     this.rawDataReceived = Buffer.concat([this.rawDataReceived, data]);
 
@@ -389,6 +420,19 @@ export class GameClient {
     }
     this.timeCheckerStartTime = 0;
     this.initialClientTime = 0;
+  }
+
+  /** Battle heartbeat watchdog: with the ~1s TimeChecker cadence, no inbound data for IDLE_TIMEOUT_MS
+   *  means the connection is dead — an abrupt drop (power/internet loss) that never fired TCP 'close'.
+   *  Close it so the normal disconnect flow (60s reconnect grace → removal) runs instead of leaving the
+   *  player stuck in the match forever. */
+  private checkLiveness(): void {
+    if (!this.currentBattle) return;
+    const idleMs = Date.now() - this.lastDataReceivedAt;
+    if (idleMs > GameClient.IDLE_TIMEOUT_MS) {
+      logger.warn(`Client ${this.getRemoteAddress()} (${this.user?.username ?? "?"}) idle ${idleMs}ms — assuming dead, closing.`);
+      this.closeConnection();
+    }
   }
 
   public sendTimeCheckerPacket(): void {
