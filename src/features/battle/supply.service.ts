@@ -92,16 +92,29 @@ export class SupplyService {
         if (!user) return;
         SupplyService.stopHealing(client);
 
+        // PARKOUR: the repair kit is TIME-based, not HP-budget-based. It stays active for its whole tick
+        // budget even at FULL health — topping the tank back up the instant it takes damage — and only
+        // stops once the tick limit runs out. (Other modes stop as soon as the tank is full OR the kit has
+        // poured in its HP budget.)
+        const parkour = battle.settings.parkourMode;
+
         const hullHP = ItemUtils.getHullArmor(user);
         const stepNormalized = (HEAL_HP_PER_TICK * 10000) / hullHP;
         const budgetNormalized = maxGivenFraction * 10000; // total HP the kit can hand out
         let delivered = 0;
-        if (client.currentHealth >= 10000) return;
+        // In parkour we still activate at full health (it keeps topping up as damage comes in).
+        if (!parkour && client.currentHealth >= 10000) return;
 
-        // Floating "+health" effect over the tank (HEALTH slot). Duration is the kit's nominal time
-        // when given (drop medkit), else the real heal time = ticks to deliver the deliverable amount.
+        // Parkour tick limit = the kit's real HP ÷ HP healed per tick: full hull HP / 30 for an inventory
+        // kit, half that ((hullHP/2)/30) for a field-drop medkit (maxGivenFraction 1.0 vs 0.5). The heal
+        // stays active for that many ticks, topping the tank up as it takes damage.
+        const tickLimit = Math.ceil((maxGivenFraction * hullHP) / HEAL_HP_PER_TICK);
+        let ticksElapsed = 0;
+
+        // Floating "+health" effect over the tank (HEALTH slot). Parkour shows it for the whole tick budget;
+        // otherwise it's the given nominal time (drop medkit) or the real heal time to deliver the budget.
         const ticks = Math.ceil(Math.min(10000 - client.currentHealth, budgetNormalized) / stepNormalized);
-        const durationMs = effectDurationMs ?? ticks * HEAL_TICK_MS;
+        const durationMs = parkour ? tickLimit * HEAL_TICK_MS : (effectDurationMs ?? ticks * HEAL_TICK_MS);
         battle.broadcast(new EffectStartedPacket(user.username, SUPPLY_SLOT.HEALTH, durationMs, 0));
 
         client.healTimer = setInterval(() => {
@@ -113,6 +126,18 @@ export class SupplyService {
             // temperatures hard, out-pacing the beam/flame even while still under fire.
             relieveFreeze(battle, client);
             relieveBurn(battle, client);
+
+            if (parkour) {
+                // Top up to full (never overheal); the effect stays active regardless of health and ends
+                // only when the tick budget is spent — so damage taken mid-heal is refilled next tick.
+                const step = Math.min(stepNormalized, 10000 - client.currentHealth);
+                if (step > 0) {
+                    client.currentHealth += step;
+                    battle.broadcast(new SetHealthPacket({ nickname: user.username, health: Math.round(client.currentHealth) }));
+                }
+                if (++ticksElapsed >= tickLimit) SupplyService.stopHealing(client);
+                return;
+            }
 
             // This tick gives a normal step, but never overheals past full and never exceeds the
             // kit's remaining budget (so the last tick before the budget runs out is partial).
