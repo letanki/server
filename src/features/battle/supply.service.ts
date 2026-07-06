@@ -3,6 +3,7 @@ import { GameClient } from "@/server/game.client";
 import { ItemUtils } from "@/utils/item.utils";
 import { relieveBurn } from "@/features/weapons/flamethrower/flamethrower.handlers";
 import { relieveFreeze, broadcastMovementSpec } from "@/features/weapons/freeze/freeze.handlers";
+import { relieveMachinegunHeat } from "@/features/weapons/machinegun/machinegun.handlers";
 import { Battle } from "./battle.model";
 import { EffectStartedPacket, EffectStoppedPacket, SetHealthPacket } from "./battle.packets";
 
@@ -126,6 +127,7 @@ export class SupplyService {
             // temperatures hard, out-pacing the beam/flame even while still under fire.
             relieveFreeze(battle, client);
             relieveBurn(battle, client);
+            relieveMachinegunHeat(battle, client); // cools an overheating Vulcan barrel (−0.12/tick, from the official capture)
 
             if (parkour) {
                 // Top up to full (never overheal); the effect stays active regardless of health and ends

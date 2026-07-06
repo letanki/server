@@ -7,19 +7,34 @@ import logger from "@/utils/logger";
 import { TankTemperaturePacket } from "@/features/battle/battle.packets";
 import * as MachinegunPackets from "./machinegun.packets";
 
-// Vulcan overheat, calibrated from the m0 capture (FuscaVerde): you may fire for the weapon's
-// temperatureHittingTime (physics special_entity, = WEAPON_RELOAD_TIME×1000: 4390ms m0 … 7000ms m3) before
-// the barrel heats; after that the heat ramps over that same time to a ~0.22 cap (red tint) and burns the
-// shooter (~702 normalized/s ≈ weapon DPS × 0.31 at the cap). Pausing cools it back to 0 over spinDownTime,
-// the residual heat still burning meanwhile. Sustained fire can cook the shooter to death.
-// Cap and self-burn fraction aren't in the equipment configs (empirical from the capture); the grace/ramp
-// time and the cooldown ARE read per-mod from physics (see the call site).
-const MG_HEAT_CAP = 0.22;
-const MG_SELF_BURN_FRACTION = 0.31; // self-burn DPS at the cap = weapon DPS × this
+// Vulcan overheat, calibrated from THREE official captures (2026-07-06: s1-49319 m3/500hp full ramp + two
+// health activations; s2-59778 m3 four firing pauses incl. a residual-burn death; s3-51423 m0/titan-336hp
+// which DISAMBIGUATED the mod-dependence — supersedes the earlier partial m0 "0.22 cap" misread). Model:
+// • GRACE: fire continuously for temperatureHittingTime (physics special_entity: 4390ms m0 … 7000ms m3)
+//   before the barrel heats (confirmed on both mods: temp starts grace+~0.7s after the first shot cmd).
+//   The grace RE-APPLIES on every trigger resume — even a 2.6s pause with heat remaining restarts it, and
+//   during the fresh grace the heat keeps COOLING while already firing (s2: 0.73 → fell to 0.44 over
+//   ~7.7s of resumed fire, then climbed again).
+// • RAMP: past the grace, +0.01 PER SHOT COMMAND — tied to the burst cadence, which is mod-specific
+//   (m0 ~264ms, m3 ~285ms), so the heat is accrued in the shot handler, not on a clock. Cap 1.0.
+// • SELF-BURN: `30 real HP × heat` per second — MOD/DPS-INDEPENDENT (m3/500hp: 600 norm/s at heat 1.0;
+//   m0/titan-336hp: damage tick = 892 norm × heat = the same 30 real; a DPS-scaled model only fit m3 by
+//   the 60×0.5=30 coincidence and is off by 2.2× on m0). Keeps burning through pauses — s2 shows a death
+//   from residual burn after releasing. Matches HEAL_HP_PER_TICK×... no relation, just 30.
+// • COOLDOWN: whenever not (firing && past grace), heat falls a constant −0.032/s (both mods, exact:
+//   0.618→0.010 in 19×1s ticks; full scale ≈ 31s). Firing is "over" after ~spinDownTime (1500ms) without
+//   a shot command.
+// • HEALTH KIT: each 0.5s heal tick shaves −0.12 heat (relieveMachinegunHeat, wired into SupplyService),
+//   the ramp still adding +0.01/shot underneath (both mods: relief steps of exactly −0.12).
+const MG_HEAT_CAP = 1.0;
+const MG_RAMP_PER_SHOT = 0.01;       // heat added per shot command past the grace (mod-independent)
+const MG_COOL_PER_MS = 0.032 / 1000; // constant cooldown (both captures: −0.032 per 1s tick)
+const MG_SELF_BURN_HP_PER_SEC = 30;  // self-burn real HP/s at heat 1.0, × current heat (mod-independent)
+const MG_HEAL_RELIEF = 0.12;        // heat shaved per repair-kit heal tick (capture: 1.00→0 in ~9 ticks under fire)
 const MG_OVERHEAT_TICK_MS = 500;
-const MG_FIRE_GAP_MS = 600;         // no shot for this long ⇒ no longer firing (start cooling)
+const MG_FIRE_GAP_MS = 1500;        // no shot for this long ⇒ trigger released (heatTime resets, grace re-applies)
 const MG_SHOT_MIN_MS = 50, MG_SHOT_MAX_MS = 300; // clamp for per-shot elapsed time (target damage)
-const MG_GRACE_FALLBACK_MS = 4390, MG_COOL_FALLBACK_MS = 1500; // used only if physics is missing
+const MG_GRACE_FALLBACK_MS = 4390; // used only if physics is missing
 
 function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number, minPct: number): number {
     if (!a.battlePosition || !b.battlePosition) return 1;
@@ -31,7 +46,7 @@ function distanceFactor(a: GameClient, b: GameClient, maxR: number, minR: number
 
 /** Drives the shooter's overheat while/after they hold the trigger: ramps the heat (red tint) past the grace
  *  period, burns them for it, and cools back down once they stop. Self-clears on death/full cooldown. */
-function scheduleOverheat(server: GameServer, battle: NonNullable<GameClient["currentBattle"]>, name: string, graceMs: number, coolMs: number, dps: number): void {
+function scheduleOverheat(server: GameServer, battle: NonNullable<GameClient["currentBattle"]>, name: string, graceMs: number): void {
     battle.timers.set(`overheat:${name}`, MG_OVERHEAT_TICK_MS, async () => {
         const sc = server.findClientByUsername(name);
         if (!sc || sc.currentBattle !== battle || sc.battleState !== "active") {
@@ -39,23 +54,33 @@ function scheduleOverheat(server: GameServer, battle: NonNullable<GameClient["cu
             return;
         }
         const firing = Date.now() - sc.lastMachinegunShot < MG_FIRE_GAP_MS;
-        if (firing) {
-            sc.machinegunHeatTime += MG_OVERHEAT_TICK_MS;
-            const past = Math.max(0, sc.machinegunHeatTime - graceMs); // grace then ramp over the same time
-            sc.machinegunHeat = Math.min(MG_HEAT_CAP, (past / graceMs) * MG_HEAT_CAP);
-        } else {
-            sc.machinegunHeatTime = 0;
-            sc.machinegunHeat = Math.max(0, sc.machinegunHeat - MG_HEAT_CAP * (MG_OVERHEAT_TICK_MS / coolMs));
+        // Continuous-fire clock: resets on release, so the grace RE-APPLIES on every trigger resume.
+        // The climb itself happens in the SHOT handler (+0.01 per shot command past the grace).
+        sc.machinegunHeatTime = firing ? sc.machinegunHeatTime + MG_OVERHEAT_TICK_MS : 0;
+        if (!(firing && sc.machinegunHeatTime > graceMs)) {
+            // Constant cooldown — runs when released AND during a fresh grace while firing (per capture).
+            sc.machinegunHeat = Math.max(0, sc.machinegunHeat - MG_COOL_PER_MS * MG_OVERHEAT_TICK_MS);
         }
         battle.broadcast(new TankTemperaturePacket(name, sc.machinegunHeat));
         if (sc.machinegunHeat > 0) {
-            const selfReal = dps * MG_SELF_BURN_FRACTION * (sc.machinegunHeat / MG_HEAT_CAP) * (MG_OVERHEAT_TICK_MS / 1000);
+            // Self-burn scales with the CURRENT heat: 30 real HP × heat per second (mod-independent).
+            const selfReal = MG_SELF_BURN_HP_PER_SEC * sc.machinegunHeat * (MG_OVERHEAT_TICK_MS / 1000);
             await server.battleService.applyDamage(battle, sc, sc, selfReal, 0);
-            if (sc.battleState === "active") scheduleOverheat(server, battle, name, graceMs, coolMs, dps);
+            if (sc.battleState === "active") scheduleOverheat(server, battle, name, graceMs);
         } else if (firing) {
-            scheduleOverheat(server, battle, name, graceMs, coolMs, dps);
+            scheduleOverheat(server, battle, name, graceMs);
         }
     });
+}
+
+/** Using a health kit cools an overheating Vulcan barrel: each heal tick shaves the shooter's heat by
+ *  MG_HEAL_RELIEF (capture: −0.12/tick, temp 1.00→0 in ~9 ticks while STILL firing). Called from
+ *  SupplyService's heal tick like relieveBurn/relieveFreeze; no-op when the barrel is cold. The overheat
+ *  timer keeps ramping/burning underneath — beating the heat to 0 just restarts the climb (no new grace). */
+export function relieveMachinegunHeat(battle: NonNullable<GameClient["currentBattle"]>, client: GameClient): void {
+    if (!client.user || client.machinegunHeat <= 0) return;
+    client.machinegunHeat = Math.max(0, client.machinegunHeat - MG_HEAL_RELIEF);
+    battle.broadcast(new TankTemperaturePacket(client.user.username, client.machinegunHeat));
 }
 
 export class StartShootingMachinegunCommandHandler implements IPacketHandler<MachinegunPackets.StartShootingMachinegunCommandPacket> {
@@ -129,13 +154,17 @@ export class MachinegunShotCommandHandler implements IPacketHandler<MachinegunPa
             await server.battleService.applyDamage(currentBattle, client, targetClient, dps * elapsed * factor, 0);
         }
 
-        // Track continuous fire and arm the overheat loop (the barrel heats only past the grace period).
+        // Track continuous fire and arm the overheat loop (cooldown + self-burn + tint broadcast).
         client.lastMachinegunShot = now;
+        const special = physics?.special_entity as any;
+        const graceMs = special?.temperatureHittingTime ?? MG_GRACE_FALLBACK_MS;
+        // Heat climbs PER SHOT COMMAND once continuous fire outlasts the grace — tied to the burst
+        // cadence (mod-specific: m0 ~264ms, m3 ~285ms), exactly like the official ramp.
+        if (client.machinegunHeatTime > graceMs) {
+            client.machinegunHeat = Math.min(MG_HEAT_CAP, client.machinegunHeat + MG_RAMP_PER_SHOT);
+        }
         if (!currentBattle.timers.has(`overheat:${user.username}`)) {
-            const special = physics?.special_entity as any;
-            const graceMs = special?.temperatureHittingTime ?? MG_GRACE_FALLBACK_MS;
-            const coolMs = special?.spinDownTime ?? MG_COOL_FALLBACK_MS;
-            scheduleOverheat(server, currentBattle, user.username, graceMs, coolMs, dps);
+            scheduleOverheat(server, currentBattle, user.username, graceMs);
         }
     }
 }
