@@ -5,7 +5,7 @@ import User from "@/shared/models/user.model";
 
 const SUPPLY_TYPES = ["health", "armor", "double_damage", "n2o", "mine"] as const;
 
-/** Adds any supply to the caller's inventory (generalizes /buymines): no garage trip, no cap. */
+/** Adds any supply to the caller's inventory (replaces the old /buymines): no garage trip, no cap. */
 export default class SupplyCommand implements ICommand {
     name = "supply";
     description = "Adiciona suprimentos ao seu inventário, sem garagem e sem limite. Uso: /supply <tipo> <amount>.";

@@ -58,6 +58,8 @@ export class CombatService {
         const targetUser = targetClient.user;
         if (!targetUser || targetClient.battleState !== "active" || realDamage <= 0) return;
         if (battle.roundState === BattleRoundState.FINISHED) return; // no damage/kills during the round-finish freeze
+        if (battle.paused) return; // staff /pause: combat frozen
+        if (targetClient.godMode) return; // staff /god: this tank is immune to all damage
 
         // Friendly fire: in team modes with friendlyFire disabled, teammates can't damage each other.
         // Self-damage always lands (ricochet bounce-back, splash on yourself, self-destruct), and DM has

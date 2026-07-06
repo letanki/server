@@ -190,6 +190,8 @@ export class BattleService {
         // During the round-finish freeze nobody may pick up the flag or trigger kill/void zones — the
         // carrier's flag just fell right under them and would otherwise be re-grabbed instantly.
         if (currentBattle.roundState === BattleRoundState.FINISHED) return;
+        // Staff /pause: same interaction freeze (flags/mines/domination/zones) while movement still relays.
+        if (currentBattle.paused) return;
 
         this.ctf.checkFlagInteractions(client);
         this.mine.checkTriggers(client);

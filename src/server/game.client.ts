@@ -69,9 +69,11 @@ export class GameClient {
     this._currentBattle?.clients.delete(this);
     this._currentBattle = battle;
     battle?.clients.add(this);
-    // Effects and scoreboard don't carry across battles. (Supply cooldowns reset on tank ACTIVATION —
-    // ReadyToActivateHandler — which always precedes any supply use, so no clear is needed here.)
+    // Effects, staff toggles and scoreboard don't carry across battles. (Supply cooldowns reset on tank
+    // ACTIVATION — ReadyToActivateHandler — which always precedes any supply use, so no clear here.)
     this.activeEffects = [];
+    this.godMode = false;
+    this.speedMultiplier = 1;
     this.kills = 0;
     this.deaths = 0;
     this.battleScore = 0;
@@ -172,6 +174,12 @@ export class GameClient {
   // cooldown is only VISUAL — a macro/lag burst of activation packets would otherwise consume one supply
   // per packet. ActivateSupplyCommandHandler discards activations arriving before their ready time.
   public supplyReadyAt: Map<string, number> = new Map();
+  // Staff /god: while true, CombatService.applyDamage skips this tank entirely (weapons, mines, splash,
+  // self-burn). Kill/kick zones still apply (that's /bounds). Reset on battle change.
+  public godMode: boolean = false;
+  // Staff /speed: movement-spec speed multiplier applied by broadcastMovementSpec (composes with
+  // nitro/freeze). 1 = normal. Reset on battle change.
+  public speedMultiplier: number = 1;
   public equipmentChangedInGarage: boolean = false;
   // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose
   // equipped base changed vs this snapshot arm the re-arm 15-min cooldown (so the player can freely swap

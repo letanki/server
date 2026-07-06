@@ -52,7 +52,7 @@ export function broadcastMovementSpec(battle: NonNullable<GameClient["currentBat
     const freeze = slowFactor(target.freezeTemperature); // 1 when not cold
     battle.broadcast(new TankSpecificationPacket({
         nickname: target.user.username,
-        speed: base.speed * (nitro ? NITRO_SPEED_MULT : 1) * freeze,
+        speed: base.speed * (nitro ? NITRO_SPEED_MULT : 1) * freeze * target.speedMultiplier, // speedMultiplier = staff /speed (1 = normal)
         maxTurnSpeed: base.maxTurnSpeed * freeze,
         turretTurnSpeed: base.turretTurnSpeed * freeze,
         acceleration: base.acceleration + (nitro ? NITRO_ACCEL_BONUS : 0),

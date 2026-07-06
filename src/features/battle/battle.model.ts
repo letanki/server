@@ -135,6 +135,9 @@ export class Battle {
      *  the playable shell (parkour exploration/tests). Persists across round restarts; fresh battles
      *  start with bounds ON. checkPlayerPosition skips the boundary boxes while true. */
     public boundsDisabled: boolean = false;
+    /** Staff toggle (/pause): combat freeze — no damage/kills, no flag/mine/zone interactions. Movement
+     *  still relays and the round clock keeps ticking (only gameplay interactions are held). */
+    public paused: boolean = false;
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
     // auto-removed.
     public isSystem: boolean = false;
