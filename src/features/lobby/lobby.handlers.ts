@@ -65,7 +65,14 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
             }
 
             const responsePacket = new LobbyPackets.CreateBattleResponse(JSON.stringify(finalPayload));
-            server.broadcastToBattleList(responsePacket);
+            // Private battles must NOT appear in everyone's list — only recipients who are allowed to
+            // see it get the card (creator + staff now); invited players / chat-preview clickers get it
+            // granted on demand (see Battle.grantViewer / canBeSeenBy).
+            if (battle.settings.privateBattle) {
+                server.broadcastToBattleList(responsePacket, (c) => battle.canBeSeenBy(c.user));
+            } else {
+                server.broadcastToBattleList(responsePacket);
+            }
 
             await LobbyWorkflow.sendBattleDetails(client, server, battle);
         } catch (error: any) {
@@ -111,6 +118,12 @@ export class RequestBattleByLinkHandler implements IPacketHandler<LobbyPackets.R
         }
 
         client.lastViewedBattleId = battle.battleId;
+
+        // Opening a private battle's preview from a chat link grants list visibility (and pushes the
+        // card so it shows up in this player's battle list).
+        if (battle.settings.privateBattle && battle.grantViewer(client.user)) {
+            client.sendPacket(new LobbyPackets.CreateBattleResponse(JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle))));
+        }
 
         if (client.getState() === "chat_garage") {
             await LobbyWorkflow.returnToLobby(client, server, true);

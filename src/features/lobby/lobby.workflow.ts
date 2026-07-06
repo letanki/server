@@ -321,43 +321,47 @@ export class LobbyWorkflow {
         client.sendPacket(new LobbyPackets.BattleInfo(jsonData));
     }
 
-    private static sendBattleList(client: GameClient, server: GameServer): void {
-        const battles = server.lobbyService.getBattles();
+    /** Builds a single battle's entry for the battle LIST (uses plain username strings — the battle
+     *  DETAILS/ShowBattleInfo use objects; sending objects here breaks player count, friend matching
+     *  and add/remove-by-username on join/leave). Reused by the full list, CreateBattle and the
+     *  private-battle preview grant so the card shape stays identical everywhere. */
+    public static buildBattleListEntry(battle: Battle): object {
+        const preview = this.getMapPreviewResourceId(battle);
+        const basePayload = {
+            battleId: battle.battleId,
+            battleMode: BattleMode[battle.settings.battleMode],
+            map: battle.settings.mapId,
+            maxPeople: battle.settings.maxPeopleCount,
+            name: battle.settings.name,
+            privateBattle: battle.settings.privateBattle,
+            proBattle: battle.settings.proBattle,
+            minRank: battle.settings.minRank,
+            maxRank: battle.settings.maxRank,
+            preview: preview,
+            parkourMode: battle.settings.parkourMode,
+            equipmentConstraintsMode: EquipmentConstraintsMode[battle.settings.equipmentConstraintsMode],
+            suspicionLevel: "NONE",
+        };
 
-        const battleListPayload = battles.map((battle) => {
-            const preview = this.getMapPreviewResourceId(battle);
-            const basePayload = {
-                battleId: battle.battleId,
-                battleMode: BattleMode[battle.settings.battleMode],
-                map: battle.settings.mapId,
-                maxPeople: battle.settings.maxPeopleCount,
-                name: battle.settings.name,
-                privateBattle: battle.settings.privateBattle,
-                proBattle: battle.settings.proBattle,
-                minRank: battle.settings.minRank,
-                maxRank: battle.settings.maxRank,
-                preview: preview,
-                parkourMode: battle.settings.parkourMode,
-                equipmentConstraintsMode: EquipmentConstraintsMode[battle.settings.equipmentConstraintsMode],
-                suspicionLevel: "NONE",
+        if (battle.isTeamMode()) {
+            return {
+                ...basePayload,
+                usersBlue: battle.usersBlue.map((u) => u.username),
+                usersRed: battle.usersRed.map((u) => u.username),
             };
+        }
+        return {
+            ...basePayload,
+            users: battle.users.map((u) => u.username),
+        };
+    }
 
-            // The battle LIST uses plain username strings (the battle DETAILS/ShowBattleInfo
-            // use objects). Sending objects here breaks the client's player count, friend
-            // matching, and add/remove-by-username on join/leave.
-            if (battle.isTeamMode()) {
-                return {
-                    ...basePayload,
-                    usersBlue: battle.usersBlue.map((u) => u.username),
-                    usersRed: battle.usersRed.map((u) => u.username),
-                };
-            } else {
-                return {
-                    ...basePayload,
-                    users: battle.users.map((u) => u.username),
-                };
-            }
-        });
+    private static sendBattleList(client: GameClient, server: GameServer): void {
+        // Private battles are hidden from everyone except the creator, invited players and anyone who
+        // opened the battle's preview from a chat link (see Battle.canBeSeenBy).
+        const battles = server.lobbyService.getBattles().filter((battle) => battle.canBeSeenBy(client.user));
+
+        const battleListPayload = battles.map((battle) => this.buildBattleListEntry(battle));
 
         const jsonData = JSON.stringify({ battles: battleListPayload });
         client.sendPacket(new LobbyPackets.BattleList(jsonData));

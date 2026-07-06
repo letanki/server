@@ -240,8 +240,8 @@ export class GameServer {
     this.clientManager.sendToLobbyChatListeners(packet);
   }
 
-  public broadcastToBattleList(packet: IPacket): void {
-    this.clientManager.sendToBattleListWatchers(packet);
+  public broadcastToBattleList(packet: IPacket, filter?: (client: GameClient) => boolean): void {
+    this.clientManager.sendToBattleListWatchers(packet, filter);
   }
 
   public notifySubscribersOfStatusChange(username: string, isOnline: boolean, serverNumber: number = 1): void {

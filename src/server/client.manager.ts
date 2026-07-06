@@ -53,10 +53,10 @@ export class ClientManager {
     });
   }
 
-  public sendToBattleListWatchers(packet: IPacket): void {
+  public sendToBattleListWatchers(packet: IPacket, filter?: (client: GameClient) => boolean): void {
     const battleListStates: ClientState[] = ["chat_lobby", "battle_lobby"];
     this.clients.forEach((client) => {
-      if (battleListStates.includes(client.getState())) {
+      if (battleListStates.includes(client.getState()) && (!filter || filter(client))) {
         client.sendPacket(packet);
       }
     });

@@ -2,6 +2,7 @@ import { IDependency } from "@/features/loader/loader.types";
 import type { IPacket } from "@/packets/packet.interfaces";
 import type { GameClient } from "@/server/game.client";
 import { UserDocument } from "@/shared/models/user.model";
+import { chatModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ResourceId } from "@/generated/resourceTypes";
 import { ResourceManager } from "@/utils/resource.manager";
@@ -141,6 +142,32 @@ export class Battle {
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
     // auto-removed.
     public isSystem: boolean = false;
+
+    /** Creator's lowercase username (null for system battles). Private battles are only visible in the
+     *  battle list to the creator, invited players, and anyone who opened its preview from a chat link. */
+    public creatorUsername: string | null = null;
+    /** Lowercase usernames granted visibility of a PRIVATE battle (invited + chat-preview clickers). The
+     *  creator is implicitly allowed. Ignored for public battles (settings.privateBattle === false). */
+    public readonly allowedViewers = new Set<string>();
+
+    /** Whether `user` may see this battle in their battle list. Public battles are always visible;
+     *  private ones only to the creator and granted viewers. */
+    public canBeSeenBy(user: UserDocument | null | undefined): boolean {
+        if (!this.settings.privateBattle) return true;
+        if (!user) return false;
+        // Staff (any moderator cargo above a regular user) can always see private battles for moderation.
+        if (chatModeratorPower(user.chatModeratorLevel) > 0) return true;
+        const key = user.username.toLowerCase();
+        return this.creatorUsername === key || this.allowedViewers.has(key);
+    }
+
+    /** Grants `user` visibility of this private battle. Returns true if this was a newly granted viewer
+     *  (so the caller can push the list card), false if they could already see it. */
+    public grantViewer(user: UserDocument | null | undefined): boolean {
+        if (!user || this.canBeSeenBy(user)) return false;
+        this.allowedViewers.add(user.username.toLowerCase());
+        return true;
+    }
 
     /**
      * All this battle's named timers (round time limit, finish-results pause, empty-battle removal,

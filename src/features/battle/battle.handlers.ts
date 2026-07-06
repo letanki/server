@@ -3,7 +3,7 @@ import { suppliesData } from "@/config/supplies.data";
 import { HEAL_MAX_GIVEN } from "./supply.service";
 import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
-import { AddUserToBattleDmPacket, AddUserTeamPacket, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
+import { AddUserToBattleDmPacket, AddUserTeamPacket, CreateBattleResponse, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
@@ -521,6 +521,12 @@ export class SendBattleInviteHandler implements IPacketHandler<BattlePackets.Sen
         if (!targetClient || !battle) {
             logger.warn(`Battle invite from ${inviter.username} to ${packet.targetNickname} could not be delivered (target offline or battle gone).`);
             return;
+        }
+
+        // Inviting a player to a private battle grants them list visibility (and pushes the card so the
+        // battle shows in their list even though it was hidden at creation).
+        if (battle.settings.privateBattle && battle.grantViewer(targetClient.user)) {
+            targetClient.sendPacket(new CreateBattleResponse(JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle))));
         }
 
         targetClient.sendPacket(new BattlePackets.ShowBattleInvitePacket({

@@ -96,6 +96,7 @@ export class LobbyService {
             }
 
             battle.isSystem = !creator; // no player creator => system battle (never auto-removed)
+            battle.creatorUsername = creator ? creator.username.toLowerCase() : null;
             this.activeBattles.set(battle.battleId, battle);
             logger.info(`Battle created`, {
                 battleId: battle.battleId,
