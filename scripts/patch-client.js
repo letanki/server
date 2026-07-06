@@ -18,6 +18,9 @@
  *   node scripts/patch-client.js --all --deploy         # patch + deploy (todos os SWFs)
  *   node scripts/patch-client.js --only animated-paint-fullcover --deploy
  *   node scripts/patch-client.js --deploy-only          # move os -patch.swf p/ .resource
+ *   node scripts/patch-client.js --ip <addr> [--port <n>]  # reescreve resources/config.xml (endereço do
+ *       game server que o cliente conecta) + deploya em .resource; combina com qualquer modo ou roda só:
+ *       npm run patch:deploy -- --ip 192.168.0.10
  * Overrides (só com UM SWF alvo): --base/--out/--deploy-to <swf>. Outros:
  *   --rabcdasm <dir>, --keep, --backup.
  *
@@ -48,7 +51,8 @@ function loadPatches() {
 
 function parseArgs(argv, patches) {
   const o = { rabcdasm: path.join(ROOT, 'tools', 'rabcdasm'), keep: false, backup: false,
-    list: false, select: null, deploy: false, deployOnly: false, base: null, out: null, deployTo: null };
+    list: false, select: null, deploy: false, deployOnly: false, base: null, out: null, deployTo: null,
+    ip: null, port: null };
   let only = null, except = null, all = false;
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -58,6 +62,8 @@ function parseArgs(argv, patches) {
     else if (a === '--rabcdasm') o.rabcdasm = path.resolve(argv[++i]);
     else if (a === '--only') only = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--except') except = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
+    else if (a === '--ip') o.ip = argv[++i];
+    else if (a === '--port') o.port = argv[++i];
     else if (a === '--all') all = true;
     else if (a === '--deploy') o.deploy = true;
     else if (a === '--deploy-only') o.deployOnly = true;
@@ -71,6 +77,21 @@ function parseArgs(argv, patches) {
   else if (except) o.select = ids.filter((id) => !except.includes(id));
   else if (all) o.select = ids;
   return o;
+}
+
+/** Rewrites the client bootstrap config.xml (game-server address/port) in resources/ AND deploys it to
+ *  .resource/ — used by --ip/--port so pointing the client at another host is one flag away. */
+function updateConfigXml(ip, port) {
+  const src = path.join(ROOT, 'resources', 'config.xml');
+  if (!fs.existsSync(src)) die('resources/config.xml nao existe');
+  let xml = fs.readFileSync(src, 'utf8');
+  if (ip) xml = xml.replace(/(<server address=")[^"]*(")/, `$1${ip}$2`);
+  if (port) xml = xml.replace(/(<port>)[^<]*(<\/port>)/, `$1${port}$2`);
+  fs.writeFileSync(src, xml);
+  const dst = path.join(ROOT, '.resource', 'config.xml');
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  fs.copyFileSync(src, dst);
+  log(`config.xml atualizado (${ip ? 'address=' + ip : ''}${ip && port ? ', ' : ''}${port ? 'port=' + port : ''}) + deploy em .resource/`);
 }
 
 function toolPath(dir, n) { return path.join(dir, n + (process.platform === 'win32' ? '.exe' : '')); }
@@ -142,6 +163,13 @@ function processSwf(o, swfName, swfPatches, base, out, deployTo) {
 function main() {
   const patches = loadPatches();
   const o = parseArgs(process.argv, patches);
+
+  // --ip/--port: rewrite + deploy the client bootstrap config.xml. Combines with any mode (patch,
+  // deploy-only) or runs standalone (e.g. `npm run patch:deploy -- --ip 192.168.0.10`).
+  if (o.ip || o.port) {
+    updateConfigXml(o.ip, o.port);
+    if (!o.select && !o.deployOnly && !o.list) return; // standalone config update
+  }
 
   if (o.list || (!o.select && !o.deployOnly)) {
     console.log('Patches disponiveis:');
