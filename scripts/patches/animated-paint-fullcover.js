@@ -21,7 +21,9 @@
  *     densidade de tiles = 512/framePx (ex.: frame 64px → 8 tiles).
  *
  * Mantidos: drawTransparent chama update() (anima no spawn), remoção da guarda do update() (buffer
- * compartilhado), e guarda de 1º frame no delta (dt = time>0 ? now-time : 0).
+ * compartilhado). A fase da animação agora é ABSOLUTA (b4f88b65 = (now/1000*fps) % numFrames via getTimer
+ * global) em vez de acumulada por instância — assim carroceria e torreta ficam SEMPRE em sincronia mesmo
+ * trocando a torreta (que cria um material novo); isso também substitui a antiga guarda de 1º frame.
  */
 
 const SCALEX = 'QName(PackageNamespace(""), "scaleX")';
@@ -95,23 +97,40 @@ const MARK_CTOR = 'pushshort           512\n      multiply\n      getlocal3';
 
 const DRAW_TRANSP_RE = /name "drawTransparent"[\s\S]*?callsupervoid\s+QName\(Namespace\("http:\/\/alternativaplatform\.com\/en\/alternativa3d"\), "drawTransparent"\), 7/;
 const GUARD_RE = /(getproperty\s+QName\(PrivateNamespace\("alternativa\.tanks\.materials:AnimatedPaintMaterial"\), "a4d5069f"\)\s*getlocal0\s*getproperty\s+QName\(PrivateNamespace\("alternativa\.tanks\.materials:AnimatedPaintMaterial"\), "b4f88b65"\)\s*)ifne(\s+)(L\d+)(\s*returnvoid)/;
-const DELTA_RE = new RegExp('getproperty\\s+' + esc(TIME) + '\\s+subtract');
-const DELTA_BLOCK = `getproperty         ${TIME}
-      pushbyte            0
-      ifle                Lgzero
+// ---------- fase ABSOLUTA no update(): sincroniza TODAS as instâncias (carroceria + torreta) ----------
+// Original acumula por instância: b4f88b65 += (dt/1000)*fps ; b4f88b65 %= numFrames — a fase depende de
+// QUANDO o material nasceu, então trocar a torreta cria um material novo fora de fase com a carroceria.
+// Novo: b4f88b65 = (now/1000*fps) % numFrames, derivado do relógio GLOBAL getTimer (local4 = now, já
+// capturado no topo do update) → toda instância mostra o mesmo frame no mesmo instante. Também elimina o
+// salto do 1º frame (não usa mais delta), substituindo a antiga guarda de delta.
+const B65 = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPaintMaterial"), "b4f88b65")';
+const FPS_S = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPaintMaterial"), "fps")';
+const NF_S = 'QName(PrivateNamespace("alternativa.tanks.materials:AnimatedPaintMaterial"), "numFrames")';
+const ACCUM_RE = new RegExp(
+  'getlocal0\\s+getlocal0\\s+getproperty\\s+' + esc(B65) +
+  '\\s+getlocal2\\s+pushshort\\s+1000\\s+divide\\s+getlocal0\\s+getproperty\\s+' + esc(FPS_S) +
+  '\\s+multiply\\s+add\\s+setproperty\\s+' + esc(B65) +
+  '\\s+getlocal0\\s+getlocal0\\s+getproperty\\s+' + esc(B65) +
+  '\\s+getlocal0\\s+getproperty\\s+' + esc(NF_S) +
+  '\\s+modulo\\s+setproperty\\s+' + esc(B65));
+const ABS_BLOCK =
+`getlocal0
+      getlocal            4
+      pushshort           1000
+      divide
       getlocal0
-      getproperty         ${TIME}
-      subtract
-      jump                Lgdone
-     Lgzero:
-      pop
-      pushbyte            0
-     Lgdone:`;
+      getproperty         ${FPS_S}
+      multiply
+      getlocal0
+      getproperty         ${NF_S}
+      modulo
+      setproperty         ${B65}`;
+const MARK_ABS = `multiply\n      getlocal0\n      getproperty         ${NF_S}\n      modulo`;
 
 module.exports = {
   id: 'animated-paint-fullcover',
   swf: 'hardware',
-  description: 'PaintFragmentShader ganha o frac-wrap por frame (portado do AnimatedPaintFragmentShader morto, = Game.swf); scale = 512/sheet; anima no spawn.',
+  description: 'PaintFragmentShader ganha o frac-wrap por frame (= Game.swf); scale = 512/sheet; anima no spawn; fase absoluta (torreta/carroceria sincronizadas).',
 
   apply({ classes, log }) {
     let seenMat = false, seenFrag = false, edits = 0, already = 0;
@@ -159,11 +178,11 @@ module.exports = {
       const g = t.replace(GUARD_RE, '$1pop\n      pop\n      jump$2$3$4');
       if (g !== t) { t = g; edits++; } else if (/pop\n      pop\n      jump/.test(t)) already++;
 
-      // guarda de 1º frame no delta
-      if (t.includes('Lgzero:')) {
+      // fase ABSOLUTA no update() (sincroniza carroceria + torreta, sem salto de 1º frame)
+      if (t.includes(MARK_ABS)) {
         already++;
       } else {
-        const d = t.replace(DELTA_RE, DELTA_BLOCK);
+        const d = t.replace(ACCUM_RE, ABS_BLOCK);
         if (d !== t) { t = d; edits++; }
       }
 
