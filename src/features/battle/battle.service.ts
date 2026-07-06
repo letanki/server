@@ -195,6 +195,10 @@ export class BattleService {
         this.mine.checkTriggers(client);
         this.domination.checkPointOccupancy(client);
 
+        // Staff toggle (/bounds off): boundary kill/kick zones disabled for this battle — tanks may
+        // roam outside the playable shell. Flag/mine/domination checks above still run.
+        if (currentBattle.boundsDisabled) return;
+
         const geometries = getMapGeometries(currentBattle.mapResourceId);
         if (geometries.length === 0) return;
 

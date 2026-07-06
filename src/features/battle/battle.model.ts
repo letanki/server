@@ -131,6 +131,10 @@ export class Battle {
     /** Active mines on the field, keyed by mine id. Managed by MineService. */
     public readonly activeMines = new Map<string, IActiveMine>();
     public mineCounter: number = 0;
+    /** Staff toggle (/bounds off): disables the map's kill/kick boundary zones so tanks can roam outside
+     *  the playable shell (parkour exploration/tests). Persists across round restarts; fresh battles
+     *  start with bounds ON. checkPlayerPosition skips the boundary boxes while true. */
+    public boundsDisabled: boolean = false;
     // System battles (e.g. "Batalha para Novatos", created without a player creator) are never
     // auto-removed.
     public isSystem: boolean = false;
