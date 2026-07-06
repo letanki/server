@@ -66,6 +66,18 @@ export class GarageWorkflow {
         this._loadGarageDependencies(client);
     }
 
+    /** Fully reloads the garage view if the client currently has it open (lobby or in-battle garage).
+     *  Needed whenever the user's RANK changes with the garage open — the item lists are rank-dependent
+     *  and the client does not rebuild them in place (items end up duplicated). Unloads the garage and
+     *  re-runs the load flow; the GARAGE_DATA callback then re-initializes it. No-op outside the garage. */
+    public static reloadGarage(client: GameClient, server: GameServer): void {
+        const state = client.getState();
+        if (state !== "chat_garage" && state !== "battle_garage") return;
+        logger.info(`Reloading garage for ${client.user?.username} (rank changed with the garage open).`);
+        client.sendPacket(new GaragePackets.UnloadGaragePacket());
+        this._loadGarageDependencies(client);
+    }
+
     public static enterBattleGarageView(client: GameClient, server: GameServer): void {
         client.setState("battle_garage");
         client.sendPacket(new SetLayout(1));

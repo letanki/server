@@ -1,4 +1,5 @@
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
+import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { UpdateRankPacket, UpdateScorePacket } from "@/features/profile/profile.packets";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import User from "@/shared/models/user.model";
@@ -29,6 +30,7 @@ export default class ResetRankCommand implements ICommand {
         for (const client of context.server.getClients()) {
             const user = client.user;
             if (!user) continue;
+            const rankChanged = user.rank !== initial.rank;
             user.experience = initial.score;
             user.rank = initial.rank;
             user.nextRankScore = initial.nextRankScore;
@@ -40,6 +42,8 @@ export default class ResetRankCommand implements ICommand {
                 nextRankScore: initial.nextRankScore,
                 reward: 0,
             }));
+            // Rank-dependent garage lists don't rebuild in place — reload for anyone with it open.
+            if (rankChanged) GarageWorkflow.reloadGarage(client, context.server);
         }
 
         context.reply(`Rank resetado para ${result.modifiedCount} usuário(s). Jogadores online foram atualizados.`);

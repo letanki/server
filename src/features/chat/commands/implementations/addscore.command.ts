@@ -1,5 +1,6 @@
 import { MAX_COMMAND_SCORE } from "@/config/rank.data";
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
+import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { UpdateRankPacket, UpdateScorePacket } from "@/features/profile/profile.packets";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 
@@ -59,6 +60,9 @@ export default class AddScoreCommand implements ICommand {
                     context.executor.sendPacket(rankPacket);
                     context.reply(`Parabéns! Você alcançou o rank: ${newRankInfo.name}.`);
                 }
+                // The garage item lists are rank-dependent: a rank change (up OR down) with the garage
+                // open must fully reload it, or the client renders duplicated items.
+                GarageWorkflow.reloadGarage(context.executor, context.server);
             }
         } catch (error: any) {
             context.reply(`Erro ao atualizar a pontuação: ${error.message}`);

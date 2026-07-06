@@ -44,6 +44,21 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
             // client's score counter with the new total.
             if (result && "newExperience" in result) {
                 client.sendPacket(new ProfilePackets.UpdateScorePacket(result.newExperience));
+                // purchaseItem only adds experience — recompute the rank here. On a rank-up, notify the
+                // client and RELOAD the garage (it's open — that's where the item was bought): its item
+                // lists are rank-dependent and don't rebuild in place (items would duplicate).
+                if (server.rankService.updateRank(client.user)) {
+                    await client.user.save();
+                    const rankInfo = server.rankService.getRankById(client.user.rank);
+                    client.sendPacket(new ProfilePackets.UpdateRankPacket({
+                        rank: client.user.rank,
+                        score: client.user.experience,
+                        currentRankScore: rankInfo?.minScore ?? 0,
+                        nextRankScore: client.user.nextRankScore,
+                        reward: 0,
+                    }));
+                    GarageWorkflow.reloadGarage(client, server);
+                }
             } else if (result && "supplyId" in result) {
                 // Bought a stackable supply: keep the in-battle supply panel in sync. If the player had
                 // supplies already (panel loaded), update just this item's count; otherwise this is their
