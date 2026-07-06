@@ -4,6 +4,19 @@ export const INVITE_CODE_CHARACTERS = "0123456789abcdef";
 export const DEFAULT_PORT = 1337;
 export const DEFAULT_MAX_CLIENTS = 10;
 
+/**
+ * In-game web panel (HTMLLoader) defaults. The server tells the client which URL/size/position
+ * to open via the OpenWebPanel packet, so the host lives here (not hardcoded in the SWF patch).
+ * x/y = -1 → the client centers the panel on the stage. Override URL with the WEBPANEL_URL env.
+ */
+export const WEBPANEL = {
+  URL: process.env.WEBPANEL_URL || "http://127.0.0.1:9999/panel",
+  WIDTH: 380,
+  HEIGHT: 320,
+  X: -1,
+  Y: -1,
+};
+
 export const CALLBACK = {
   LOGIN_FORM: 3,
   GARAGE_DATA: 4,

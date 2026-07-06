@@ -26,6 +26,17 @@ export class ResourceServer {
     this.app.use(express.static(this.resourceDir));
     // Uploaded clan logos live outside .resource (which build:resources overwrites); served under /clanlogo.
     this.app.use(CLAN_LOGO_ROUTE, express.static(CLAN_LOGO_DIR));
+    // In-game web panel (HTMLLoader target): extra client features (e.g. per-weapon shot color). SHELVED —
+    // the HTMLLoader can't be made transparent/borderless under Stage3D direct render mode. Kept disabled
+    // as reference; re-enable together with scripts/patches/_webpanel-button.js if the idea is revived.
+    // this.app.use(
+    //   "/panel",
+    //   express.static(path.join(__dirname, "../../webpanel"), {
+    //     etag: false,
+    //     lastModified: false,
+    //     setHeaders: (res) => res.setHeader("Cache-Control", "no-store"),
+    //   })
+    // );
     this.app.get("/", (req: Request, res: Response) => {
       res.send("Resource Server is running");
     });

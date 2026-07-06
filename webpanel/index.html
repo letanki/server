@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Painel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* DIAGNÓSTICO: fundo MAGENTA. Se a view inteira ficar magenta, o HTML novo está preenchendo
+       (o branco anterior era cache). Se sobrar branco em volta do magenta, a superfície do
+       HTMLLoader é maior que o conteúdo. Depois voltamos para o tema escuro. */
+    html, body {
+      height: 100%; width: 100%; overflow: hidden;
+      background: #ff00aa; color: #ffffff;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      -webkit-user-select: none; user-select: none;
+    }
+    .panel { height: 100%; display: flex; flex-direction: column; }
+    .panel header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: #232838; border-bottom: 1px solid #2a3040;
+      flex: 0 0 auto;
+    }
+    .panel header h1 { font-size: 14px; font-weight: 600; }
+    #close {
+      appearance: none; border: 1px solid #3a4050; background: #2c3346; color: #e6e8ee;
+      width: 26px; height: 26px; border-radius: 7px; font-size: 15px; cursor: pointer; line-height: 1;
+    }
+    #close:hover { background: #384056; }
+    .panel .body { padding: 18px 14px; flex: 1 1 auto; overflow: auto; }
+    .panel .body p { color: #8b93a7; font-size: 13px; line-height: 1.5; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #37d67a; margin-right: 7px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <header>
+      <h1><span class="dot"></span>Painel</h1>
+      <button id="close" title="Fechar (ESC)" onclick="closePanel()">&times;</button>
+    </header>
+    <div class="body">
+      <p>Painel do tamanho do conteúdo, servido pelo LT-Server. As personalizações do jogo entram aqui.</p>
+    </div>
+  </div>
+  <script>
+    // Sinaliza o AS (HTMLLoader) para fechar: navega para um host sentinela; o AS escuta locationChanging,
+    // cancela a navegação (preventDefault) e remove a view.
+    function closePanel() { window.location.href = "http://wpclose/"; }
+  </script>
+</body>
+</html>
