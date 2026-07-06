@@ -360,6 +360,13 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             return;
         }
 
+        // Staff mute: silenced users can't post battle-chat messages (commands above still work).
+        if (user.mutedUntil && user.mutedUntil > new Date()) {
+            const minutesLeft = Math.ceil((user.mutedUntil.getTime() - Date.now()) / 60000);
+            client.sendPacket(new BattlePackets.BattleChatMessagePacket({ nickname: null, message: `Você está silenciado por mais ${minutesLeft} minuto(s).`, team: 2 }));
+            return;
+        }
+
         const isSpectator = client.isSpectator || battle.spectators.some((s: UserDocument) => s.id === user.id);
 
         let senderTeamId = 2;

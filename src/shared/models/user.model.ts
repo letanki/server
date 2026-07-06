@@ -79,6 +79,8 @@ export interface UserAttributes {
     isPunished: boolean;
     punishmentExpiresAt: Date | null;
     punishmentReason: string | null;
+    /** Chat mute (staff /mute): while in the future, chat messages are rejected (commands still work). */
+    mutedUntil: Date | null;
     hasDoubleCrystal: boolean;
     premiumExpiresAt: Date | null;
     rank: number;
@@ -133,6 +135,7 @@ const UserSchema = new Schema<UserDocument>({
     isPunished: { type: Boolean, default: false },
     punishmentExpiresAt: { type: Date, default: null },
     punishmentReason: { type: String, default: null },
+    mutedUntil: { type: Date, default: null },
     hasDoubleCrystal: { type: Boolean, default: false },
     premiumExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
