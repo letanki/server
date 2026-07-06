@@ -1,4 +1,4 @@
-import { BattleChatMessagePacket } from "@/features/battle/battle.packets";
+import { BattleSystemMessagePacket } from "@/features/battle/battle.packets";
 import { ChatHistory } from "@/features/chat/chat.packets";
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
@@ -26,7 +26,8 @@ export default class MsgCommand implements ICommand {
 
         const tagged = `[STAFF] ${message}`;
         if (target.currentBattle) {
-            target.sendPacket(new BattleChatMessagePacket({ nickname: null, message: tagged, team: 2 }));
+            // Battle chat's system-message channel (606668848, confirmed in-game).
+            target.sendPacket(new BattleSystemMessagePacket(tagged));
         } else {
             target.sendPacket(new ChatHistory([{ message: tagged, isSystem: true, isWarning: true, source: null, target: null }]));
         }

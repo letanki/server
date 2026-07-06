@@ -54,6 +54,32 @@ export class EquipmentNotAllowedPacket extends BasePacket {
     static getId(): number { return -10847382; }
 }
 
+/**
+ * Server→client: SYSTEM message line in the battle chat (id 606668848, body = optionalString(message)).
+ * Confirmed IN-GAME (2026-07-06): renders as a system notice — the right channel for command replies,
+ * /broadcast, /msg and any server→player notice while in a battle.
+ */
+export class BattleSystemMessagePacket extends BasePacket {
+    constructor(private readonly message: string | null = null) { super(); }
+    read(): void {}
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.message).getBuffer(); }
+    static getId(): number { return 606668848; }
+}
+
+/**
+ * Server→client: a SPECTATOR chat line (id 1532749363, body = optionalString(uid) + optionalString
+ * (message)). The client renders it with the yellow "Espectador:" (SPECTATOR_NAME) prefix — the line
+ * ctor receives isSpectator=true — so this is how the OFFICIAL relays spectator messages, NOT a generic
+ * system channel (a first read mistook it for one; staff text should use the nickname-null
+ * BattleChatMessagePacket instead). Kept for a future spectator-chat rework (see spectator-chat memory).
+ */
+export class BattleSpectatorMessagePacket extends BasePacket {
+    constructor(private readonly message: string | null = null, private readonly uid: string | null = "") { super(); }
+    read(): void {}
+    write(): Buffer { return new BufferWriter().writeOptionalString(this.uid).writeOptionalString(this.message).getBuffer(); }
+    static getId(): number { return 1532749363; }
+}
+
 export class EnterBattleAsSpectatorPacket extends BasePacket implements BattleTypes.IEnterBattleAsSpectator {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }

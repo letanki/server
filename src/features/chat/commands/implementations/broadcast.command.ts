@@ -1,4 +1,4 @@
-import { BattleChatMessagePacket } from "@/features/battle/battle.packets";
+import { BattleSystemMessagePacket } from "@/features/battle/battle.packets";
 import { ChatHistory } from "@/features/chat/chat.packets";
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
@@ -24,7 +24,7 @@ export default class BroadcastCommand implements ICommand {
         );
         for (const client of context.server.getClients()) {
             if (client.user && client.currentBattle) {
-                client.sendPacket(new BattleChatMessagePacket({ nickname: null, message, team: 2 }));
+                client.sendPacket(new BattleSystemMessagePacket(message));
             }
         }
         context.reply("Mensagem enviada a todos.");

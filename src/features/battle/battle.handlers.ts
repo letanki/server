@@ -336,23 +336,11 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
         }
 
         if (packet.message.startsWith("/")) {
+            // Command replies use the battle chat's SYSTEM message channel (606668848) — no nickname or
+            // team involved, so it also works for spectators (whose nickname isn't in the scoreboard and
+            // would #1009 the client on a regular chat line — see spectator-chat).
             const replyFunction = (message: string) => {
-                let senderTeamId = 2;
-                if (battle.isTeamMode()) {
-                    if (battle.usersBlue.some((p) => p.id === user.id)) senderTeamId = 1;
-                    else if (battle.usersRed.some((p) => p.id === user.id)) senderTeamId = 0;
-                }
-
-                // SPECTATORS aren't in the client's scoreboard — a battle-chat line with their nickname
-                // crashes the receiving client resolving the sender (#1009, see spectator-chat). Route
-                // command replies to a spectator through the nickname-less system lane instead. This is
-                // read LIVE (not captured) so a /spectate transition mid-command picks up the new state.
-                const replyData = {
-                    nickname: client.isSpectator ? null : user.username,
-                    message: message,
-                    team: senderTeamId,
-                };
-                client.sendPacket(new BattlePackets.BattleChatMessagePacket(replyData));
+                client.sendPacket(new BattlePackets.BattleSystemMessagePacket(message));
             };
 
             const context: CommandContext = {
@@ -386,7 +374,7 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             }
         }
 
-        const sendTo = (users: UserDocument[], pkt: BattlePackets.BattleChatMessagePacket | BattlePackets.BattleChatTeamMessagePacket): void => {
+        const sendTo = (users: UserDocument[], pkt: BattlePackets.BattleChatMessagePacket | BattlePackets.BattleChatTeamMessagePacket | BattlePackets.BattleSpectatorMessagePacket): void => {
             for (const recipient of users) {
                 const recipientClient = server.findClientByUsername(recipient.username);
                 if (recipientClient && recipientClient.currentBattle?.battleId === battle.battleId) {
@@ -396,16 +384,19 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
         };
 
         // A spectator isn't a registered battle player, so the client crashes (#1009) rendering a normal
-        // battle-chat line whose sender it can't look up in the scoreboard. Sending nickname=null routes
-        // the client to its built-in "Spectator:" render path (no player lookup). Fellow spectators see
-        // who spoke (name prefixed into the text); players just see the generic "Spectator: <msg>". The
-        // spectators' "team" channel is spectator-only — players receive nothing.
+        // battle-chat line whose sender it can't look up in the scoreboard. Two spectator channels:
+        // • TEAM message → the dedicated spectator-team packet (1532749363, confirmed in-game): YELLOW
+        //   "Espectador:" line, delivered to spectators only.
+        // • GENERAL message → nickname-null white line ("Espectador: <msg>" render path, no player
+        //   lookup): fellow spectators see who spoke (name prefixed), players get the plain text.
         if (isSpectator) {
-            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: null, message: `${user.username}: ${packet.message}`, team: senderTeamId }));
-            if (!packet.team) {
-                const players = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
-                sendTo(players, new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId }));
+            if (packet.team) {
+                sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket(`${user.username}: ${packet.message}`, user.username));
+                return;
             }
+            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: null, message: `${user.username}: ${packet.message}`, team: senderTeamId }));
+            const players = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
+            sendTo(players, new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId }));
             return;
         }
 
