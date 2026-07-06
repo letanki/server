@@ -226,6 +226,10 @@ export class ReadyToActivateHandler implements IPacketHandler<BattlePackets.Read
         logger.info(`Activating tank for user ${client.user.username} in battle ${client.currentBattle.battleId}.`);
 
         client.battleState = "active";
+        // Supplies only become usable when the tank ACTIVATES, so this is the single reset point for the
+        // server-side supply cooldowns (a new life starts with free slots, matching the client). Clearing
+        // earlier (spawn prep / battle entry) would be redundant — activation always happens in between.
+        client.supplyReadyAt.clear();
 
         const battle = client.currentBattle;
         battle.broadcast(new BattlePackets.ActivateTankPacket(client.user.username));
@@ -594,7 +598,19 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
             return;
         }
 
-        // Health kits do nothing on a full tank — don't waste the supply.
+        // SERVER-SIDE cooldown: the client's countdown is only visual, so a macro / lag-burst of
+        // activation packets (e.g. 1ms spam of every slot) would consume one supply per packet.
+        // Activations arriving before the supply's ready time are discarded without consuming.
+        // Latency works in our favor: the client only re-enables the slot after receiving the
+        // ActivatedSupplyPacket, so a legitimate re-activation always arrives after readyAt.
+        // NOTE: field-drop pickups (BonusService.takeBonus → applyEffect/startHealing directly) NEVER
+        // touch supplyReadyAt — by design. Chaining 200 nitro boxes resets the buff every time, and an
+        // inventory activation right after still works (drops never advance the inventory cooldown).
+        const now = Date.now();
+        if (now < (client.supplyReadyAt.get(supplyId) ?? 0)) return;
+
+        // Health kits can NEVER be activated on a full tank — in ANY mode (don't waste the supply).
+        // Parkour's difference is only DURING the effect: reaching full doesn't end it (see startHealing).
         if (supplyId === "health" && client.currentHealth >= 10000) return;
 
         const count = user.supplies.get(supplyId) ?? 0;
@@ -621,19 +637,23 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
             // cooldown to 5s (vs ~30s normal) — both verified against official parkour/normal captures.
             server.battleService.supply.startHealing(client, battle, HEAL_MAX_GIVEN.INVENTORY);
             const cooldownMs = battle.settings.parkourMode ? PARKOUR_HEALTH_COOLDOWN_MS : supply.itemRestSec * 1000;
+            client.supplyReadyAt.set(supplyId, now + cooldownMs);
             client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
             return;
         }
 
         if (supplyId === "mine") {
             // (Already placed above, before the supply was consumed.) Parkour mode: mines have no delay —
-            // reactivation is instant so the player can stack one mine on top of another.
+            // reactivation is instant so the player can stack one mine on top of another (the 150ms
+            // placement throttle in MineService is the only floor there).
             const cooldownMs = battle.settings.parkourMode ? 0 : (supply.itemEffectTime + supply.itemRestSec) * 1000;
+            client.supplyReadyAt.set(supplyId, now + cooldownMs);
             client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
             return;
         }
 
         const cooldownMs = server.battleService.supply.applyEffect(client, battle, supplyId);
+        client.supplyReadyAt.set(supplyId, now + cooldownMs);
         client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
     }
 }

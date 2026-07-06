@@ -69,7 +69,8 @@ export class GameClient {
     this._currentBattle?.clients.delete(this);
     this._currentBattle = battle;
     battle?.clients.add(this);
-    // Effects and scoreboard don't carry across battles.
+    // Effects and scoreboard don't carry across battles. (Supply cooldowns reset on tank ACTIVATION —
+    // ReadyToActivateHandler — which always precedes any supply use, so no clear is needed here.)
     this.activeEffects = [];
     this.kills = 0;
     this.deaths = 0;
@@ -167,6 +168,10 @@ export class GameClient {
   // Timestamp of the last EXECUTED mine placement — MineService.placeMine drops placements arriving
   // sooner than its minimum interval (anti-spam; parkour has no reactivation cooldown).
   public lastMinePlacedAt: number = 0;
+  // Server-side supply cooldowns: supplyId → timestamp when it can be activated again. The client-side
+  // cooldown is only VISUAL — a macro/lag burst of activation packets would otherwise consume one supply
+  // per packet. ActivateSupplyCommandHandler discards activations arriving before their ready time.
+  public supplyReadyAt: Map<string, number> = new Map();
   public equipmentChangedInGarage: boolean = false;
   // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose
   // equipped base changed vs this snapshot arm the re-arm 15-min cooldown (so the player can freely swap

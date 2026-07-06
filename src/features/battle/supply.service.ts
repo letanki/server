@@ -92,18 +92,18 @@ export class SupplyService {
         if (!user) return;
         SupplyService.stopHealing(client);
 
-        // PARKOUR: the repair kit is TIME-based, not HP-budget-based. It stays active for its whole tick
-        // budget even at FULL health — topping the tank back up the instant it takes damage — and only
-        // stops once the tick limit runs out. (Other modes stop as soon as the tank is full OR the kit has
-        // poured in its HP budget.)
+        // PARKOUR: the repair kit is TIME-based, not HP-budget-based. Once RUNNING, reaching full health
+        // does NOT end the effect — it merely pauses the HP addition until damage is taken, then tops the
+        // tank back up; only the tick limit ends it. (Other modes stop as soon as the tank is full OR the
+        // kit has poured in its HP budget.) Activation at full health is refused in EVERY mode — both here
+        // and in ActivateSupplyCommandHandler.
         const parkour = battle.settings.parkourMode;
 
         const hullHP = ItemUtils.getHullArmor(user);
         const stepNormalized = (HEAL_HP_PER_TICK * 10000) / hullHP;
         const budgetNormalized = maxGivenFraction * 10000; // total HP the kit can hand out
         let delivered = 0;
-        // In parkour we still activate at full health (it keeps topping up as damage comes in).
-        if (!parkour && client.currentHealth >= 10000) return;
+        if (client.currentHealth >= 10000) return;
 
         // Parkour tick limit = the kit's real HP ÷ HP healed per tick: full hull HP / 30 for an inventory
         // kit, half that ((hullHP/2)/30) for a field-drop medkit (maxGivenFraction 1.0 vs 0.5). The heal
