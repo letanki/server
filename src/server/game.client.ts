@@ -164,6 +164,9 @@ export class GameClient {
   // Active medkit/repair-kit regeneration timer (gradual heal). Cleared on death/respawn/disconnect
   // and whenever a new kit is activated. See SupplyService.startHealing.
   public healTimer: NodeJS.Timeout | null = null;
+  // Timestamp of the last EXECUTED mine placement — MineService.placeMine drops placements arriving
+  // sooner than its minimum interval (anti-spam; parkour has no reactivation cooldown).
+  public lastMinePlacedAt: number = 0;
   public equipmentChangedInGarage: boolean = false;
   // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose
   // equipped base changed vs this snapshot arm the re-arm 15-min cooldown (so the player can freely swap

@@ -10,6 +10,11 @@ import { CombatService } from "./combat.service";
 import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
 const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger) this long after placement
+// Server-side floor between two mine placements by the same player. Parkour has NO reactivation cooldown
+// (that's its whole mine difference), so a hacked/lagged client could machine-gun mines; any placement
+// packet arriving sooner than this after the last EXECUTED one is silently dropped. The clock only
+// advances on execution: e.g. drops at 0/50/100/150ms → the 0ms and 150ms ones place, the middle two don't.
+const MINE_PLACE_MIN_INTERVAL_MS = 150;
 // A mine fires when a tank is physically ON it — its REAL hull collision box (per-hull, oriented by the tank
 // yaw; the same boxes CtfService uses for flag pickup) covers the mine. A fixed centre-radius was wrong: a
 // wasp's nose is 231 units from centre, so driving the tip onto a mine never got the centre close enough.
@@ -60,12 +65,21 @@ export class MineService {
         for (const owner of owners) battle.broadcast(new RemoveMinesPacket(owner));
     }
 
-    /** Drops a mine at the caller's current position (Mine supply activation). */
-    public placeMine(client: GameClient, battle: Battle): void {
+    /** Drops a mine at the caller's current position (Mine supply activation). Placements arriving
+     *  sooner than MINE_PLACE_MIN_INTERVAL_MS after the last successful one are dropped (anti-spam —
+     *  matters in parkour, whose reactivation cooldown is 0). The staff /mine scatter goes through
+     *  placeMineAt directly and is not throttled. */
+    public placeMine(client: GameClient, battle: Battle): string | null {
         const pos = client.battlePosition;
-        if (!pos) return;
+        if (!pos) return null;
+        const now = Date.now();
+        if (now - client.lastMinePlacedAt < MINE_PLACE_MIN_INTERVAL_MS) return null; // too soon — packet discarded
         const id = this.placeMineAt(client, battle, pos);
-        if (id) logger.info(`Mine ${id} placed by ${client.user?.username} in battle ${battle.battleId}`);
+        if (id) {
+            client.lastMinePlacedAt = now; // only an EXECUTED placement advances the throttle clock
+            logger.info(`Mine ${id} placed by ${client.user?.username} in battle ${battle.battleId}`);
+        }
+        return id;
     }
 
     /** Places a mine at an explicit world position, owned by `client`'s user, and returns its id (or null if
@@ -168,6 +182,12 @@ export class MineService {
             const zLow = upright ? hull.zMin - MINE_HEIGHT : hull.zMin - hullHeight - MINE_HEIGHT;
             const zHigh = upright ? hull.zMax + MINE_HEIGHT : hull.zMax + hullHeight + MINE_HEIGHT;
             if (localZ < zLow || localZ > zHigh) continue;
+            // Line-of-sight: the box alone can't tell "physically ON the mine" from "separated by thin
+            // geometry" (a floor slab, a low wall the hull overhangs). If any collision surface lies
+            // BETWEEN the mine and the tank centre, they aren't touching — skip. isBlockedBetween trims
+            // both ends so the ground the mine/tank rest on doesn't count (same LOS the thunder splash
+            // uses). Cheap here: it only runs for the rare candidate that already passed the box test.
+            if (this.collision.isBlockedBetween(battle.mapResourceId, mine.position, battlePosition)) continue;
             this._detonate(battle, mine.id, client);
             break;
         }

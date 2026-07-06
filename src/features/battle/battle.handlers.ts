@@ -599,6 +599,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
 
         const count = user.supplies.get(supplyId) ?? 0;
         if (count <= 0) return;
+
+        // Mines can be REFUSED (placement throttle, withoutMines, no position) — attempt the placement
+        // BEFORE consuming the supply, so a discarded packet doesn't eat a mine from the inventory.
+        if (supplyId === "mine" && !server.battleService.mine.placeMine(client, battle)) return;
+
         // Decrement in memory synchronously (so back-to-back activations see the new count) and persist
         // with an atomic $inc instead of user.save(). A full save() on the same Mongoose document from
         // concurrent activations (e.g. rapid parkour mine drops) throws ParallelSaveError.
@@ -621,9 +626,8 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         }
 
         if (supplyId === "mine") {
-            server.battleService.mine.placeMine(client, battle);
-            // Parkour mode: mines have no delay — reactivation is instant so the player can stack one
-            // mine on top of another.
+            // (Already placed above, before the supply was consumed.) Parkour mode: mines have no delay —
+            // reactivation is instant so the player can stack one mine on top of another.
             const cooldownMs = battle.settings.parkourMode ? 0 : (supply.itemEffectTime + supply.itemRestSec) * 1000;
             client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
             return;
