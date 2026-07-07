@@ -506,6 +506,22 @@ export class RankedMatchmakingService implements RankedObserver {
         });
     }
 
+    /** Top mineiros do servidor: quem mais colocou minas no total (stats.counters.mines_used global). */
+    public async getTopMiners(limit: number = 20): Promise<Array<{ username: string; tag: string | null; mines: number }>> {
+        const key = "stats.counters.mines_used";
+        const users: any[] = await User.find({ [key]: { $gt: 0 } })
+            .sort({ [key]: -1 })
+            .limit(limit)
+            .select(`username clanId ${key}`)
+            .lean();
+        const tags = await this.tagsByClanId(users.map((u) => String(u.clanId ?? "")));
+        return users.map((u) => ({
+            username: u.username,
+            tag: u.clanId ? tags.get(String(u.clanId)) ?? null : null,
+            mines: u.stats?.counters?.mines_used ?? 0,
+        }));
+    }
+
     /** Posição do jogador no ranking do modo (1 = topo) + total de classificados. */
     public async getPlayerPosition(userId: string): Promise<{ rank: number; mmr: number; total: number } | null> {
         const key = `rankedModes.${MODE_KEY}.mmr`;

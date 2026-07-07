@@ -129,7 +129,24 @@
     .lbrank { width: 22px; text-align: center; font-weight: 800; color: #7f8798; font-size: 13px; }
     .lbrow.me .lbrank { color: #f0a830; }
     .lbname { flex: 1; font-size: 13px; font-weight: 600; color: #dfe3ea; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lbmmr { font-size: 13px; font-weight: 800; color: #f0a830; }
+    .lbmmr, .lbval { font-size: 13px; font-weight: 800; color: #f0a830; }
+
+    /* tela inicial: ocupa a tela inteira, grid de 12 colunas (mineiros 3 | usuário+buscar 6 | ranking 3) */
+    .card.home3 { width: 100%; height: 100%; max-width: none; max-height: none; }
+    .card.home3 #content { min-height: 0; padding: 32px 48px; }
+    /* IE11 (StageWebView) NÃO suporta CSS Grid moderno — usamos flexbox com flex-grow proporcional
+       para emular as 12 colunas: mineiros 3 + centro 6 + ranking 3 = 12. */
+    .cols3 { flex: 1 1 auto; display: flex; min-height: 0; }
+    .cols3 > .col + .col { margin-left: 32px; } /* IE11 não tem gap: espaço via margem entre colunas */
+    .span3 { -ms-flex: 3 1 0%; flex: 3 1 0%; min-width: 0; }
+    .span6 { -ms-flex: 6 1 0%; flex: 6 1 0%; min-width: 0; }
+    .col { min-width: 0; display: flex; flex-direction: column;
+      background: rgba(255,255,255,.02); border: 1px solid #2b3444; border-radius: 4px; padding: 14px; }
+    .col.center { align-items: center; justify-content: center; text-align: center; gap: 6px; background: none; border: 0; padding: 6px 4px; }
+    .colhd { font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #cfd5df;
+      text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #2b3444; }
+    .colbody { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+    .col.center .gbtn { margin-top: 12px; width: auto; min-width: 240px; padding-left: 32px; padding-right: 32px; } /* não esticar: largura pelo conteúdo */
   </style>
 </head>
 <body>
@@ -178,6 +195,8 @@
       lastDynShown = -1; // força o próximo tick a escrever o número
       var c = document.getElementById("content");
       var html = "";
+      // home não tem header (é bare/solto no backdrop): usa o botão de fechar flutuante do canto.
+      document.getElementById("bdclose").style.display = (s.state === "idle" && view === "home") ? "block" : "none";
       if (s.state === "idle" && view === "board") {
         html += '<div class="bhead">Classificação · XP/BP</div>';
         html += '<div id="boardlist" class="boardlist">carregando…</div>';
@@ -186,13 +205,22 @@
         loadBoard();
         return;
       } else if (s.state === "idle") {
-        html += '<div class="hero" style="gap:4px">';
+        // 3 colunas: maiores mineiros (servidor) | usuário + buscar | ranking MMR do XP/BP
+        html += '<div class="cols3">';
+        html += '<div class="col span3"><div class="colhd">Maiores Mineiros</div><div id="minerlist" class="colbody">carregando…</div></div>';
+        html += '<div class="col center span6">';
         html += '<div class="mmrbig" id="mmr">' + (s.mmr || 0) + '</div><div class="mmrlbl">SEU MMR</div>';
         html += '<div class="pill card">XP/BP · CTF 1v1</div>';
-        html += '<div class="who" id="who">' + nameTag(username, mytag) + '</div></div>';
+        html += '<div class="who" id="who">' + nameTag(username, mytag) + '</div>';
         html += '<button class="gbtn wide" onclick="onSearchClick()">Buscar Partida</button>';
-        html += '<button class="graybtn wide" style="margin-top:8px" onclick="goBoard()">Classificação</button>';
         html += '<div id="errmsg" class="errmsg"></div>';
+        html += '</div>';
+        html += '<div class="col span3"><div class="colhd">Ranking XP/BP</div><div id="mmrlist" class="colbody">carregando…</div></div>';
+        html += '</div>';
+        c.innerHTML = html;
+        loadMiners();
+        loadMmrBoard();
+        return;
       } else if (s.state === "searching") {
         html += '<div class="hero"><div class="htitle gold">Buscando Partida</div>';
         html += '<div class="count"><span id="dyn">0</span><span style="font-size:20px">s</span></div></div>';
@@ -267,11 +295,36 @@
     function render(s) {
       // resultado = solto (sem card); busca/encontrada = compact (widget pequeno); resto = card normal.
       var cc = (s.state === "result") ? "card bare" : (s.state === "searching" || s.state === "found") ? "card compact" : "card";
+      if (s.state === "idle" && view === "home") cc = "card bare home3"; // home = 3 colunas soltas direto no backdrop (sem moldura)
       if (cc !== lastCardCls) { document.getElementById("card").className = cc; lastCardCls = cc; }
       var key = s.state + (s.state === "idle" ? ":" + view : "");
       if (key !== renderedKey) { renderedKey = key; state = s.state; build(s); }
       updateDyn(s);
       if (s.state === "active" && !closing) { closing = true; setTimeout(closePanel, 300); }
+    }
+
+    // Constrói as linhas de um rank (mineiros ou MMR); valKey = campo do valor exibido à direita.
+    function lbRows(list, valKey) {
+      if (!list || !list.length) return '<div class="lbempty">Sem dados ainda.</div>';
+      var h = "";
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        var me = (p.username === username) ? " me" : "";
+        h += '<div class="lbrow' + me + '"><span class="lbrank">' + (i + 1) + '</span><span class="lbname">' + nameTag(p.username, p.tag) + '</span><span class="lbval">' + p[valKey] + '</span></div>';
+      }
+      return h;
+    }
+    function loadMiners() {
+      api("GET", "/ranked/miners", null, function (st, d) {
+        var el = document.getElementById("minerlist"); if (!el) return;
+        el.innerHTML = (st === 200 && d) ? lbRows(d.top, "mines") : "erro ao carregar.";
+      });
+    }
+    function loadMmrBoard() {
+      api("GET", "/ranked/leaderboard", null, function (st, d) {
+        var el = document.getElementById("mmrlist"); if (!el) return;
+        el.innerHTML = (st === 200 && d) ? lbRows(d.top, "mmr") : "erro ao carregar.";
+      });
     }
 
     function goBoard() { view = "board"; renderedKey = null; poll(); }

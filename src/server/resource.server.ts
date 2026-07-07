@@ -119,6 +119,11 @@ export class ResourceServer {
       ]);
       res.json({ top, you });
     });
+
+    // GET /ranked/miners → rank de maiores mineiros do servidor (quem mais colocou minas)
+    this.app.get("/ranked/miners", auth, async (_req: Request, res: Response) => {
+      res.json({ top: await this.matchmaking.getTopMiners(20) });
+    });
   }
 
   public start(): void {
