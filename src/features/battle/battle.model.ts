@@ -129,6 +129,11 @@ export class Battle {
     /** Active drops on the field, keyed by bonus id ("type#instance"). Managed by BonusService. */
     public readonly activeBonuses = new Map<string, IActiveBonus>();
     public bonusCounter: number = 0;
+    /** esportDropTiming only: region indices still awaiting their ONE-TIME initial drop. The 1s seeding
+     *  tick rolls a per-region chance for each entry and removes it once dropped; when empty the tick
+     *  stops (thereafter regions only re-drop on the fixed post-collection cooldown). Null until the
+     *  esport seeding loop initializes it. See BonusService / [[bonus-drop-model]]. */
+    public bonusSeedQueue: Set<number> | null = null;
     /** Active mines on the field, keyed by mine id. Managed by MineService. */
     public readonly activeMines = new Map<string, IActiveMine>();
     public mineCounter: number = 0;

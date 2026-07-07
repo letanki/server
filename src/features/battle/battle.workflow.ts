@@ -46,7 +46,7 @@ export class BattleWorkflow {
         client.isChatLoaded = false;
         client.startTimeChecker();
         client.sendPacket(new BattlePackets.WeaponPhysicsPacket(JSON.stringify(weaponPhysicsData)));
-        client.sendPacket(new BattlePackets.BonusDataPacket(JSON.stringify(getBonusData())));
+        client.sendPacket(new BattlePackets.BonusDataPacket(JSON.stringify(getBonusData(battle.settings.esportDropTiming))));
 
         const dependencies = { resources: battle.mapLibraryDependencies };
         client.sendPacket(new LoadDependencies(dependencies, CALLBACK.BATTLE_MAP_LIBS_LOADED));
