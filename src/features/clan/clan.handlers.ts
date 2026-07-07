@@ -58,6 +58,7 @@ async function openClanWindowForState(client: GameClient, server: GameServer): P
     if (client.user.clanId) {
         const clan = await server.clanService.getClanById(client.user.clanId);
         if (clan) {
+            await server.clanService.promoteEligibleNovices(clan); // lazy Novice→Private (24h) on window open
             const view = await server.clanService.buildClanView(clan);
             client.sendPacket(new ClanPackets.MyClanWindowPacket(view));
             // Tell the client which clan actions this member may use (gates the UI buttons by their position).

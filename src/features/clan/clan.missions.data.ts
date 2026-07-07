@@ -27,8 +27,9 @@ export interface IClanMissionTemplate {
 
 /** Each fully-completed mission is worth this many clan points, split among members by contribution share
  *  (a member contributing `d` of a mission's `criteria` earns round(d/criteria × MISSION_POINTS)). Normalising
- *  by criteria keeps the 40000-score goal from dwarfing the 3000-kill goal. */
-export const MISSION_POINTS = 1000;
+ *  by criteria keeps the 40000-score goal from dwarfing the 3000-kill goal. Wiki: "each mission awards up
+ *  to 100 points per day" (e.g. 5000 of a 20000 goal → 25 points). */
+export const MISSION_POINTS = 100;
 
 /** The daily clan mission set, replicated from the official capture (ids/targets/prizes). */
 export const CLAN_MISSION_TEMPLATES: IClanMissionTemplate[] = [

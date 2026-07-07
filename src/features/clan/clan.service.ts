@@ -33,16 +33,27 @@ function nextWeeklyReset(): Date {
 }
 
 export const CLAN_CREATION_COST = 500000; // crystals to found a clan (matches InitUserClanModels)
+export const CLAN_MIN_RANK = 8; // Master Sergeant — the minimum rank to create/join/be invited to a clan (wiki)
+export const CLAN_MAX_MEMBERS = 16; // hard member cap per clan (wiki)
+export const CLAN_MAX_DESCRIPTION = 3000; // clan description character cap (wiki)
+const NOVICE_PROMOTE_MS = 24 * 60 * 60 * 1000; // a Novice auto-promotes to Private after 24h (checked lazily)
+
+/** The effective join floor for a clan: never below Master Sergeant, even if the clan's minRank is unset
+ *  (-1) or a legacy value below it. */
+function effectiveMinRank(clan: ClanDocument): number {
+    return Math.max(clan.minRank ?? -1, CLAN_MIN_RANK);
+}
 
 export class ClanService {
     /** Founds a new clan led by `user`, charging the creation cost. Throws on validation failure. */
     public async createClan(user: UserDocument, name: string, tag: string, description: string): Promise<ClanDocument> {
         if (user.clanId) throw new Error("Você já está em um clã.");
+        if (user.rank < CLAN_MIN_RANK) throw new Error("Você precisa ser Sargento-Mor (rank 8) para criar um clã.");
         // The 24h post-leave cooldown only blocks JOINING another clan, not creating one.
         const cleanName = name.trim();
         const cleanTag = tag.trim();
-        if (cleanName.length < 3) throw new Error("Nome do clã muito curto.");
-        if (cleanTag.length < 2) throw new Error("Tag do clã muito curta.");
+        if (cleanName.length < 4 || cleanName.length > 20) throw new Error("O nome do clã deve ter de 4 a 20 caracteres.");
+        if (cleanTag.length < 1 || cleanTag.length > 5) throw new Error("A tag do clã deve ter de 1 a 5 caracteres.");
         if (user.crystals < CLAN_CREATION_COST) throw new Error("Cristais insuficientes para criar um clã.");
         if (await Clan.findOne({ $or: [{ name: cleanName }, { tag: cleanTag }] })) {
             throw new Error("Já existe um clã com esse nome ou tag.");
@@ -79,6 +90,24 @@ export class ClanService {
         return positionHasPermission(this.getPosition(clan, userId), flag);
     }
 
+    /** Promotes any Novice who has been in the clan for 24h+ to Private (wiki rule). Checked lazily when a
+     *  member opens the clan window (no background job). Persists + returns true if anything changed. */
+    public async promoteEligibleNovices(clan: ClanDocument): Promise<boolean> {
+        const cutoff = Date.now() - NOVICE_PROMOTE_MS;
+        let changed = false;
+        for (const memberId of clan.members) {
+            const uid = String(memberId);
+            if (this.getPosition(clan, uid) !== ClanPosition.NOVICE) continue;
+            const since = clan.memberSince?.get(uid);
+            if (since && new Date(since).getTime() <= cutoff) {
+                clan.positions.set(uid, ClanPosition.PRIVATE);
+                changed = true;
+            }
+        }
+        if (changed) await clan.save();
+        return changed;
+    }
+
     public getClanById(id: unknown): Promise<ClanDocument | null> {
         return Clan.findById(id as any).exec();
     }
@@ -102,6 +131,7 @@ export class ClanService {
         if (user.clanId || !clan) return null; // already in a clan / no clan
         if (this.clanCooldownSeconds(user) > 0) return null; // still on post-leave cooldown
         if (clan.recruiting === false) return null; // clan closed to requests
+        if (user.rank < effectiveMinRank(clan)) return null; // below the clan's minimum rank
         if (!clan.joinRequests.some((id) => String(id) === String(user._id))) {
             clan.joinRequests.push(user._id as any);
             await clan.save();
@@ -159,6 +189,8 @@ export class ClanService {
         if (!target) return false;
         if (String(target._id) === String(leader._id)) return false;
         if (target.clanId) return false;
+        if (target.rank < effectiveMinRank(clan)) return false; // can't invite below the clan's minimum rank
+        if (clan.members.length >= CLAN_MAX_MEMBERS) return false; // clan full
         return true;
     }
 
@@ -167,8 +199,10 @@ export class ClanService {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
         if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.INVITE)) return null; // needs "invite"
+        if (clan.members.length >= CLAN_MAX_MEMBERS) return null; // clan full
         const target = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!target || target.clanId) return null;
+        if (target.rank < effectiveMinRank(clan)) return null; // below the clan's minimum rank
         if (!clan.invites.some((id) => String(id) === String(target._id))) {
             clan.invites.push(target._id as any);
             await clan.save();
@@ -198,6 +232,8 @@ export class ClanService {
         if (user.clanId) return null;
         const clan = await this.getClanByTag(tag);
         if (!clan || !clan.invites.some((id) => String(id) === String(user._id))) return null;
+        if (clan.members.length >= CLAN_MAX_MEMBERS) return null; // clan full
+        if (user.rank < effectiveMinRank(clan)) return null; // below the clan's minimum rank
         clan.invites = clan.invites.filter((id) => String(id) !== String(user._id)) as any;
         if (!clan.members.some((id) => String(id) === String(user._id))) clan.members.push(user._id as any);
         clan.positions.set(String(user._id), ClanPosition.NOVICE);
@@ -243,8 +279,9 @@ export class ClanService {
         if (!owner.clanId) return null;
         const clan = await this.getClanById(owner.clanId);
         if (!clan || !this.memberHasPermission(clan, owner._id, ClanPermissionFlag.EDIT_SETTINGS)) return null; // needs "edit settings"
-        if (patch.description !== undefined) clan.description = patch.description ?? "";
-        if (patch.minRank !== undefined) clan.minRank = patch.minRank;
+        if (patch.description !== undefined) clan.description = (patch.description ?? "").slice(0, CLAN_MAX_DESCRIPTION);
+        // Minimum rank can't be set below Master Sergeant (wiki); clamp into [CLAN_MIN_RANK, 30].
+        if (patch.minRank !== undefined) clan.minRank = Math.min(30, Math.max(CLAN_MIN_RANK, patch.minRank));
         if (patch.recruiting !== undefined) clan.recruiting = patch.recruiting;
         await clan.save();
         return clan;
@@ -430,9 +467,11 @@ export class ClanService {
         if (!leader.clanId) return null;
         const clan = await this.getClanById(leader.clanId);
         if (!clan || !this.memberHasPermission(clan, leader._id, ClanPermissionFlag.MANAGE_REQUESTS)) return null; // needs "manage requests"
+        if (clan.members.length >= CLAN_MAX_MEMBERS) return null; // clan full
         const requester = await User.findOne({ login: username.trim().toLowerCase() }).exec();
         if (!requester || requester.clanId) return null;
         if (!clan.joinRequests.some((id) => String(id) === String(requester._id))) return null; // must have requested
+        if (requester.rank < effectiveMinRank(clan)) return null; // below the clan's minimum rank
         clan.joinRequests = clan.joinRequests.filter((id) => String(id) !== String(requester._id)) as any;
         if (!clan.members.some((id) => String(id) === String(requester._id))) clan.members.push(requester._id as any);
         clan.positions.set(String(requester._id), ClanPosition.NOVICE);
