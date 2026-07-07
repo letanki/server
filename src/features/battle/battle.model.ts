@@ -134,6 +134,9 @@ export class Battle {
      *  stops (thereafter regions only re-drop on the fixed post-collection cooldown). Null until the
      *  esport seeding loop initializes it. See BonusService / [[bonus-drop-model]]. */
     public bonusSeedQueue: Set<number> | null = null;
+    /** Threshold-mode gold box (randomGold=false): the fund level at which the NEXT gold box drops. Null
+     *  until initialized (first ~[7000,7200], then +7000±100 each time). Reset on round restart/empty. */
+    public nextGoldThreshold: number | null = null;
     /** Active mines on the field, keyed by mine id. Managed by MineService. */
     public readonly activeMines = new Map<string, IActiveMine>();
     public mineCounter: number = 0;

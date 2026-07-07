@@ -63,9 +63,20 @@ const DEFAULT_RESPAWN_MAX_MS = 170000;
 // to the fund yet. Infinite ground lifetime in esport still applies to ALL types.
 const BUFF_DROP_TYPES = new Set(["nitro", "damage", "armor", "health"]);
 
-// Gold-box drop cadence: a siren announces, then the box falls 30-50s later (wiki), repeating each cycle.
-const GOLD_BOX_FIRST_DELAY_MS = 20000; // first siren after the round starts
-const GOLD_BOX_INTERVAL_MS = 90000; // gap from one drop to the next siren
+// Gold box (1000 crystals): fund-triggered, in one of two modes (per the wiki):
+//   • RANDOM-FUND — all regular battles, AND PRO battles with `randomGold` on: a single global probabilistic
+//     roll per fund event, GOLD_DROP_CHANCE = 1/7000 per crystal added (~0.014%). Chance starts at 0,
+//     accumulates with crystals added → ~1 gold per ~7k fund.
+//   • THRESHOLD — PRO battles with `randomGold` off: the gold drops when the fund crosses a level — first at
+//     [7000,7200], then each next at previous+7000±100.
+// When it fires: siren announces, box falls 30-50s later. Location = a random `crystal_100` zone. Golds roll
+// independently (no in-flight cap); a rare overlap within the 30-50s window just reuses the "goldBoxDrop"
+// timer (one box falls) — acceptable. See [[bonus-drop-model]].
+const GOLD_DROP_CHANCE = 1 / 7000; // random-fund mode: per crystal added to the fund (~0.014%)
+const GOLD_THRESHOLD_FIRST_MIN = 7000; // threshold mode: first gold at fund in [MIN, MAX]
+const GOLD_THRESHOLD_FIRST_MAX = 7200;
+const GOLD_THRESHOLD_STEP = 7000; // then each next = previous + STEP ± JITTER
+const GOLD_THRESHOLD_JITTER = 100;
 const GOLD_BOX_DROP_MIN_MS = 30000; // siren → drop delay (wiki: random 30-50s)
 const GOLD_BOX_DROP_MAX_MS = 50000;
 const GOLD_BOX_COMING_MESSAGE = "A caixa de ouro será deixada em breve";
@@ -125,17 +136,41 @@ export class BonusService {
         for (const id of [...battle.activeBonuses.keys()]) this.removeBonus(battle, id);
     }
 
-    /** Starts the gold-box drop cycle (siren → random 30-50s → a gold box falls → repeat). No-op if the
-     *  battle disabled gold boxes. */
-    public startGoldBoxDrops(battle: Battle): void {
-        if (battle.settings.withoutGoldBoxes) return;
-        battle.timers.set("goldBoxCycle", GOLD_BOX_FIRST_DELAY_MS, () => this._goldBoxAnnounce(battle));
+    /** No timer to start — the gold box is fund-triggered (see onFundAdded). Kept for symmetry with the
+     *  battle lifecycle calls. */
+    public startGoldBoxDrops(_battle: Battle): void {
+        /* fund-triggered; nothing to schedule */
     }
 
-    /** Stops the gold-box drop cycle (pending siren + pending drop). */
+    /** Cancels a pending gold drop (announced siren waiting to fall) and resets the threshold — round
+     *  restart / battle emptied (the fund is back to 0). */
     public stopGoldBoxDrops(battle: Battle): void {
-        battle.timers.clear("goldBoxCycle");
         battle.timers.clear("goldBoxDrop");
+        battle.nextGoldThreshold = null;
+    }
+
+    /** Rolls the gold box on a fund increment of `amount` crystals. Mode per proBattle/`randomGold`:
+     *  random-fund (probabilistic 1/7000 per crystal) or fund-threshold crossing. On trigger, fires the
+     *  siren + schedules the drop. */
+    private _rollGoldBox(battle: Battle, amount: number): void {
+        if (battle.settings.withoutGoldBoxes) return;
+        const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+        // Random-fund mode: all regular battles + PRO battles with `randomGold` on. 1/7000 per crystal added.
+        if (!battle.settings.proBattle || battle.settings.randomGold) {
+            const chance = 1 - Math.pow(1 - GOLD_DROP_CHANCE, amount);
+            if (Math.random() < chance) this._goldBoxAnnounce(battle);
+            return;
+        }
+
+        // Threshold mode: PRO battle with `randomGold` off — drop when the fund crosses the next level.
+        if (battle.nextGoldThreshold == null) {
+            battle.nextGoldThreshold = Math.round(rand(GOLD_THRESHOLD_FIRST_MIN, GOLD_THRESHOLD_FIRST_MAX));
+        }
+        if (battle.fund >= battle.nextGoldThreshold) {
+            battle.nextGoldThreshold += Math.round(GOLD_THRESHOLD_STEP + rand(-GOLD_THRESHOLD_JITTER, GOLD_THRESHOLD_JITTER));
+            this._goldBoxAnnounce(battle);
+        }
     }
 
     /** Broadcasts the "gold box coming" siren (unless disabled) and schedules the drop 30-50s later. */
@@ -147,24 +182,27 @@ export class BonusService {
         battle.timers.set("goldBoxDrop", delay, () => this._goldBoxDrop(battle));
     }
 
-    /** Drops a gold box at a random bonus-region point, then schedules the next cycle. */
+    /** Drops the gold box at a random `crystal_100` zone (falls back to any bonus region if the map has
+     *  none). */
     private _goldBoxDrop(battle: Battle): void {
-        const regions = getMapBonusRegions(battle.mapResourceId);
-        if (regions.length > 0) {
-            const region = regions[Math.floor(Math.random() * regions.length)];
-            const rand = (a: number, b: number) => a + Math.random() * (b - a);
-            const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
-            this.spawnBonus(battle, "gold", position);
-        }
-        battle.timers.set("goldBoxCycle", GOLD_BOX_INTERVAL_MS, () => this._goldBoxAnnounce(battle));
+        const mode = MODE_TOKEN[battle.settings.battleMode];
+        const inMode = getMapBonusRegions(battle.mapResourceId).filter((r) => r.gameModes.includes(mode));
+        const goldZones = inMode.filter((r) => r.bonusType === "crystal_100");
+        const regions = goldZones.length > 0 ? goldZones : inMode;
+        if (regions.length === 0) return;
+        const region = regions[Math.floor(Math.random() * regions.length)];
+        const rand = (a: number, b: number) => a + Math.random() * (b - a);
+        const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
+        this.spawnBonus(battle, "gold", position);
     }
 
     /** Removes every active drop (e.g. on round restart) and RE-SEEDS the buff field from scratch (the
      *  seed tick stops once the field is full, so a plain clear would leave it empty for the new round).
-     *  The crystal tick (default) keeps running on its own timer. */
+     *  Also resets the gold threshold (the fund is back to 0 for the new round). */
     public clearAll(battle: Battle): void {
         for (const id of [...battle.activeBonuses.keys()]) this.removeBonus(battle, id);
         this._clearBuffRespawns(battle);
+        this.stopGoldBoxDrops(battle);
         this._startBuffSeeding(battle);
     }
 
@@ -197,6 +235,8 @@ export class BonusService {
             const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
             this.spawnBonus(battle, "crystall", position);
         }
+        // Gold box: single global roll, 100x rarer than a crystal-zone roll.
+        this._rollGoldBox(battle, amount);
     }
 
     /** Buff seeding tick (1s, both modes): each still-unseeded region independently rolls a chance to drop
