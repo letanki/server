@@ -63,6 +63,13 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
             return;
         }
 
+        // Buscando ranqueada: não pode entrar em nenhuma batalha (senão o matchmaking pega ele já em jogo).
+        if (server.rankedService?.isBusy(client.user.id)) {
+            client.sendPacket(new BattleHaltPacket(client.lastViewedBattleId));
+            server.rankedService.notifyChat(client, "Você está buscando uma partida ranqueada. Cancele a busca para entrar em outra batalha.");
+            return;
+        }
+
         try {
             const battle = server.battleService.addUserToBattle(client.user, client.lastViewedBattleId, packet.battleTeam);
             client.currentBattle = battle;
@@ -258,6 +265,24 @@ export class ReadyToPlaceHandler implements IPacketHandler<BattlePackets.ReadyTo
         // per user so a repeated ReadyToPlace just re-arms it, and cleared on battle teardown (clearAll).
         const battle = client.currentBattle;
         const user = client.user;
+
+        // Ranked: the first spawn of a match must be simultaneous — hold each player's placement until
+        // ALL players have sent ReadyToPlace, then release them together. Subsequent respawns are normal.
+        const ranked = server.rankedService?.gateRankedFirstSpawn(client);
+        if (ranked !== null && ranked !== undefined) {
+            for (const c of ranked) {
+                if (!c.user) continue;
+                const b = c.currentBattle;
+                if (!b) continue;
+                logger.info(`Placing user ${c.user.username} on battlefield ${b.battleId} in ${SPAWN_DELAY_MS}ms (ranked simultaneous start).`);
+                b.timers.set(`spawn:${c.user.id}`, SPAWN_DELAY_MS, () => {
+                    if (c.isDestroyed || c.currentBattle !== b || c.isSpectator) return;
+                    BattleWorkflow.placeTank(c);
+                });
+            }
+            return;
+        }
+
         logger.info(`Placing user ${user.username} on battlefield ${battle.battleId} in ${SPAWN_DELAY_MS}ms.`);
         battle.timers.set(`spawn:${user.id}`, SPAWN_DELAY_MS, () => {
             // Re-validate at fire time: the player may have left, disconnected or gone spectator meanwhile.

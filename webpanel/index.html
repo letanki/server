@@ -2,49 +2,308 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Painel</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Ranqueada</title>
   <style>
+    /* Tema extraído do cliente: botões com textura escovada real (assets/btn-*.png),
+       bandeiras CTF reais (assets/flag-*.png), fundo escuro, destaques em dourado/âmbar. */
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* DIAGNÓSTICO: fundo MAGENTA. Se a view inteira ficar magenta, o HTML novo está preenchendo
-       (o branco anterior era cache). Se sobrar branco em volta do magenta, a superfície do
-       HTMLLoader é maior que o conteúdo. Depois voltamos para o tema escuro. */
     html, body {
-      height: 100%; width: 100%; overflow: hidden;
-      background: #ff00aa; color: #ffffff;
-      font-family: "Segoe UI", Tahoma, sans-serif;
-      -webkit-user-select: none; user-select: none;
+      height: 100%; width: 100%; overflow: hidden; color: #dfe3ea;
+      font-family: "Segoe UI", Tahoma, sans-serif; -webkit-user-select: none; user-select: none;
     }
-    .panel { height: 100%; display: flex; flex-direction: column; }
-    .panel header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px; background: #232838; border-bottom: 1px solid #2a3040;
-      flex: 0 0 auto;
+    body { position: relative; display: flex; align-items: center; justify-content: center; background: #05070a; }
+    /* backdrop: a imagem do jogo pura, repetida lado a lado (tamanho natural, SEM esticar e SEM blur)
+       até preencher a view em tela cheia. */
+    .backdrop { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #05070a;
+      background-image: url(assets/backdrop-ingame.jpg); background-repeat: repeat; background-position: top left; background-size: auto; }
+    /* card centralizado (a janela do painel) */
+    .card { position: relative; z-index: 1; width: 400px; max-width: 92%; max-height: 92%;
+      display: flex; flex-direction: column; overflow: hidden; border-radius: 6px;
+      background: linear-gradient(180deg, #1b202a, #0e1116); border: 1px solid #2b3444; border-top-color: #3a465a;
+      box-shadow: 0 22px 60px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.05); }
+    /* estado resultado: solto, sem moldura nem header */
+    .card.bare { background: none; border: 0; box-shadow: none; overflow: visible; width: 420px; }
+    .card.bare header { display: none; }
+    .card.bare #content { min-height: 0; }
+    /* busca/encontrada: widget pequeno, card arredondado translúcido (75%) sobre o fundo escuro do widget */
+    .card.compact { width: 100%; height: 100%; max-width: none; max-height: none;
+      border-radius: 16px; border: 1px solid rgba(74,88,112,.45);
+      background: rgba(17,21,29,.75); box-shadow: 0 8px 26px rgba(0,0,0,.5); }
+    .card.compact header { display: none; }
+    .card.compact #content { min-height: 0; padding: 12px 14px; justify-content: center; }
+    .card.compact #content { padding: 10px 12px; }
+    .card.compact .hero { gap: 2px; }
+    .card.compact .htitle { font-size: 12px; }
+    .card.compact .vs { font-size: 11px; }
+    .card.compact .hsub { font-size: 10px; }
+    .card.compact .count { font-size: 24px; margin-top: 1px; }
+    .card.compact .wide { padding: 8px; margin-top: 5px; font-size: 12px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
+      padding: 10px 14px; background: #191e27; border-bottom: 1px solid #2b3444;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
     }
-    .panel header h1 { font-size: 14px; font-weight: 600; }
-    #close {
-      appearance: none; border: 1px solid #3a4050; background: #2c3346; color: #e6e8ee;
-      width: 26px; height: 26px; border-radius: 7px; font-size: 15px; cursor: pointer; line-height: 1;
-    }
-    #close:hover { background: #384056; }
-    .panel .body { padding: 18px 14px; flex: 1 1 auto; overflow: auto; }
-    .panel .body p { color: #8b93a7; font-size: 13px; line-height: 1.5; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #37d67a; margin-right: 7px; vertical-align: middle; }
+    header h1 { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #cfd5df; }
+    header h1 b { color: #f0a830; }
+    #close { appearance: none; border: 1px solid #3a4050; background: #242b38; color: #cfd5df; width: 24px; height: 24px; border-radius: 3px; font-size: 14px; cursor: pointer; line-height: 1; }
+    #close:hover { background: #303947; }
+
+    /* corpo = uma tela por estado */
+    #content { flex: 1 1 auto; min-height: 280px; max-height: 100%; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; }
+    .hero { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; }
+
+    /* moldura escura no estilo do jogo (bevel: topo claro, sombra interna) */
+    .card { background: linear-gradient(180deg, #1a1f29, #12161d); border: 1px solid #2b3444;
+      border-top-color: #3a465a; border-radius: 4px; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+
+    .mmrbig { font-size: 46px; font-weight: 800; color: #f0a830; line-height: 1; text-shadow: 0 2px 6px rgba(0,0,0,.55); }
+    .mmrlbl { font-size: 11px; letter-spacing: 2px; color: #7f8798; }
+    .pill { margin-top: 10px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: #cfd5df; text-transform: uppercase; letter-spacing: .5px; }
+    .who { font-size: 11px; color: #6f7788; margin-top: 2px; }
+
+    .htitle { font-size: 20px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+    .htitle.gold { color: #f0a830; }
+    .hsub { font-size: 12px; color: #8b93a7; }
+    .hsub b { color: #f0a830; }
+    .vs { font-size: 15px; color: #cfd5df; }
+    .vs b { color: #fff; }
+    .count { font-size: 56px; font-weight: 800; color: #f0a830; line-height: 1.1; text-shadow: 0 2px 8px rgba(0,0,0,.5); }
+
+    /* botões escovados do jogo */
+    .gbtn, .graybtn { appearance: none; border-radius: 4px; padding: 14px; font-size: 14px; font-weight: 700;
+      letter-spacing: .5px; text-transform: uppercase; cursor: pointer; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.55);
+      border: 1px solid #000; background-repeat: no-repeat; background-position: center; background-size: 100% 100%;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
+    .errmsg { margin-top: 10px; min-height: 16px; color: #f2777a; font-size: 12px; text-align: center; }
+    .gbtn { background-image: url(assets/btn-green.png); border-color: #26401d; }
+    .graybtn { background-image: url(assets/btn-gray.png); border-color: #333; }
+    .gbtn:hover, .graybtn:hover { filter: brightness(1.12); }
+    .wide { display: block; width: 100%; flex: 0 0 auto; }
+
+    /* tela de resultado */
+    /* título grande no topo, sem card */
+    .rtitle { font-size: 38px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; text-align: center; margin-top: 4px; }
+    .rtitle.win { color: #5ea637; text-shadow: 0 0 22px rgba(94,166,55,.45); }
+    .rtitle.loss { color: #c9453a; text-shadow: 0 0 22px rgba(201,69,58,.35); }
+    .rtitle.draw { color: #f0a830; text-shadow: 0 0 22px rgba(240,168,48,.35); }
+    /* placar 7 × 5 */
+    .score { text-align: center; font-size: 40px; font-weight: 800; line-height: 1; margin: 6px 0; color: #dfe3ea; }
+    .score i { font-style: normal; color: #5b6474; font-size: 26px; margin: 0 14px; vertical-align: middle; }
+    .score .win { color: #5ea637; } .score .loss { color: #c9453a; } .score .draw { color: #f0a830; }
+    .rmmr { font-size: 11px; color: #8b93a7; text-align: center; margin-top: 2px; }
+    .rmmr b { color: #f0a830; }
+    /* tabela de placar */
+    .sb { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+    .sb th { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; color: #7f8798; font-weight: 700; padding: 6px 4px; border-bottom: 1px solid #2b3444; text-align: center; }
+    .sb th.lft { text-align: left; }
+    .sb td { padding: 9px 4px; text-align: center; color: #cfd5df; font-weight: 600; border-bottom: 1px solid rgba(43,52,68,.5); }
+    .sb td.lft { text-align: left; }
+    .sb tr.me td { background: rgba(240,168,48,.10); }
+    .sb .tg { color: #f0a830; font-weight: 800; }
+    .sb td.pos { color: #5ea637; font-weight: 800; }
+    .sb td.neg { color: #c9453a; font-weight: 800; }
+    .ractions { display: flex; gap: 8px; margin-top: auto; }
+    .ractions button { flex: 1; padding: 12px; }
+
+    /* classificação / leaderboard */
+    .bhead { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #cfd5df; text-align: center; margin-bottom: 8px; }
+    .boardlist { flex: 1 1 auto; overflow-y: auto; margin-bottom: 8px; }
+    .lbyou { font-size: 12px; color: #8b93a7; text-align: center; padding: 6px; margin-bottom: 8px; border-bottom: 1px solid #2b3444; }
+    .lbyou b { color: #f0a830; }
+    .lbempty { font-size: 12px; color: #7f8798; text-align: center; padding: 14px; }
+    .lbrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 3px; }
+    .lbrow:nth-child(even) { background: rgba(255,255,255,.02); }
+    .lbrow.me { background: rgba(240,168,48,.12); }
+    .lbrank { width: 22px; text-align: center; font-weight: 800; color: #7f8798; font-size: 13px; }
+    .lbrow.me .lbrank { color: #f0a830; }
+    .lbname { flex: 1; font-size: 13px; font-weight: 600; color: #dfe3ea; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lbmmr { font-size: 13px; font-weight: 800; color: #f0a830; }
   </style>
 </head>
 <body>
-  <div class="panel">
+  <div class="backdrop"></div>
+  <div class="card" id="card">
     <header>
-      <h1><span class="dot"></span>Painel</h1>
+      <h1>Partida <b>Competitiva</b></h1>
       <button id="close" title="Fechar (ESC)" onclick="closePanel()">&times;</button>
     </header>
-    <div class="body">
-      <p>Painel do tamanho do conteúdo, servido pelo LT-Server. As personalizações do jogo entram aqui.</p>
-    </div>
+    <div id="content"></div>
   </div>
+
   <script>
-    // Sinaliza o AS (HTMLLoader) para fechar: navega para um host sentinela; o AS escuta locationChanging,
-    // cancela a navegação (preventDefault) e remove a view.
     function closePanel() { window.location.href = "http://wpclose/"; }
+
+    function qs(name) { var m = location.search.match(new RegExp("[?&]" + name + "=([^&]*)")); return m ? decodeURIComponent(m[1]) : ""; }
+    var TOKEN = qs("token");
+    function api(method, path, body, cb) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, path + (path.indexOf("?") >= 0 ? "&" : "?") + "token=" + encodeURIComponent(TOKEN), true);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.onreadystatechange = function () { if (xhr.readyState !== 4) return; var d = null; try { d = JSON.parse(xhr.responseText); } catch (e) {} cb(xhr.status, d); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    }
+
+    var state = "";        // estado atual renderizado
+    var username = "…";
+    var closing = false;
+    var view = "home";     // sub-tela quando idle: "home" | "board" (classificação)
+    var renderedKey = null;
+    // timer da "partida encontrada" roda 100% no painel; o servidor só entra/cancela
+    var foundEndsAt = 0, searchMs0 = 0, searchT0 = 0, enterSent = false;
+    var lastDynShown = -1, lastCardCls = "";
+
+    api("GET", "/ranked/whoami", null, function (st, d) { if (st === 200 && d && d.username) { username = d.username; touchWho(); } });
+    function touchWho() { var w = document.getElementById("who"); if (w) w.innerHTML = username; }
+
+    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+    // Constrói a tela do estado (só quando o estado MUDA); valores dinâmicos são atualizados no updateDyn.
+    function build(s) {
+      lastDynShown = -1; // força o próximo tick a escrever o número
+      var c = document.getElementById("content");
+      var html = "";
+      if (s.state === "idle" && view === "board") {
+        html += '<div class="bhead">Classificação · XP/BP</div>';
+        html += '<div id="boardlist" class="boardlist">carregando…</div>';
+        html += '<button class="graybtn wide" onclick="goHome()">Voltar</button>';
+        c.innerHTML = html;
+        loadBoard();
+        return;
+      } else if (s.state === "idle") {
+        html += '<div class="hero" style="gap:4px">';
+        html += '<div class="mmrbig" id="mmr">' + (s.mmr || 0) + '</div><div class="mmrlbl">SEU MMR</div>';
+        html += '<div class="pill card">XP/BP · CTF 1v1</div>';
+        html += '<div class="who" id="who">' + esc(username) + '</div></div>';
+        html += '<button class="gbtn wide" onclick="onSearchClick()">Buscar Partida</button>';
+        html += '<button class="graybtn wide" style="margin-top:8px" onclick="goBoard()">Classificação</button>';
+        html += '<div id="errmsg" class="errmsg"></div>';
+      } else if (s.state === "searching") {
+        html += '<div class="hero"><div class="htitle gold">Buscando Partida</div>';
+        html += '<div class="count"><span id="dyn">0</span><span style="font-size:20px">s</span></div></div>';
+        html += '<button class="graybtn wide" onclick="onSearchClick()">Cancelar</button>';
+      } else if (s.state === "found") {
+        // a contagem começa AGORA e roda no painel; ao zerar, avisamos o servidor (POST /ranked/enter)
+        foundEndsAt = Date.now() + (s.countdownMs || 10000);
+        enterSent = false;
+        html += '<div class="hero"><div class="htitle gold">Partida Encontrada</div>';
+        html += '<div class="count" id="dyn">' + Math.ceil((s.countdownMs || 10000) / 1000) + '</div></div>';
+        html += '<button class="graybtn wide" onclick="onSearchClick()">Cancelar</button>';
+      } else if (s.state === "active") {
+        html += '<div class="hero"><div class="htitle gold">Entrando na partida…</div></div>';
+      } else if (s.state === "result" && s.result) {
+        html += buildResult(s.result);
+      }
+      c.innerHTML = html;
+    }
+
+    function buildResult(r) {
+      var title = r.outcome === "win" ? "Vitória" : r.outcome === "loss" ? "Derrota" : "Empate";
+      var h = "";
+      h += '<div class="rtitle ' + r.outcome + '">' + title + '</div>';
+      h += '<div class="score"><span class="' + r.outcome + '">' + r.you.flags + '</span><i>×</i><span>' + r.opp.flags + '</span></div>';
+      h += '<div class="rmmr">MMR ' + r.mmrAfter + (r.rank ? ' · <b>#' + r.rank + '</b> de ' + r.total : '') + '</div>';
+      h += '<table class="sb"><thead><tr><th class="lft">Jogador</th><th>K</th><th>D</th><th>K/D</th><th>Pts</th></tr></thead><tbody>';
+      h += sbRow(r.you, true);
+      h += sbRow(r.opp, false);
+      h += '</tbody></table>';
+      h += '<div class="ractions"><button class="gbtn" onclick="playAgain()">Jogar Novamente</button>';
+      h += '<button class="graybtn" onclick="exitRanked()">Sair</button></div>';
+      return h;
+    }
+    function sbRow(p, me) {
+      var kd = (p.deaths > 0 ? p.kills / p.deaths : p.kills).toFixed(2);
+      var pts = (p.delta > 0 ? "+" : "") + p.delta;
+      var cls = p.delta > 0 ? "pos" : (p.delta < 0 ? "neg" : "");
+      var tag = p.tag ? '<span class="tg">[' + esc(p.tag) + "]</span> " : "";
+      return '<tr class="' + (me ? "me" : "") + '"><td class="lft">' + tag + esc(p.nick) + "</td><td>" + p.kills + "</td><td>" + p.deaths + "</td><td>" + kd + '</td><td class="' + cls + '">' + pts + "</td></tr>";
+    }
+
+    // Atualiza só os valores que mudam a cada poll (sem reconstruir a tela).
+    // sincroniza SÓ o tempo de fila com o servidor (o timer do "found" é 100% local, ver build)
+    function updateDyn(s) {
+      var mmr = document.getElementById("mmr"); if (mmr && s.mmr != null) mmr.innerHTML = s.mmr;
+      if (s.state === "searching") { searchMs0 = s.queuedForMs || 0; searchT0 = Date.now(); }
+      localTick();
+    }
+    // Atualiza o número. Escreve no DOM SÓ quando o valor muda (1x/seg) — o motor IE da StageWebView
+    // repinta a tela toda a cada escrita, então evitar escritas redundantes tira o "travamento".
+    function localTick() {
+      var dyn = document.getElementById("dyn");
+      if (!dyn) { lastDynShown = -1; return; }
+      var val;
+      if (state === "found") {
+        var left = Math.ceil((foundEndsAt - Date.now()) / 1000);
+        val = Math.max(0, left);
+        if (left <= 0 && !enterSent) {
+          enterSent = true;
+          api("POST", "/ranked/enter", null, function () {}); // avisa o servidor: pode entrar
+          if (!closing) { closing = true; setTimeout(closePanel, 300); }
+        }
+      } else if (state === "searching") {
+        val = Math.floor((searchMs0 + (Date.now() - searchT0)) / 1000);
+      } else {
+        return;
+      }
+      if (val !== lastDynShown) { dyn.innerHTML = val; lastDynShown = val; }
+    }
+    setInterval(localTick, 200);
+
+    function render(s) {
+      // resultado = solto (sem card); busca/encontrada = compact (widget pequeno); resto = card normal.
+      var cc = (s.state === "result") ? "card bare" : (s.state === "searching" || s.state === "found") ? "card compact" : "card";
+      if (cc !== lastCardCls) { document.getElementById("card").className = cc; lastCardCls = cc; }
+      var key = s.state + (s.state === "idle" ? ":" + view : "");
+      if (key !== renderedKey) { renderedKey = key; state = s.state; build(s); }
+      updateDyn(s);
+      if (s.state === "active" && !closing) { closing = true; setTimeout(closePanel, 300); }
+    }
+
+    function goBoard() { view = "board"; renderedKey = null; poll(); }
+    function goHome() { view = "home"; renderedKey = null; poll(); }
+    function loadBoard() {
+      api("GET", "/ranked/leaderboard", null, function (st, d) {
+        var el = document.getElementById("boardlist");
+        if (!el) return;
+        if (st !== 200 || !d) { el.innerHTML = "erro ao carregar."; return; }
+        var h = "";
+        if (d.you) h += '<div class="lbyou">Você: <b>#' + d.you.rank + '</b> de ' + d.you.total + ' · ' + d.you.mmr + ' MMR</div>';
+        if (!d.top || d.top.length === 0) { el.innerHTML = h + '<div class="lbempty">Ninguém classificado ainda.</div>'; return; }
+        for (var i = 0; i < d.top.length; i++) {
+          var p = d.top[i];
+          var me = (p.username === username) ? " me" : "";
+          h += '<div class="lbrow' + me + '"><span class="lbrank">' + (i + 1) + '</span><span class="lbname">' + esc(p.username) + '</span><span class="lbmmr">' + p.mmr + '</span></div>';
+        }
+        el.innerHTML = h;
+      });
+    }
+
+    function poll() { api("GET", "/ranked/status", null, function (st, d) { if (st === 200 && d) render(d); }); }
+
+    // modo demo p/ inspecionar layout no navegador: /panel/?demo=result (ou ?demo=found)
+    var demo = qs("demo");
+    if (demo === "result") {
+      render({ state: "result", mmr: 1016, result: { outcome: "win", mmrAfter: 1016, rank: 3, total: 42, you: { nick: "Danlino", tag: "LT", flags: 7, kills: 9, deaths: 4, delta: 16 }, opp: { nick: "Adversario", tag: null, flags: 5, kills: 6, deaths: 9, delta: -16 } } });
+    } else if (demo === "found") {
+      render({ state: "found", mmr: 1000, opponent: "Adversario", countdownMs: 10000 });
+    } else {
+      setInterval(poll, 1500);
+      poll();
+    }
+
+    function onSearchClick() {
+      if (state === "idle") {
+        api("POST", "/ranked/enqueue", null, function (st, d) {
+          if (d && d.ok === false) { showError(d.error || "Não foi possível buscar partida."); return; }
+          poll();
+        });
+      } else {
+        api("POST", "/ranked/cancel", null, function () { poll(); });
+      }
+    }
+    function showError(msg) { var e = document.getElementById("errmsg"); if (e) e.innerHTML = esc(msg); }
+    function playAgain() { state = ""; api("POST", "/ranked/enqueue", null, function () { poll(); }); }
+    function exitRanked() { api("POST", "/ranked/dismiss", null, function () { closePanel(); }); }
   </script>
 </body>
 </html>

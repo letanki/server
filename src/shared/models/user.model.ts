@@ -65,6 +65,15 @@ const UserStatsSchema = new Schema<IUserStats>(
     { _id: false }
 );
 
+export interface RankedModeStats {
+    mmr: number;
+    wins: number;
+    losses: number;
+    abandons: number;
+    games: number;
+    currentStreak: number;
+}
+
 export interface UserAttributes {
     username: string; // display name (original casing)
     login: string; // lowercase of username — the unique, indexed key used for authentication
@@ -85,6 +94,17 @@ export interface UserAttributes {
     premiumExpiresAt: Date | null;
     rank: number;
     nextRankScore: number;
+    /** Competitive matchmaking — LEGACY single-mode stats (kept only to seed rankedModes once). */
+    ranked: {
+        mmr: number;
+        wins: number;
+        losses: number;
+        abandons: number;
+        games: number;
+        currentStreak: number;
+    };
+    /** Competitive stats PER MODE (key = mode id, e.g. "xpbp"). mmr starts at 1000 (Elo). */
+    rankedModes: Map<string, RankedModeStats>;
     crystalAbonementExpiresAt: Date | null;
     friends: mongoose.Types.ObjectId[];
     friendRequestsSent: mongoose.Types.ObjectId[];
@@ -140,6 +160,35 @@ const UserSchema = new Schema<UserDocument>({
     premiumExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
     nextRankScore: { type: Number, default: 100 },
+    ranked: {
+        type: new mongoose.Schema(
+            {
+                mmr: { type: Number, default: 1000 },
+                wins: { type: Number, default: 0 },
+                losses: { type: Number, default: 0 },
+                abandons: { type: Number, default: 0 },
+                games: { type: Number, default: 0 },
+                currentStreak: { type: Number, default: 0 },
+            },
+            { _id: false }
+        ),
+        default: () => ({}),
+    },
+    rankedModes: {
+        type: Map,
+        of: new mongoose.Schema(
+            {
+                mmr: { type: Number, default: 1000 },
+                wins: { type: Number, default: 0 },
+                losses: { type: Number, default: 0 },
+                abandons: { type: Number, default: 0 },
+                games: { type: Number, default: 0 },
+                currentStreak: { type: Number, default: 0 },
+            },
+            { _id: false }
+        ),
+        default: () => new Map(),
+    },
     crystalAbonementExpiresAt: { type: Date, default: null },
     friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
     friendRequestsSent: [{ type: Schema.Types.ObjectId, ref: "User" }],

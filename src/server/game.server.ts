@@ -14,6 +14,7 @@ import { LobbyService } from "@/features/lobby/lobby.service";
 import { OnlineNotifierData } from "@/features/profile/profile.packets";
 import { ProfileService } from "@/features/profile/profile.service";
 import { QuestService } from "@/features/quests/quests.service";
+import type { RankedMatchmakingService } from "@/features/ranked/ranked.matchmaking.service";
 import { ReferralService } from "@/features/referral/referral.service";
 import { SettingsService } from "@/features/settings/settings.service";
 import { ShopService } from "@/features/shop/shop.service";
@@ -82,6 +83,8 @@ export class GameServer {
   public readonly referralService: ReferralService;
   public readonly profileService: ProfileService;
   public readonly clanService: ClanService;
+  /** Matchmaking competitivo (setado no bootstrap): hooks de round/saída + leaderboard/posição. */
+  public rankedService?: RankedMatchmakingService;
 
   private _getBattleService: () => BattleService;
 

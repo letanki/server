@@ -11,6 +11,9 @@ export interface IWebPanelConfig {
   /** Top-left position in px. Use -1 (default) to have the client center it on the stage. */
   x?: number;
   y?: number;
+  /** Se true, x/y/w/h são PORCENTAGENS (0-100) do palco; a view acompanha o resize da janela.
+   *  Em qualquer modo, x<0 centraliza X e y<0 centraliza Y. Em px, w<=0/h<=0 = tela cheia. */
+  pct?: boolean;
 }
 
 /**
@@ -30,6 +33,7 @@ export class OpenWebPanel extends BasePacket {
   public height: number;
   public x: number;
   public y: number;
+  public pct: boolean;
 
   constructor(cfg: IWebPanelConfig) {
     super();
@@ -38,6 +42,7 @@ export class OpenWebPanel extends BasePacket {
     this.height = cfg.height;
     this.x = cfg.x ?? -1;
     this.y = cfg.y ?? -1;
+    this.pct = cfg.pct ?? false;
   }
 
   /** Convenience: the default panel (URL/size from config, centered). */
@@ -67,6 +72,7 @@ export class OpenWebPanel extends BasePacket {
       y: this.y,
       w: this.width,
       h: this.height,
+      pct: this.pct,
     });
     const writer = new BufferWriter();
     writer.writeInt32BE(0); // referredUsers count (unused)

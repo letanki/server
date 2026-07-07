@@ -51,8 +51,10 @@ export class BattleService {
      * XT variants are pure skins of the base items (same stats/physics), so they qualify too.
      * Throws a join-rejection error (shown to the player) when the equipped gear doesn't comply.
      */
-    private static _enforceEquipmentConstraint(mode: EquipmentConstraintsMode, user: UserDocument): void {
-        if (mode === EquipmentConstraintsMode.NONE) return;
+    /** Returns a PT-BR error string if `user`'s equipment violates the constraint `mode`, else null.
+     *  Public so matchmaking (Partida Competitiva XP/BP) can pre-validate at enqueue time. */
+    public static getEquipmentConstraintError(mode: EquipmentConstraintsMode, user: UserDocument): string | null {
+        if (mode === EquipmentConstraintsMode.NONE) return null;
 
         const baseHulls =
             mode === EquipmentConstraintsMode.HORNET_RAILGUN ? ["hornet"] :
@@ -64,8 +66,14 @@ export class BattleService {
         const railgunMod = turretId === "railgun" || turretId === "railgun_xt" ? (user.turrets.get(turretId) ?? 0) : -1;
         if (!allowedHulls.includes(user.equippedHull) || railgunMod < BattleService.RAILGUN_MIN_MOD) {
             const hullLabel = baseHulls.map((h) => (h === "hornet" ? "Zangão" : "Vespa")).join(" ou ");
-            throw new EquipmentConstraintError(`Esta batalha exige ${hullLabel} + Canhão-elétrico (no mínimo M2).`);
+            return `Esta batalha exige ${hullLabel} + Canhão-elétrico (no mínimo M2).`;
         }
+        return null;
+    }
+
+    private static _enforceEquipmentConstraint(mode: EquipmentConstraintsMode, user: UserDocument): void {
+        const error = BattleService.getEquipmentConstraintError(mode, user);
+        if (error) throw new EquipmentConstraintError(error);
     }
 
     private disconnectedPlayers = new Map<string, IDisconnectedPlayerInfo>();
@@ -553,6 +561,8 @@ export class BattleService {
                 StatsService.flushRound(client, battle, StatsService.countsWinLoss(battle) ? "loss" : "none", this.server);
                 client.statsFlushedForRound = true;
             }
+            // Partida Competitiva: sair de um round em ANDAMENTO = abandono → W.O. para o adversário.
+            this.server.rankedService?.onPlayerLeft(battle, userId);
         }
 
         battle.users = battle.users.filter((u) => u.id !== userId);

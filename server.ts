@@ -18,6 +18,7 @@ import { SettingsService } from "@/features/settings/settings.service";
 import { ShopService } from "@/features/shop/shop.service";
 import { PacketHandlerService } from "@/packets/packet-handler.service";
 import { PacketService } from "@/packets/packet.service";
+import { RankedMatchmakingService } from "@/features/ranked/ranked.matchmaking.service";
 import { GameServer } from "@/server/game.server";
 import { ResourceServer } from "@/server/resource.server";
 import { RankService } from "@/shared/services/rank.service";
@@ -105,7 +106,9 @@ async function bootstrap() {
 
   battleService = new BattleService(server, lobbyService);
 
-  const resourceServer = new ResourceServer();
+  const rankedMatchmakingService = new RankedMatchmakingService(server);
+  server.rankedService = rankedMatchmakingService;
+  const resourceServer = new ResourceServer(rankedMatchmakingService);
   const debugConsole = new DebugConsole(server, userService);
 
   logger.info("Starting LeTanki and Resource servers");

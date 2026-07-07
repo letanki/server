@@ -70,6 +70,9 @@ export class RoundService {
         battle.roundState = BattleRoundState.FINISHED;
         battle.timers.clear("round");
 
+        // Partida Competitiva: resolve o Elo pelo placar antes de qualquer restart do round.
+        this.server.rankedService?.onRoundFinished(battle);
+
         // Crystal payout from the battle fund (team-first in team modes, then per player).
         const players = [...battle.clients].filter((c) => c.user && !c.isSpectator);
         const rewards = this._computeRewards(battle, players);

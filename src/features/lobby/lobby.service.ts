@@ -57,6 +57,13 @@ export class LobbyService {
 
     public createBattle(settings: IBattleCreationSettings, creator?: UserDocument): Battle {
         try {
+            // Invariante XP/BP: batalha com restrição de equipamento SEMPRE trava a troca. Isso é expresso
+            // desabilitando o rearmamento (reArmorEnabled=false), que o EquipItemRequestHandler honra como
+            // bloqueio total — assim a regra vale para qualquer modo/mapa, inegociável.
+            if (settings.equipmentConstraintsMode !== EquipmentConstraintsMode.NONE) {
+                settings.reArmorEnabled = false;
+            }
+
             const battle = new Battle(settings);
 
             if (settings.battleMode === BattleMode.CTF) {
