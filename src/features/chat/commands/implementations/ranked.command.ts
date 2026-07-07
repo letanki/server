@@ -13,7 +13,9 @@ export default class RankedCommand implements ICommand {
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.NONE;
 
     async execute(context: CommandContext, _args: string[]): Promise<void> {
-        sendWebPanel(context.executor, { width: 0, height: 0 }, "ranked-command"); // 0 = tela cheia (modal)
+        // Se já está buscando/em partida encontrada, reabre no tamanho pequeno (widget), não fullscreen.
+        const size = context.server.rankedService?.panelSizeFor(context.executor.user!.id) ?? { width: 0, height: 0 };
+        sendWebPanel(context.executor, size, "ranked-command");
         context.reply("Abrindo painel de Partida Competitiva…");
     }
 }

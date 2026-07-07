@@ -13,11 +13,13 @@ import * as ReferralPackets from "./referral.packets";
 export class RequestReferralInfoHandler implements IPacketHandler<ReferralPackets.RequestReferralInfo> {
     public readonly packetId = ReferralPackets.RequestReferralInfo.getId();
 
-    public async execute(client: GameClient, _server: GameServer): Promise<void> {
+    public async execute(client: GameClient, server: GameServer): Promise<void> {
         if (!client.user) {
             logger.warn("RequestReferralInfo received from unauthenticated client.", { client: client.getRemoteAddress() });
             return;
         }
-        sendWebPanel(client, { width: 0, height: 0 }, "referral-button"); // 0 = tela cheia (modal)
+        // Se já está buscando/em partida encontrada, reabre no tamanho pequeno (widget), não fullscreen.
+        const size = server.rankedService?.panelSizeFor(client.user.id) ?? { width: 0, height: 0 };
+        sendWebPanel(client, size, "referral-button");
     }
 }

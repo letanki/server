@@ -168,6 +168,11 @@ export class RankedMatchmakingService implements RankedObserver {
         return this.queue.has(userId) || this.matchByUser.has(userId);
     }
 
+    /** Tamanho para (re)abrir o painel: pequeno (widget) se buscando/encontrada; fullscreen caso contrário. */
+    public panelSizeFor(userId: string): { width: number; height: number; x: number; y: number } {
+        return this.isBusy(userId) ? PANEL_SMALL : PANEL_FULL;
+    }
+
     /** Envia um aviso de sistema no chat que o jogador está vendo (batalha ou lobby), estilo /msg. */
     public notifyChat(client: GameClient, message: string): void {
         const tagged = `[RANQUEADA] ${message}`;
