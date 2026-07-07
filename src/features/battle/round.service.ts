@@ -16,7 +16,7 @@ import { SupplyService } from "./supply.service";
 import { ChangeFundPacket, EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
 
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
-const FUND_PER_KILL = 1; // crystals added to the battle fund per kill
+const FUND_PER_KILL = 10; // crystals added to the battle fund per kill (matches official ~8-11/kill from captures)
 const FUND_PER_FLAG = 10; // crystals added to the battle fund per flag capture
 
 /**
@@ -230,10 +230,12 @@ export class RoundService {
         }
     }
 
-    /** Adds to the battle fund (crystal pool) and broadcasts the new total to everyone in the battle. */
+    /** Adds to the battle fund (crystal pool), broadcasts the new total, and rolls crystal-box drops
+     *  (wiki: 1% per crystal zone per crystal added — see BonusService.onFundAdded). */
     private _addFund(battle: Battle, amount: number): void {
         battle.fund += amount;
         battle.broadcast(new ChangeFundPacket(battle.fund));
+        this.bonus.onFundAdded(battle, amount);
     }
 
     /**

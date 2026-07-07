@@ -1,10 +1,10 @@
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { Battle, BattleMode, IDomPointState } from "./battle.model";
 import { BattleEvents } from "./battle-events";
-import { RoundService } from "./round.service";
+import { Battle, BattleMode, IDomPointState } from "./battle.model";
 import { PointCaptureStartedPacket, PointCaptureStoppedPacket, PointScoreChangedPacket, PointStateChangedPacket, PointTankEnteredPacket, PointTankLeftPacket, SetCtfScorePacket } from "./battle.packets";
+import { RoundService } from "./round.service";
 
 const DOM_TICK_MS = 1000; // capture loop interval (1s)
 const CAPTURE_RATE = 20; // meter change per second PER net player (matches official). net = blue - red

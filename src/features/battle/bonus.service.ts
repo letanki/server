@@ -28,9 +28,12 @@ function lifeTimeFor(type: string): number {
 // The CLIENT detects the actual touch (it simulates the parachute fall) and sends TakeBonusCommand;
 // the server only sanity-checks horizontal (x,y) distance, generously, against grossly-wrong claims.
 const BONUS_PICKUP_SAFETY_RADIUS = 800;
-const SPAWN_TICK_MS = 20000; // how often the crystal auto-spawn loop runs (default mode, crystal regions only)
-const SPAWN_CHANCE_PER_REGION = 0.25; // chance an empty crystal region drops on a given tick
-const MAX_ACTIVE_BONUSES = 8; // cap on simultaneous crystal drops per battle
+// Crystal box drop (wiki "Crystal boxes"): a crystal box (10 crystals) rolls whenever crystals are ADDED
+// to the battle fund — NOT on a time tick. For EACH `crystal`-type drop zone, independently, the chance is
+// CRYSTAL_DROP_CHANCE per crystal added (so a +ΔF fund event = 1-(1-p)^ΔF per zone). Zones roll independent
+// and ignore occupancy, so boxes can stack — faithful to official (see [[bonus-drop-model]]). We only use
+// `crystal`-typed zones (not crystal_100/500) by design.
+const CRYSTAL_DROP_CHANCE = 0.01;
 
 // --- SUPPLY/BUFF field drops (both modes) — measured from official captures, see [[bonus-drop-model]] ---
 // The buff DROP SYSTEM: each buff region is seeded ONCE (1s probabilistic tick), then re-drops after its
@@ -54,10 +57,10 @@ const seedParams = (esport: boolean): SeedParams => (esport ? ESPORT_SEED : DEFA
 const ESPORT_RESPAWN_MS = 100000;
 const DEFAULT_RESPAWN_MIN_MS = 45000;
 const DEFAULT_RESPAWN_MAX_MS = 170000;
-// The buff/supply bonus ids the seed+respawn system governs (our ids, post REGION_TYPE_MAP). Crystal/gold/
-// event boxes are NOT here — in default they still drop via the crystal _crystalTick; their own fund-based
-// system (wiki "Crystal boxes": ~1% per drop-zone per crystal in the fund; gold 1/7000 per crystal or
-// fund thresholds) is not wired yet. Infinite ground lifetime in esport still applies to ALL types.
+// The buff/supply bonus ids the seed+respawn system governs (our ids, post REGION_TYPE_MAP). Crystal/gold
+// boxes are NOT here — the crystal box drops via the fund-based onFundAdded (wiki: 1% per `crystal` zone
+// per crystal added); gold (1/7000 per crystal or fund thresholds) is still on the legacy cycle, not wired
+// to the fund yet. Infinite ground lifetime in esport still applies to ALL types.
 const BUFF_DROP_TYPES = new Set(["nitro", "damage", "armor", "health"]);
 
 // Gold-box drop cadence: a siren announces, then the box falls 30-50s later (wiki), repeating each cycle.
@@ -111,15 +114,12 @@ export class BonusService {
     public startAutoSpawn(battle: Battle): void {
         if (battle.settings.withoutBonuses) return;
         this._startBuffSeeding(battle);
-        if (!battle.settings.esportDropTiming) {
-            battle.timers.set("crystalSpawn", SPAWN_TICK_MS, () => this._crystalTick(battle));
-        }
+        // Crystal boxes are NOT on a timer — they roll on fund increments (see onFundAdded).
     }
 
     /** Stops every drop loop and clears active drops (no re-seed — unlike clearAll). */
     public stopAutoSpawn(battle: Battle): void {
         battle.timers.clear("buffSeed");
-        battle.timers.clear("crystalSpawn");
         this._clearBuffRespawns(battle); // cancel seed queue + pending region respawns
         this.stopGoldBoxDrops(battle);
         for (const id of [...battle.activeBonuses.keys()]) this.removeBonus(battle, id);
@@ -174,7 +174,7 @@ export class BonusService {
         const mode = MODE_TOKEN[battle.settings.battleMode];
         const regions = getMapBonusRegions(battle.mapResourceId);
         // Seed queue: regions that support this mode AND map to a SUPPLY/BUFF type. Crystal/gold regions
-        // are excluded (default: handled by _crystalTick; esport: not field-dropped).
+        // are excluded (crystal boxes drop via the fund-based onFundAdded, not the seed queue).
         battle.bonusSeedQueue = new Set(
             regions.map((_r, i) => i).filter((i) => regions[i].gameModes.includes(mode) && BUFF_DROP_TYPES.has(REGION_TYPE_MAP[regions[i].bonusType]))
         );
@@ -183,22 +183,20 @@ export class BonusService {
         battle.timers.set("buffSeed", delayMs + tickMs, () => this._buffSeedTick(battle));
     }
 
-    /** Legacy probabilistic tick — default mode, CRYSTAL regions only (buff regions use the seed+respawn
-     *  model). Kept until the fund-based crystal drop system exists. */
-    private _crystalTick(battle: Battle): void {
-        const regions = getMapBonusRegions(battle.mapResourceId);
+    /** Crystal box drop (wiki model): call whenever `amount` crystals are ADDED to the battle fund. For
+     *  each `crystal`-type zone, independently, spawn a crystal box (10) with chance 1-(1-p)^amount. Zones
+     *  ignore occupancy (boxes may stack). No-op if bonuses are disabled. */
+    public onFundAdded(battle: Battle, amount: number): void {
+        if (battle.settings.withoutBonuses || amount <= 0) return;
         const mode = MODE_TOKEN[battle.settings.battleMode];
-        const occupied = new Set([...battle.activeBonuses.values()].map((b) => b.regionIndex).filter((i) => i !== undefined));
-
-        for (let i = 0; i < regions.length && battle.activeBonuses.size < MAX_ACTIVE_BONUSES; i++) {
-            const region = regions[i];
-            if (occupied.has(i) || !region.gameModes.includes(mode)) continue;
-            if (BUFF_DROP_TYPES.has(REGION_TYPE_MAP[region.bonusType])) continue; // buffs handled elsewhere
-            if (Math.random() > SPAWN_CHANCE_PER_REGION) continue;
-            this._spawnFromRegion(battle, region, i);
+        const zoneChance = 1 - Math.pow(1 - CRYSTAL_DROP_CHANCE, amount); // `amount` independent 1% rolls
+        const rand = (a: number, b: number) => a + Math.random() * (b - a);
+        for (const region of getMapBonusRegions(battle.mapResourceId)) {
+            if (region.bonusType !== "crystal" || !region.gameModes.includes(mode)) continue;
+            if (Math.random() >= zoneChance) continue;
+            const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
+            this.spawnBonus(battle, "crystall", position);
         }
-
-        battle.timers.set("crystalSpawn", SPAWN_TICK_MS, () => this._crystalTick(battle)); // re-arm
     }
 
     /** Buff seeding tick (1s, both modes): each still-unseeded region independently rolls a chance to drop
@@ -268,6 +266,29 @@ export class BonusService {
         }
         logger.info(`Bonus ${id} spawned in battle ${battle.battleId} at (${position.x | 0},${position.y | 0},${position.z | 0})`);
         return id;
+    }
+
+    /** Debug/staff: drops ONE bonus at the CENTER of every bonus region of the battle's map+mode, using
+     *  the region's own type (crystal→crystall, crystal_100→gold [golden box], crystal_500→special,
+     *  medkit→health, nitro/damageup/armorup→their buff). One-off drops (no regionIndex → no respawn
+     *  wiring). Returns per-type counts so a command can report what dropped where. */
+    public spawnAllRegions(battle: Battle): Record<string, number> {
+        const regions = getMapBonusRegions(battle.mapResourceId);
+        const mode = MODE_TOKEN[battle.settings.battleMode];
+        const counts: Record<string, number> = {};
+        for (const region of regions) {
+            if (!region.gameModes.includes(mode)) continue;
+            const type = REGION_TYPE_MAP[region.bonusType];
+            if (!type) continue;
+            const position = {
+                x: (region.min.x + region.max.x) / 2,
+                y: (region.min.y + region.max.y) / 2,
+                z: (region.min.z + region.max.z) / 2,
+            };
+            this.spawnBonus(battle, type, position);
+            counts[type] = (counts[type] ?? 0) + 1;
+        }
+        return counts;
     }
 
     /** Removes a bonus (expiry or after pickup): clears its timer and tells everyone it's gone. */
