@@ -117,13 +117,17 @@ function modeStatsOf(user: UserDocument): RankedModeStats {
     return s as RankedModeStats;
 }
 
+/** Mapas sorteados a cada partida ranqueada 1v1. Todos suportam CTF e têm bandeiras nos dados gerados. */
+const RANKED_MAPS = ["map_sandbox", "map_zone", "map_station"] as const;
+const pickRankedMap = (): string => RANKED_MAPS[Math.floor(Math.random() * RANKED_MAPS.length)];
+
 function rankedBattleSettings(): IBattleCreationSettings {
     return {
         name: "Partida Competitiva",
         privateBattle: true, // sistema/oculta da lista pública
         proBattle: false,
         battleMode: BattleMode.CTF, // 1v1 CTF: vence quem fizer 7 bandeiras (ou o maior em 10 min)
-        mapId: "map_sandbox",
+        mapId: pickRankedMap(), // sorteia sandbox/zona/estação a cada partida
         mapTheme: MapTheme.SUMMER,
         maxPeopleCount: 1, // CTF é POR TIME: 1 por time = 1v1 (2 daria 2v2)
         minRank: 1,
