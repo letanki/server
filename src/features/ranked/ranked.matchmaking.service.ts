@@ -468,17 +468,37 @@ export class RankedMatchmakingService implements RankedObserver {
 
     // ===================== classificação / leaderboard (por modo) =====================
 
+    /** Tag do clã do jogador (sem colchetes), ou null se não tiver clã. */
+    public async getUserTag(userId: string): Promise<string | null> {
+        const user = await User.findById(userId);
+        return user ? this.server.clanService.getTagForUser(user) : null;
+    }
+
+    /** Resolve as tags de vários clãs de uma vez (evita N buscas) → Map<clanId, tag>. */
+    private async tagsByClanId(clanIds: string[]): Promise<Map<string, string>> {
+        const unique = [...new Set(clanIds.filter(Boolean))];
+        const map = new Map<string, string>();
+        await Promise.all(
+            unique.map(async (id) => {
+                const clan = await this.server.clanService.getClanById(id);
+                if (clan?.tag) map.set(id, clan.tag);
+            })
+        );
+        return map;
+    }
+
     /** Top jogadores do modo por MMR (só quem já jogou ≥1 partida — a entrada só existe após o Elo). */
-    public async getLeaderboard(limit: number = 20): Promise<Array<{ username: string; mmr: number; wins: number; losses: number; games: number }>> {
+    public async getLeaderboard(limit: number = 20): Promise<Array<{ username: string; tag: string | null; mmr: number; wins: number; losses: number; games: number }>> {
         const key = `rankedModes.${MODE_KEY}.mmr`;
         const users: any[] = await User.find({ [key]: { $exists: true } })
             .sort({ [key]: -1 })
             .limit(limit)
-            .select(`username rankedModes.${MODE_KEY}`)
+            .select(`username clanId rankedModes.${MODE_KEY}`)
             .lean();
+        const tags = await this.tagsByClanId(users.map((u) => String(u.clanId ?? "")));
         return users.map((u) => {
             const s = u.rankedModes?.[MODE_KEY] ?? {};
-            return { username: u.username, mmr: s.mmr ?? 1000, wins: s.wins ?? 0, losses: s.losses ?? 0, games: s.games ?? 0 };
+            return { username: u.username, tag: u.clanId ? tags.get(String(u.clanId)) ?? null : null, mmr: s.mmr ?? 1000, wins: s.wins ?? 0, losses: s.losses ?? 0, games: s.games ?? 0 };
         });
     }
 

@@ -1,5 +1,5 @@
 import { battleDataObject } from "@/config/battle.data";
-import { CALLBACK } from "@/config/constants";
+import { CALLBACK, WEBPANEL } from "@/config/constants";
 import { HideLoginForm, Punishment } from "@/features/authentication/auth.packets";
 import { Battle, BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
 import { BattleWorkflow } from "@/features/battle/battle.workflow";
@@ -26,6 +26,7 @@ import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as LobbyPackets from "./lobby.packets";
 import { UnloadBattleListPacket } from "./lobby.packets";
+import { sendWebPanel } from "@/features/webpanel/webpanel.service";
 
 const mapUserToObject = (user: UserDocument) => ({
     kills: 0,
@@ -122,6 +123,13 @@ export class LobbyWorkflow {
 
         await LobbyWorkflow.enterLobby(client, server);
         server.notifySubscribersOfStatusChange(user.username, true);
+
+        // Modal informativo (não fullscreen) explicando a Ranqueada e como acessá-la, a cada login no lobby.
+        sendWebPanel(
+            client,
+            { url: `${WEBPANEL.URL}?intro=1`, width: 460, height: 300, x: -1, y: -1 },
+            "ranked-intro"
+        );
 
         // Auto-open the daily-missions window if a mission completed while the player was away and they
         // haven't seen it yet (matches the official; getQuestsForUser then marks it viewed).

@@ -76,6 +76,17 @@
       border: 1px solid #000; background-repeat: no-repeat; background-position: center; background-size: 100% 100%;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
     .errmsg { margin-top: 10px; min-height: 16px; color: #f2777a; font-size: 12px; text-align: center; }
+    /* botão de fechar flutuante no canto superior direito do backdrop (usado no modal solto de intro) */
+    #bdclose { display: none; position: absolute; top: 12px; right: 12px; z-index: 5;
+      appearance: none; border: 1px solid #3a4050; background: rgba(36,43,56,.85); color: #cfd5df;
+      width: 28px; height: 28px; border-radius: 4px; font-size: 16px; line-height: 1; cursor: pointer; }
+    #bdclose:hover { background: #303947; }
+    .intro { color: #cfd5df; font-size: 13px; line-height: 1.5; text-align: left; }
+    .intro .lead { margin: 0 0 10px; }
+    .intro .ilist { margin: 0 0 10px; padding-left: 18px; }
+    .intro .ilist li { margin: 4px 0; }
+    .intro .how { margin: 0 0 4px; color: #9aa4b2; }
+    .intro b { color: #f0a830; }
     .gbtn { background-image: url(assets/btn-green.png); border-color: #26401d; }
     .graybtn { background-image: url(assets/btn-gray.png); border-color: #333; }
     .gbtn:hover, .graybtn:hover { filter: brightness(1.12); }
@@ -100,7 +111,7 @@
     .sb td { padding: 9px 4px; text-align: center; color: #cfd5df; font-weight: 600; border-bottom: 1px solid rgba(43,52,68,.5); }
     .sb td.lft { text-align: left; }
     .sb tr.me td { background: rgba(240,168,48,.10); }
-    .sb .tg { color: #f0a830; font-weight: 800; }
+    .tg { color: #f0a830; font-weight: 800; }
     .sb td.pos { color: #5ea637; font-weight: 800; }
     .sb td.neg { color: #c9453a; font-weight: 800; }
     .ractions { display: flex; gap: 8px; margin-top: auto; }
@@ -123,6 +134,7 @@
 </head>
 <body>
   <div class="backdrop"></div>
+  <button id="bdclose" title="Fechar" onclick="closePanel()">&times;</button>
   <div class="card" id="card">
     <header>
       <h1>Partida <b>Competitiva</b></h1>
@@ -146,6 +158,7 @@
 
     var state = "";        // estado atual renderizado
     var username = "…";
+    var mytag = null;      // tag do clã do jogador logado (null = sem clã)
     var closing = false;
     var view = "home";     // sub-tela quando idle: "home" | "board" (classificação)
     var renderedKey = null;
@@ -153,10 +166,12 @@
     var foundEndsAt = 0, searchMs0 = 0, searchT0 = 0, enterSent = false;
     var lastDynShown = -1, lastCardCls = "";
 
-    api("GET", "/ranked/whoami", null, function (st, d) { if (st === 200 && d && d.username) { username = d.username; touchWho(); } });
-    function touchWho() { var w = document.getElementById("who"); if (w) w.innerHTML = username; }
+    api("GET", "/ranked/whoami", null, function (st, d) { if (st === 200 && d && d.username) { username = d.username; mytag = d.tag || null; touchWho(); } });
+    function touchWho() { var w = document.getElementById("who"); if (w) w.innerHTML = nameTag(username, mytag); }
 
     function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+    // Nome do jogador com a tag do clã na frente (se houver): "[TAG] Nick".
+    function nameTag(name, tag) { return (tag ? '<span class="tg">[' + esc(tag) + '] </span>' : '') + esc(name); }
 
     // Constrói a tela do estado (só quando o estado MUDA); valores dinâmicos são atualizados no updateDyn.
     function build(s) {
@@ -174,7 +189,7 @@
         html += '<div class="hero" style="gap:4px">';
         html += '<div class="mmrbig" id="mmr">' + (s.mmr || 0) + '</div><div class="mmrlbl">SEU MMR</div>';
         html += '<div class="pill card">XP/BP · CTF 1v1</div>';
-        html += '<div class="who" id="who">' + esc(username) + '</div></div>';
+        html += '<div class="who" id="who">' + nameTag(username, mytag) + '</div></div>';
         html += '<button class="gbtn wide" onclick="onSearchClick()">Buscar Partida</button>';
         html += '<button class="graybtn wide" style="margin-top:8px" onclick="goBoard()">Classificação</button>';
         html += '<div id="errmsg" class="errmsg"></div>';
@@ -272,7 +287,7 @@
         for (var i = 0; i < d.top.length; i++) {
           var p = d.top[i];
           var me = (p.username === username) ? " me" : "";
-          h += '<div class="lbrow' + me + '"><span class="lbrank">' + (i + 1) + '</span><span class="lbname">' + esc(p.username) + '</span><span class="lbmmr">' + p.mmr + '</span></div>';
+          h += '<div class="lbrow' + me + '"><span class="lbrank">' + (i + 1) + '</span><span class="lbname">' + nameTag(p.username, p.tag) + '</span><span class="lbmmr">' + p.mmr + '</span></div>';
         }
         el.innerHTML = h;
       });
@@ -282,7 +297,9 @@
 
     // modo demo p/ inspecionar layout no navegador: /panel/?demo=result (ou ?demo=found)
     var demo = qs("demo");
-    if (demo === "result") {
+    if (qs("intro") === "1") {
+      showIntro();
+    } else if (demo === "result") {
       render({ state: "result", mmr: 1016, result: { outcome: "win", mmrAfter: 1016, rank: 3, total: 42, you: { nick: "Danlino", tag: "LT", flags: 7, kills: 9, deaths: 4, delta: 16 }, opp: { nick: "Adversario", tag: null, flags: 5, kills: 6, deaths: 9, delta: -16 } } });
     } else if (demo === "found") {
       render({ state: "found", mmr: 1000, opponent: "Adversario", countdownMs: 10000 });
@@ -304,6 +321,26 @@
     function showError(msg) { var e = document.getElementById("errmsg"); if (e) e.innerHTML = esc(msg); }
     function playAgain() { state = ""; api("POST", "/ranked/enqueue", null, function () { poll(); }); }
     function exitRanked() { api("POST", "/ranked/dismiss", null, function () { closePanel(); }); }
+
+    // Modal informativo mostrado no login: explica a Ranqueada e como acessá-la. Sem polling.
+    function showIntro() {
+      // conteúdo solto (sem card/header); o fechar fica no canto sup. direito do backdrop.
+      document.getElementById("card").className = "card bare";
+      document.getElementById("bdclose").style.display = "block";
+      var c = document.getElementById("content");
+      var h = "";
+      h += '<div class="intro">';
+      h += '<p class="lead">O modo <b>Ranqueada (XP/BP)</b> coloca você em duelos <b>1v1 de Captura de Bandeira</b> valendo pontos de <b>MMR</b>.</p>';
+      h += '<ul class="ilist">';
+      h += '<li><b>Vença</b> para subir de MMR — derrotas e abandonos fazem descer.</li>';
+      h += '<li>O <b>equipamento é travado</b>: entre com uma configuração válida de XP/BP.</li>';
+      h += '<li>Suba no <b>ranking</b> do modo e dispute o topo da tabela.</li>';
+      h += '</ul>';
+      h += '<p class="how">Para jogar, abra o painel pelo <b>botão de indicação</b> ou digite <b>/ranked</b> no chat.</p>';
+      h += '</div>';
+      h += '<button class="gbtn wide" onclick="closePanel()">Entendi</button>';
+      c.innerHTML = h;
+    }
   </script>
 </body>
 </html>

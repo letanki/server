@@ -74,9 +74,9 @@ export class ResourceServer {
     };
 
     // GET /ranked/whoami → identidade da sessão (prova a ponte autenticada)
-    this.app.get("/ranked/whoami", auth, (_req: Request, res: Response) => {
+    this.app.get("/ranked/whoami", auth, async (_req: Request, res: Response) => {
       const s = res.locals.session as PanelSession;
-      res.json({ username: s.username });
+      res.json({ username: s.username, tag: await this.matchmaking.getUserTag(s.userId) });
     });
 
     // GET /ranked/status → estado atual do jogador na fila/partida
