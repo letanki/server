@@ -118,7 +118,7 @@ function modeStatsOf(user: UserDocument): RankedModeStats {
 }
 
 /** Mapas sorteados a cada partida ranqueada 1v1. Todos suportam CTF e têm bandeiras nos dados gerados. */
-const RANKED_MAPS = ["map_sandbox", "map_zone", "map_station"] as const;
+const RANKED_MAPS = ["map_sandbox", "map_zone", "map_station", "map_sandal", "map_dualiti", "map_garder"] as const;
 const pickRankedMap = (): string => RANKED_MAPS[Math.floor(Math.random() * RANKED_MAPS.length)];
 
 function rankedBattleSettings(): IBattleCreationSettings {
