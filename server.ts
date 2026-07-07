@@ -1,3 +1,4 @@
+import "dotenv/config"; // DEVE ser o primeiro import: carrega o .env ANTES de qualquer módulo que leia process.env no load (ex.: constants.ts lê WEBPANEL_URL).
 import { DEFAULT_PORT } from "@/config/constants";
 import { DebugConsole } from "@/console/debug.console";
 import { ConfigService } from "@/core/config/config.service";
@@ -25,11 +26,8 @@ import { RankService } from "@/shared/services/rank.service";
 import { UserService } from "@/shared/services/user.service";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
-
-dotenv.config();
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : DEFAULT_PORT;
 
