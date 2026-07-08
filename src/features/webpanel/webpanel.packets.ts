@@ -14,6 +14,8 @@ export interface IWebPanelConfig {
   /** Se true, x/y/w/h são PORCENTAGENS (0-100) do palco; a view acompanha o resize da janela.
    *  Em qualquer modo, x<0 centraliza X e y<0 centraliza Y. Em px, w<=0/h<=0 = tela cheia. */
   pct?: boolean;
+  /** Se true, o cliente DESCARTA a view (fechamento dirigido pelo servidor) e ignora url/tamanho. */
+  close?: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export class OpenWebPanel extends BasePacket {
   public x: number;
   public y: number;
   public pct: boolean;
+  public close: boolean;
 
   constructor(cfg: IWebPanelConfig) {
     super();
@@ -43,6 +46,7 @@ export class OpenWebPanel extends BasePacket {
     this.x = cfg.x ?? -1;
     this.y = cfg.y ?? -1;
     this.pct = cfg.pct ?? false;
+    this.close = cfg.close ?? false;
   }
 
   /** Convenience: the default panel (URL/size from config, centered). */
@@ -73,6 +77,7 @@ export class OpenWebPanel extends BasePacket {
       w: this.width,
       h: this.height,
       pct: this.pct,
+      close: this.close,
     });
     const writer = new BufferWriter();
     writer.writeInt32BE(0); // referredUsers count (unused)

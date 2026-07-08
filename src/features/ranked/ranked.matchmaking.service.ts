@@ -4,7 +4,7 @@ import { BattleService } from "@/features/battle/battle.service";
 import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import { ChatHistory } from "@/features/chat/chat.packets";
 import { UnloadGaragePacket } from "@/features/garage/garage.packets";
-import { repositionWebPanel, sendWebPanel } from "@/features/webpanel/webpanel.service";
+import { closeWebPanel, repositionWebPanel, sendWebPanel } from "@/features/webpanel/webpanel.service";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import User, { RankedModeStats, UserDocument } from "@/shared/models/user.model";
@@ -380,6 +380,9 @@ export class RankedMatchmakingService implements RankedObserver {
         // Todos prontos: o cronômetro do round só começa a valer agora — reseta para o tempo cheio
         // (mesmo efeito do comando /time), para ninguém perder segundos esperando o outro carregar.
         this.server.battleService.setRoundTimeLeft(battle, battle.settings.timeLimitInSec);
+        // FECHAMENTO autoritativo do painel no gatilho do spawn: garante que o widget "Buscando"/"Encontrada"
+        // suma ao entrar na partida mesmo se o JS do painel estiver travado (Stage3D em produção).
+        for (const c of clients) if (c) closeWebPanel(c);
         logger.info(`[ranked] todos prontos na partida ${match.matchId}: liberando o primeiro spawn simultâneo e resetando o tempo do round.`);
         return clients as GameClient[];
     }

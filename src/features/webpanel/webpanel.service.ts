@@ -36,3 +36,13 @@ export function sendWebPanel(client: PanelClient, overrides: Partial<IWebPanelCo
 export function repositionWebPanel(client: PanelClient, cfg: Partial<IWebPanelConfig>): void {
   client.sendPacket(OpenWebPanel.default(withToken(client, cfg)));
 }
+
+/**
+ * Fecha (descarta) o painel web do cliente de forma AUTORITATIVA pelo servidor. Diferente do fechamento
+ * pelo HTML (que depende do JS do painel rodando), isso funciona mesmo se a StageWebView estiver com os
+ * timers estarvados durante a batalha (Stage3D) — o caso em que o widget "Buscando" travava em produção.
+ * No-op no cliente se não houver painel aberto.
+ */
+export function closeWebPanel(client: PanelClient): void {
+  client.sendPacket(OpenWebPanel.default({ close: true }));
+}

@@ -69,12 +69,21 @@ const OPEN_BODY =
       getlocal0
       pushscope
 
-      ; cfg = JSON.parse(param2)   — {url, x, y, w, h, pct}
+      ; cfg = JSON.parse(param2)   — {url, x, y, w, h, pct, close}
       getlex              ${JSONC}
       getlocal2
       callproperty        ${PUB('parse')}, 1
       coerce              ${OBJECT}
       setlocal 5
+
+      ; se cfg.close for verdadeiro -> descarta a view e sai (FECHAMENTO dirigido pelo servidor).
+      ; Funciona exista ou não o painel; roda ANTES do exists-check para não cair no resize-only.
+      getlocal 5
+      getproperty         ${PUB('close')}
+      iffalse             LnoClose
+      ${DISPOSE}
+      returnvoid
+     LnoClose:
 
       ; guarda a spec (x,y,w,h como int; pct como Boolean) p/ recalcular no resize
       getlocal0
