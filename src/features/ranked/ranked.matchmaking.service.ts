@@ -536,6 +536,16 @@ export class RankedMatchmakingService implements RankedObserver {
         return { rank: higher + 1, mmr, total };
     }
 
+    /** Espelha os stats do modo no doc EM MEMÓRIA da sessão online (se houver), para que um save() posterior
+     *  de um client.user obsoleto (ex.: sessão que relogou) não reverta o MMR gravado atomicamente. */
+    private _mirrorRankedStats(username: string, stats: RankedModeStats): void {
+        const client = this.server.findClientByUsername(username);
+        if (!client?.user) return;
+        if (!client.user.rankedModes) client.user.rankedModes = new Map();
+        client.user.rankedModes.set(MODE_KEY, stats);
+        client.user.markModified("rankedModes");
+    }
+
     /**
      * Elo (K=32). `kind="winloss"`: aId=vencedor, bId=perdedor (isAbandon → +abandons no perdedor).
      * `kind="draw"`: score 0.5 para ambos (sem win/loss). Retorna o delta de cada (a e b) para a UI.
@@ -570,11 +580,17 @@ export class RankedMatchmakingService implements RankedObserver {
             sb.currentStreak = sb.currentStreak <= 0 ? sb.currentStreak - 1 : -1;
             if (isAbandon) sb.abandons += 1;
         }
-        a.rankedModes.set(MODE_KEY, sa);
-        b.rankedModes.set(MODE_KEY, sb);
-        a.markModified("rankedModes");
-        b.markModified("rankedModes");
-        await Promise.all([a.save(), b.save()]);
+        // Persiste ATÔMICO (só o subcampo rankedModes.<modo>) em vez de save() do doc inteiro. Um jogador
+        // que RELOGOU tem um client.user obsoleto (MMR antigo, carregado no relogin); um save() posterior
+        // desse doc obsoleto reverteria o MMR recém-gravado. O updateOne com $set no subcampo é imune a
+        // esse clobber. Além disso, ESPELHAMOS no doc em memória das sessões online (mesmo padrão dos stats)
+        // para que memória e banco fiquem consistentes e a UI leia o valor certo.
+        await Promise.all([
+            User.updateOne({ _id: aId }, { $set: { [`rankedModes.${MODE_KEY}`]: sa } }),
+            User.updateOne({ _id: bId }, { $set: { [`rankedModes.${MODE_KEY}`]: sb } }),
+        ]);
+        this._mirrorRankedStats(a.username, sa);
+        this._mirrorRankedStats(b.username, sb);
         const [tagA, tagB] = await Promise.all([this.server.clanService.getTagForUser(a), this.server.clanService.getTagForUser(b)]);
         logger.info(`[ranked] Elo(${MODE_KEY}): ${a.username} ${am}→${sa.mmr} (${da >= 0 ? "+" : ""}${da}) | ${b.username} ${bm}→${sb.mmr} (${db >= 0 ? "+" : ""}${db})${isAbandon ? " [W.O.]" : ""}`);
         return {
