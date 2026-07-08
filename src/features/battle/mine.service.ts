@@ -1,20 +1,20 @@
+import { hullCollision } from "@/generated/hullCollision";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
-import { hullCollision } from "@/generated/hullCollision";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import logger from "@/utils/logger";
-import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
+import { Battle, BattleMode } from "./battle.model";
+import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 import { CollisionService } from "./collision.service";
 import { CombatService } from "./combat.service";
-import { ActivateMinePacket, DetonateMinePacket, PutMinePacket, RemoveMinesPacket } from "./battle.packets";
 
 const MINE_ARM_DELAY_MS = 1000; // a placed mine becomes armed (able to trigger) this long after placement
 // Server-side floor between two mine placements by the same player. Parkour has NO reactivation cooldown
 // (that's its whole mine difference), so a hacked/lagged client could machine-gun mines; any placement
 // packet arriving sooner than this after the last EXECUTED one is silently dropped. The clock only
-// advances on execution: e.g. drops at 0/50/100/150ms → the 0ms and 150ms ones place, the middle two don't.
-const MINE_PLACE_MIN_INTERVAL_MS = 150;
+// advances on execution: e.g. drops at 0/50/80ms → the 0ms and 80ms ones place, the middle two don't.
+const MINE_PLACE_MIN_INTERVAL_MS = 80;
 // A mine fires when a tank is physically ON it — its REAL hull collision box (per-hull, oriented by the tank
 // yaw; the same boxes CtfService uses for flag pickup) covers the mine. A fixed centre-radius was wrong: a
 // wasp's nose is 231 units from centre, so driving the tip onto a mine never got the centre close enough.
