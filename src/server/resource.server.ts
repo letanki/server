@@ -1,5 +1,5 @@
 import { CLAN_LOGO_DIR, CLAN_LOGO_ROUTE } from "@/features/clan/clan.logo";
-import { RankedMatchmakingService } from "@/features/ranked/ranked.matchmaking.service";
+import { RankedMatchmakingService, RankedModeId } from "@/features/ranked/ranked.matchmaking.service";
 import { PanelSession, resolvePanelToken } from "@/features/webpanel/webpanel.auth";
 import logger from "@/utils/logger";
 import cors from "cors";
@@ -79,16 +79,16 @@ export class ResourceServer {
       res.json({ username: s.username, tag: await this.matchmaking.getUserTag(s.userId) });
     });
 
-    // GET /ranked/status → estado atual do jogador na fila/partida
-    this.app.get("/ranked/status", auth, async (_req: Request, res: Response) => {
+    // GET /ranked/status → estado atual do jogador na fila/partida (?mode= define o MMR exibido no idle)
+    this.app.get("/ranked/status", auth, async (req: Request, res: Response) => {
       const s = res.locals.session as PanelSession;
-      res.json(await this.matchmaking.status(s.userId));
+      res.json(await this.matchmaking.status(s.userId, req.query.mode as RankedModeId));
     });
 
-    // POST /ranked/enqueue → entra na fila (modo XP/BP)
-    this.app.post("/ranked/enqueue", auth, async (_req: Request, res: Response) => {
+    // POST /ranked/enqueue → entra na fila do modo escolhido (body {mode: "1v1"|"2v2"})
+    this.app.post("/ranked/enqueue", auth, async (req: Request, res: Response) => {
       const s = res.locals.session as PanelSession;
-      const r = await this.matchmaking.enqueue(s.userId, s.username);
+      const r = await this.matchmaking.enqueue(s.userId, s.username, (req.body?.mode as RankedModeId) ?? "1v1");
       res.status(r.ok ? 200 : 409).json(r);
     });
 
@@ -110,12 +110,13 @@ export class ResourceServer {
       res.json(this.matchmaking.dismissResult(s.userId));
     });
 
-    // GET /ranked/leaderboard → classificação do modo (top N) + posição do jogador
-    this.app.get("/ranked/leaderboard", auth, async (_req: Request, res: Response) => {
+    // GET /ranked/leaderboard?mode= → classificação do modo (top N) + posição do jogador
+    this.app.get("/ranked/leaderboard", auth, async (req: Request, res: Response) => {
       const s = res.locals.session as PanelSession;
+      const mode = (req.query.mode as RankedModeId) ?? "1v1";
       const [top, you] = await Promise.all([
-        this.matchmaking.getLeaderboard(20),
-        this.matchmaking.getPlayerPosition(s.userId),
+        this.matchmaking.getLeaderboard(mode, 20),
+        this.matchmaking.getPlayerPosition(s.userId, mode),
       ]);
       res.json({ top, you });
     });

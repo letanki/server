@@ -150,13 +150,24 @@
     .span3 { -ms-flex: 3 1 0%; flex: 3 1 0%; min-width: 0; }
     .span6 { -ms-flex: 6 1 0%; flex: 6 1 0%; min-width: 0; }
     .col { min-width: 0; display: flex; flex-direction: column;
-      background: rgba(255,255,255,.02); border: 1px solid #2b3444; border-radius: 4px; padding: 14px; }
+      background-color: rgba(255,255,255,.02); border: 1px solid #2b3444; border-radius: 4px; padding: 14px;
+      /* imagem de fundo dos cards laterais (mineiros/ranking): esticada, sem repetir */
+      background-image: url(assets/background-card.png); background-repeat: no-repeat; background-size: 100% 100%; }
     .col.center { align-items: center; justify-content: center; text-align: center; gap: 6px; background: none; border: 0; padding: 6px 4px; }
     .colhd { font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #cfd5df;
       text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #2b3444; }
     .colbody { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
     .col.center .gbtn { margin-top: 12px; width: auto; min-width: 240px; padding-left: 32px; padding-right: 32px; } /* não esticar: largura pelo conteúdo */
-  </style>
+
+    /* seletor de modo (1v1/2v2) no centro + abas do ranking à direita: botões segmentados */
+    .modesel { display: flex; gap: 6px; margin: 2px 0; }
+    .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
+    .modesel button, .tabs button { appearance: none; cursor: pointer; font-weight: 700; font-size: 12px;
+      letter-spacing: .5px; text-transform: uppercase; padding: 6px 16px; border-radius: 4px;
+      border: 1px solid #2b3444; background: #1a2029; color: #8b93a7; }
+    .modesel button.on, .tabs button.on { background: rgba(240,168,48,.15); border-color: #f0a830; color: #f0a830; }
+    .sb tr.sbsep td { padding: 0; border-bottom: 2px solid #3a465a; }
+</style>
 </head>
 <body>
   <div class="backdrop"></div>
@@ -187,6 +198,8 @@
     var mytag = null;      // tag do clã do jogador logado (null = sem clã)
     var closing = false;
     var view = "home";     // sub-tela quando idle: "home" | "board" (classificação)
+    var selectedMode = "1v1"; // modo que o jogador vai JOGAR (dirige MMR exibido + Buscar)
+    var boardMode = "1v1";    // aba do ranking à direita (independente do modo de jogo)
     var renderedKey = null;
     // timer da "partida encontrada" roda 100% no painel; o servidor só entra/cancela
     var foundEndsAt = 0, searchStartAt = 0, enterSent = false;
@@ -218,13 +231,25 @@
         html += '<div class="cols3">';
         html += '<div class="col span3"><div class="colhd">Maiores Mineiros</div><div id="minerlist" class="colbody">carregando…</div></div>';
         html += '<div class="col center span6">';
-        html += '<div class="mmrbig" id="mmr">' + (s.mmr || 0) + '</div><div class="mmrlbl">SEU MMR</div>';
-        html += '<div class="pill card">XP/BP · CTF 1v1</div>';
+        html += '<div class="mmrbig" id="mmr">' + (s.mmr || 0) + '</div><div class="mmrlbl">SEU MMR · ' + selectedMode.toUpperCase() + '</div>';
+        html += '<div class="pill card">XP/BP · CTF</div>';
+        // seletor do modo que vai jogar
+        html += '<div class="modesel">'
+          + '<button class="' + (selectedMode === "1v1" ? "on" : "") + '" onclick="setMode(\'1v1\')">1v1</button>'
+          + '<button class="' + (selectedMode === "2v2" ? "on" : "") + '" onclick="setMode(\'2v2\')">2v2</button>'
+          + '</div>';
         html += '<div class="who" id="who">' + nameTag(username, mytag) + '</div>';
         html += '<button class="gbtn wide" onclick="onSearchClick()">Buscar Partida</button>';
         html += '<div id="errmsg" class="errmsg"></div>';
         html += '</div>';
-        html += '<div class="col span3"><div class="colhd">Ranking XP/BP</div><div id="mmrlist" class="colbody">carregando…</div></div>';
+        html += '<div class="col span3">'
+          + '<div class="colhd">Ranking XP/BP</div>'
+          + '<div class="tabs">'
+          + '<button id="tab1v1" class="' + (boardMode === "1v1" ? "on" : "") + '" onclick="setBoardMode(\'1v1\')">1v1</button>'
+          + '<button id="tab2v2" class="' + (boardMode === "2v2" ? "on" : "") + '" onclick="setBoardMode(\'2v2\')">2v2</button>'
+          + '</div>'
+          + '<div id="mmrlist" class="colbody">carregando…</div>'
+          + '</div>';
         html += '</div>';
         c.innerHTML = html;
         loadMiners();
@@ -252,13 +277,15 @@
 
     function buildResult(r) {
       var title = r.outcome === "win" ? "Vitória" : r.outcome === "loss" ? "Derrota" : "Empate";
+      var you = r.youTeam || [], opp = r.oppTeam || [];
       var h = "";
       h += '<div class="rtitle ' + r.outcome + '">' + title + '</div>';
-      h += '<div class="score"><span class="' + r.outcome + '">' + r.you.flags + '</span><i>×</i><span>' + r.opp.flags + '</span></div>';
-      h += '<div class="rmmr">MMR ' + r.mmrAfter + (r.rank ? ' · <b>#' + r.rank + '</b> de ' + r.total : '') + '</div>';
+      h += '<div class="score"><span class="' + r.outcome + '">' + r.youFlags + '</span><i>×</i><span>' + r.oppFlags + '</span></div>';
+      h += '<div class="rmmr">' + (r.mode ? r.mode.toUpperCase() + ' · ' : '') + 'MMR ' + r.mmrAfter + (r.rank ? ' · <b>#' + r.rank + '</b> de ' + r.total : '') + '</div>';
       h += '<table class="sb"><thead><tr><th class="lft">Jogador</th><th>K</th><th>D</th><th>K/D</th><th>Pts</th></tr></thead><tbody>';
-      h += sbRow(r.you, true);
-      h += sbRow(r.opp, false);
+      for (var i = 0; i < you.length; i++) h += sbRow(you[i], you[i].nick === username);
+      if (opp.length) h += '<tr class="sbsep"><td colspan="5"></td></tr>'; // separa os dois times
+      for (var j = 0; j < opp.length; j++) h += sbRow(opp[j], false);
       h += '</tbody></table>';
       h += '<div class="ractions"><button class="gbtn" onclick="playAgain()">Jogar Novamente</button>';
       h += '<button class="graybtn" onclick="exitRanked()">Sair</button></div>';
@@ -309,6 +336,8 @@
     setInterval(localTick, 200);
 
     function render(s) {
+      // Alinha o modo selecionado ao da partida/fila/resultado, para "Jogar Novamente" e o MMR baterem.
+      if (s.mode && (s.state !== "idle")) selectedMode = s.mode;
       // resultado = solto (sem card); busca/encontrada = compact (widget pequeno); resto = card normal.
       var cc = (s.state === "result") ? "card bare" : (s.state === "searching" || s.state === "found") ? "card compact" : "card";
       if (s.state === "idle" && view === "home") cc = "card bare home3"; // home = 3 colunas soltas direto no backdrop (sem moldura)
@@ -337,10 +366,21 @@
       });
     }
     function loadMmrBoard() {
-      api("GET", "/ranked/leaderboard", null, function (st, d) {
+      api("GET", "/ranked/leaderboard?mode=" + boardMode, null, function (st, d) {
         var el = document.getElementById("mmrlist"); if (!el) return;
         el.innerHTML = (st === 200 && d) ? lbRows(d.top, "mmr") : "erro ao carregar.";
       });
+    }
+    // Troca o modo que vai JOGAR: reconstrói a home (re-busca o status com o novo modo → novo MMR).
+    function setMode(m) { if (m === selectedMode) return; selectedMode = m; renderedKey = null; poll(); }
+    // Troca a aba do RANKING (independente): só recarrega a lista, sem reconstruir a tela.
+    function setBoardMode(m) {
+      if (m === boardMode) return;
+      boardMode = m;
+      var a = document.getElementById("tab1v1"), b = document.getElementById("tab2v2");
+      if (a) a.className = boardMode === "1v1" ? "on" : "";
+      if (b) b.className = boardMode === "2v2" ? "on" : "";
+      loadMmrBoard();
     }
 
     function goBoard() { view = "board"; renderedKey = null; poll(); }
@@ -367,7 +407,7 @@
     // página, que reautentica pelo token da URL e volta a sincronizar com o estado real do servidor.
     var pollFails = 0;
     function poll() {
-      api("GET", "/ranked/status", null, function (st, d) {
+      api("GET", "/ranked/status?mode=" + selectedMode, null, function (st, d) {
         if (st === 200 && d) { pollFails = 0; render(d); return; }
         if (++pollFails >= 5 && !closing) { pollFails = 0; location.reload(); }
       });
@@ -378,9 +418,11 @@
     if (qs("intro") === "1") {
       showIntro();
     } else if (demo === "result") {
-      render({ state: "result", mmr: 1016, result: { outcome: "win", mmrAfter: 1016, rank: 3, total: 42, you: { nick: "Danlino", tag: "LT", flags: 7, kills: 9, deaths: 4, delta: 16 }, opp: { nick: "Adversario", tag: null, flags: 5, kills: 6, deaths: 9, delta: -16 } } });
+      render({ state: "result", mmr: 1016, mode: "2v2", result: { outcome: "win", mode: "2v2", mmrAfter: 1016, rank: 3, total: 42, youFlags: 7, oppFlags: 5,
+        youTeam: [{ nick: "Danlino", tag: "LT", kills: 9, deaths: 4, delta: 16 }, { nick: "Aliado", tag: "LT", kills: 6, deaths: 5, delta: 16 }],
+        oppTeam: [{ nick: "Adversario", tag: null, kills: 6, deaths: 9, delta: -16 }, { nick: "Rival", tag: "XP", kills: 4, deaths: 7, delta: -16 }] } });
     } else if (demo === "found") {
-      render({ state: "found", mmr: 1000, opponent: "Adversario", countdownMs: 10000 });
+      render({ state: "found", mmr: 1000, mode: "2v2", opponents: ["Adversario", "Rival"], countdownMs: 10000 });
     } else {
       setInterval(poll, 1500);
       poll();
@@ -388,7 +430,7 @@
 
     function onSearchClick() {
       if (state === "idle") {
-        api("POST", "/ranked/enqueue", null, function (st, d) {
+        api("POST", "/ranked/enqueue", { mode: selectedMode }, function (st, d) {
           if (d && d.ok === false) { showError(d.error || "Não foi possível buscar partida."); return; }
           poll();
         });
@@ -397,7 +439,7 @@
       }
     }
     function showError(msg) { var e = document.getElementById("errmsg"); if (e) e.innerHTML = esc(msg); }
-    function playAgain() { state = ""; api("POST", "/ranked/enqueue", null, function () { poll(); }); }
+    function playAgain() { state = ""; api("POST", "/ranked/enqueue", { mode: selectedMode }, function () { poll(); }); }
     function exitRanked() { api("POST", "/ranked/dismiss", null, function () { closePanel(); }); }
 
     // Modal informativo mostrado no login: explica a Ranqueada e como acessá-la. Sem polling.

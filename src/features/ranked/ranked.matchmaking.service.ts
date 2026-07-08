@@ -22,12 +22,31 @@ const ELO_K = 32;
 const MMR_FLOOR = 100;
 
 /**
- * Núcleo do matchmaking competitivo (Partida Competitiva, XP/BP 1v1).
- * FATIA 2: fila + pareamento FIFO + CRIAÇÃO da batalha XP/BP privada e entrada forçada dos dois.
- * Falta (próximas fatias): Elo no fim + limpeza do match no fim/saída, W.O. por abandono, leaderboard.
+ * Núcleo do matchmaking competitivo (Partida Competitiva, XP/BP). Suporta VÁRIOS modos (1v1, 2v2), cada um
+ * com fila própria e MMR próprio (chave em user.rankedModes). O 2v2 é SOLO QUEUE: 4 avulsos entram e o
+ * servidor divide em 2 times equilibrados por MMR. O Elo é por MÉDIA de time (cada membro ganha/perde o
+ * mesmo delta). Fila FIFO → pareamento → batalha XP/BP privada → entrada forçada → Elo no fim + W.O. por
+ * abandono + leaderboard por modo.
  */
 // idle → searching → found (10s) → active (na batalha) → result (tela de vitória/derrota) → idle
 export type RankedState = "idle" | "searching" | "found" | "active" | "result";
+
+/** Modos ranqueados. `key` = chave dos stats em user.rankedModes (MMR próprio por modo). `teamSize` = por
+ *  time (1v1 = 1/time, 2v2 = 2/time). O 1v1 mantém a chave "xpbp" (dados legados); novos modos = novas chaves. */
+export type RankedModeId = "1v1" | "2v2";
+interface RankedModeDef {
+    id: RankedModeId;
+    key: string;
+    teamSize: number;
+    label: string;
+}
+const MODES: Record<RankedModeId, RankedModeDef> = {
+    "1v1": { id: "1v1", key: "xpbp", teamSize: 1, label: "1v1" },
+    "2v2": { id: "2v2", key: "xpbp_2v2", teamSize: 2, label: "2v2" },
+};
+const MODE_IDS = Object.keys(MODES) as RankedModeId[];
+const LEGACY_MODE_KEY = "xpbp"; // só o 1v1 herda os stats do campo legado `ranked`
+const isModeId = (v: unknown): v is RankedModeId => typeof v === "string" && v in MODES;
 
 interface PlayerRef {
     userId: string;
@@ -35,13 +54,16 @@ interface PlayerRef {
     mmr: number;
 }
 interface QueueEntry extends PlayerRef {
+    mode: RankedModeId;
     enqueuedAt: number;
 }
 interface RankedMatch {
     matchId: string;
     battleId: string;
-    a: PlayerRef;
-    b: PlayerRef;
+    mode: RankedModeDef;
+    /** Time 0 (vermelho, scoreRed) e time 1 (azul, scoreBlue). teamSize jogadores cada. */
+    teamA: PlayerRef[];
+    teamB: PlayerRef[];
     createdAt: number;
     state: "found" | "active";
     /** Fallback: se nenhum painel confirmar a entrada, o servidor entra sozinho após SAFETY_MS. */
@@ -52,37 +74,35 @@ interface RankedMatch {
     firstSpawnDone?: boolean;
 }
 
-interface PlayerBoard {
-    flags: number;
-    kills: number;
-    deaths: number;
-}
 /** Uma linha do placar (um jogador) na tela de resultado. */
 interface ResultSide {
     nick: string;
     tag: string | null; // tag do clã (sem colchetes)
     kills: number;
     deaths: number;
-    flags: number;
     delta: number; // ± pontos de MMR ganhos/perdidos por ESTE jogador
 }
 /** Resultado guardado por jogador após a partida (para a tela de resultado no painel). TTL curto. */
 interface RankedResult {
     outcome: "win" | "loss" | "draw";
+    mode: RankedModeId;
     mmrAfter: number;
     rank: number | null; // posição no ranking do modo após a partida (null = não classificado)
     total: number; // total de classificados no modo
-    you: ResultSide;
-    opp: ResultSide;
+    youFlags: number; // bandeiras do time do jogador
+    oppFlags: number; // bandeiras do time adversário
+    youTeam: ResultSide[]; // o time do jogador (inclui ele)
+    oppTeam: ResultSide[]; // o time adversário
     expiresAt: number;
 }
 
 export interface RankedStatus {
     state: RankedState;
     mmr: number;
-    mode: "xpbp";
+    mode: RankedModeId;
     queuedForMs?: number;
-    opponent?: string;
+    /** Em found/active: nomes do time adversário. */
+    opponents?: string[];
     matchId?: string;
     /** Em "found": duração total da contagem (ms) — o PAINEL conta localmente. */
     countdownMs?: number;
@@ -94,8 +114,6 @@ const PAIR_INTERVAL_MS = 2000;
 const FOUND_COUNTDOWN_MS = 10000; // "Partida encontrada": 10s de contagem (rodada no PAINEL)
 const SAFETY_ENTER_MS = 13000; // fallback do servidor: entra sozinho se o painel não confirmar
 const RANKED_MODE = EquipmentConstraintsMode.HORNET_WASP_RAILGUN;
-/** Chave do modo ranqueado atual (stats são POR MODO em user.rankedModes). Novos modos = novas chaves. */
-const MODE_KEY = "xpbp";
 // Painel: pequeno no topo-centro durante busca/encontrada; fullscreen no idle/resultado.
 const PANEL_SMALL = { width: 280, height: 124, x: -1, y: 44 };
 const PANEL_FULL = { width: 0, height: 0, x: -1, y: -1 };
@@ -103,33 +121,33 @@ const PANEL_FULL = { width: 0, height: 0, x: -1, y: -1 };
 function defaultStats(): RankedModeStats {
     return { mmr: 1000, wins: 0, losses: 0, abandons: 0, games: 0, currentStreak: 0 };
 }
-/** Stats do modo atual num doc de user; semeia de rankedModes, ou do legado `ranked`, ou default. */
-function modeStatsOf(user: UserDocument): RankedModeStats {
+/** Stats de UM modo num doc de user; semeia de rankedModes[key], do legado `ranked` (só o 1v1) ou default. */
+function modeStatsOf(user: UserDocument, key: string): RankedModeStats {
     if (!user.rankedModes) user.rankedModes = new Map();
-    let s = user.rankedModes.get(MODE_KEY);
+    let s = user.rankedModes.get(key);
     if (!s) {
-        const legacy: any = user.ranked;
+        const legacy: any = key === LEGACY_MODE_KEY ? user.ranked : null;
         s = legacy && legacy.games > 0
             ? { mmr: legacy.mmr ?? 1000, wins: legacy.wins ?? 0, losses: legacy.losses ?? 0, abandons: legacy.abandons ?? 0, games: legacy.games ?? 0, currentStreak: legacy.currentStreak ?? 0 }
             : defaultStats();
-        user.rankedModes.set(MODE_KEY, s);
+        user.rankedModes.set(key, s);
     }
     return s as RankedModeStats;
 }
 
-/** Mapas sorteados a cada partida ranqueada 1v1. Todos suportam CTF e têm bandeiras nos dados gerados. */
+/** Mapas sorteados a cada partida ranqueada. Todos suportam CTF e têm bandeiras nos dados gerados. */
 const RANKED_MAPS = ["map_sandbox", "map_zone", "map_station", "map_sandal", "map_dualiti", "map_garder"] as const;
 const pickRankedMap = (): string => RANKED_MAPS[Math.floor(Math.random() * RANKED_MAPS.length)];
 
-function rankedBattleSettings(): IBattleCreationSettings {
+function rankedBattleSettings(mode: RankedModeDef): IBattleCreationSettings {
     return {
-        name: "Partida Competitiva",
+        name: `Partida Competitiva ${mode.label}`,
         privateBattle: true, // sistema/oculta da lista pública
         proBattle: false,
-        battleMode: BattleMode.CTF, // 1v1 CTF: vence quem fizer 7 bandeiras (ou o maior em 10 min)
-        mapId: pickRankedMap(), // sorteia sandbox/zona/estação a cada partida
+        battleMode: BattleMode.CTF, // CTF: vence quem fizer 7 bandeiras (ou o maior em 10 min)
+        mapId: pickRankedMap(), // sorteia o mapa a cada partida
         mapTheme: MapTheme.SUMMER,
-        maxPeopleCount: 1, // CTF é POR TIME: 1 por time = 1v1 (2 daria 2v2)
+        maxPeopleCount: mode.teamSize, // CTF é POR TIME: teamSize por time (1 = 1v1, 2 = 2v2)
         minRank: 1,
         maxRank: 31,
         timeLimitInSec: 600, // 10 minutos
@@ -167,6 +185,23 @@ export class RankedMatchmakingService implements RankedObserver {
         this.timer = setInterval(() => this.tick(), PAIR_INTERVAL_MS);
     }
 
+    // ---- helpers de time --------------------------------------------------
+    private allPlayers(m: RankedMatch): PlayerRef[] {
+        return [...m.teamA, ...m.teamB];
+    }
+    private sideOfUser(m: RankedMatch, userId: string): "A" | "B" | null {
+        if (m.teamA.some((p) => p.userId === userId)) return "A";
+        if (m.teamB.some((p) => p.userId === userId)) return "B";
+        return null;
+    }
+    private opponentsOf(m: RankedMatch, userId: string): PlayerRef[] {
+        const side = this.sideOfUser(m, userId);
+        return side === "A" ? m.teamB : side === "B" ? m.teamA : [];
+    }
+    private usernameInMatch(m: RankedMatch, userId: string): string | null {
+        return this.allPlayers(m).find((p) => p.userId === userId)?.username ?? null;
+    }
+
     /** true se o jogador está buscando (fila) ou numa partida encontrada/ativa do ranqueado. */
     public isBusy(userId: string): boolean {
         return this.queue.has(userId) || this.matchByUser.has(userId);
@@ -187,11 +222,17 @@ export class RankedMatchmakingService implements RankedObserver {
         }
     }
 
-    public async enqueue(userId: string, username: string): Promise<{ ok: boolean; error?: string }> {
+    public async enqueue(userId: string, username: string, modeId: RankedModeId): Promise<{ ok: boolean; error?: string }> {
         this.resultByUser.delete(userId); // "Jogar novamente" dispensa a tela de resultado
+        if (!isModeId(modeId)) return { ok: false, error: "Modo inválido." };
         // O motivo da falha é devolvido no {error} e exibido pelo PRÓPRIO painel (já aberto), não no chat.
         if (this.matchByUser.has(userId)) return { ok: false, error: "Você já está em uma partida." };
-        if (this.queue.has(userId)) return { ok: true }; // idempotente
+        const existing = this.queue.get(userId);
+        if (existing) {
+            // Já na fila: se trocou de modo, re-enfileira no novo; senão idempotente.
+            if (existing.mode !== modeId) this.queue.set(userId, { ...existing, mode: modeId, enqueuedAt: Date.now() });
+            return { ok: true };
+        }
 
         // Não deixa buscar enquanto está numa batalha (casual): deve sair antes.
         const client = this.server.findClientByUsername(username);
@@ -204,9 +245,9 @@ export class RankedMatchmakingService implements RankedObserver {
         const equipError = BattleService.getEquipmentConstraintError(RANKED_MODE, user);
         if (equipError) return { ok: false, error: equipError };
 
-        const mmr = modeStatsOf(user).mmr;
-        this.queue.set(userId, { userId, username, mmr, enqueuedAt: Date.now() });
-        logger.info(`[ranked] ${username} entrou na fila (mmr ${mmr}). fila=${this.queue.size}`);
+        const mmr = modeStatsOf(user, MODES[modeId].key).mmr;
+        this.queue.set(userId, { userId, username, mmr, mode: modeId, enqueuedAt: Date.now() });
+        logger.info(`[ranked] ${username} entrou na fila ${modeId} (mmr ${mmr}). fila=${this.queue.size}`);
         if (client) repositionWebPanel(client, PANEL_SMALL); // encolhe o painel p/ o widget de busca
         return { ok: true };
     }
@@ -216,10 +257,19 @@ export class RankedMatchmakingService implements RankedObserver {
     public cancel(userId: string): { ok: boolean } {
         const q = this.queue.get(userId);
         const m = this.matchByUser.get(userId);
-        const username = q?.username ?? (m ? (m.a.userId === userId ? m.a.username : m.b.username) : null);
+        const username = q?.username ?? (m ? this.usernameInMatch(m, userId) : null);
         this.queue.delete(userId);
         if (m) {
-            if (m.state === "found") this.server.lobbyService.removeBattle(m.battleId);
+            // Cancelar durante a contagem só é permitido no "found"; apaga a batalha e devolve os OUTROS à fila.
+            if (m.state === "found") {
+                this.server.lobbyService.removeBattle(m.battleId);
+                for (const p of this.allPlayers(m)) {
+                    if (p.userId === userId) continue;
+                    this.queue.set(p.userId, { userId: p.userId, username: p.username, mmr: p.mmr, mode: m.mode.id, enqueuedAt: Date.now() });
+                    const c = this.server.findClientByUsername(p.username);
+                    if (c) repositionWebPanel(c, PANEL_SMALL); // voltam a "buscando"
+                }
+            }
             this.clearMatch(m);
         }
         if (username) {
@@ -229,7 +279,7 @@ export class RankedMatchmakingService implements RankedObserver {
         return { ok: true };
     }
 
-    /** Painel confirmou o fim da contagem local → entra os dois na partida (idempotente). */
+    /** Painel confirmou o fim da contagem local → entra todos na partida (idempotente). */
     public playerReady(userId: string): { ok: boolean } {
         const m = this.matchByUser.get(userId);
         if (m && m.state === "found") void this.enterNow(m);
@@ -241,8 +291,7 @@ export class RankedMatchmakingService implements RankedObserver {
             clearTimeout(m.safetyTimer);
             m.safetyTimer = null;
         }
-        this.matchByUser.delete(m.a.userId);
-        this.matchByUser.delete(m.b.userId);
+        for (const p of this.allPlayers(m)) this.matchByUser.delete(p.userId);
         this.matchByBattleId.delete(m.battleId);
     }
 
@@ -252,80 +301,99 @@ export class RankedMatchmakingService implements RankedObserver {
         return { ok: true };
     }
 
-    public async status(userId: string): Promise<RankedStatus> {
+    /** `requestedMode` só é usado no estado idle (MMR do modo que o painel está exibindo). */
+    public async status(userId: string, requestedMode: RankedModeId = "1v1"): Promise<RankedStatus> {
         const result = this.resultByUser.get(userId);
         if (result) {
             if (result.expiresAt < Date.now()) {
                 this.resultByUser.delete(userId);
             } else {
                 const { expiresAt, ...data } = result;
-                return { state: "result", mmr: result.mmrAfter, mode: "xpbp", result: data };
+                return { state: "result", mmr: result.mmrAfter, mode: result.mode, result: data };
             }
         }
         const match = this.matchByUser.get(userId);
         if (match) {
-            const me = match.a.userId === userId ? match.a : match.b;
-            const opp = match.a.userId === userId ? match.b : match.a;
+            const me = this.allPlayers(match).find((p) => p.userId === userId)!;
+            const opponents = this.opponentsOf(match, userId).map((p) => p.username);
             if (match.state === "found") {
-                return { state: "found", mmr: me.mmr, mode: "xpbp", opponent: opp.username, matchId: match.matchId, countdownMs: FOUND_COUNTDOWN_MS };
+                return { state: "found", mmr: me.mmr, mode: match.mode.id, opponents, matchId: match.matchId, countdownMs: FOUND_COUNTDOWN_MS };
             }
-            return { state: "active", mmr: me.mmr, mode: "xpbp", opponent: opp.username, matchId: match.matchId };
+            return { state: "active", mmr: me.mmr, mode: match.mode.id, opponents, matchId: match.matchId };
         }
         const q = this.queue.get(userId);
-        if (q) return { state: "searching", mmr: q.mmr, mode: "xpbp", queuedForMs: Date.now() - q.enqueuedAt };
+        if (q) return { state: "searching", mmr: q.mmr, mode: q.mode, queuedForMs: Date.now() - q.enqueuedAt };
+        const mode = isModeId(requestedMode) ? requestedMode : "1v1";
         const u: any = await User.findById(userId).select("rankedModes ranked").lean();
-        const mmr = u?.rankedModes?.[MODE_KEY]?.mmr ?? (u?.ranked?.games > 0 ? u.ranked.mmr : 1000);
-        return { state: "idle", mmr, mode: "xpbp" };
+        const key = MODES[mode].key;
+        const legacyMmr = mode === "1v1" && u?.ranked?.games > 0 ? u.ranked.mmr : 1000;
+        const mmr = u?.rankedModes?.[key]?.mmr ?? legacyMmr;
+        return { state: "idle", mmr, mode };
     }
 
     private tick(): void {
-        // Remove da fila quem caiu (offline) e mantém só os online, mais antigos primeiro.
-        const waiting: QueueEntry[] = [];
+        // Remove da fila quem caiu (offline) e agrupa por modo, mais antigos primeiro.
+        const waitingByMode: Record<RankedModeId, QueueEntry[]> = { "1v1": [], "2v2": [] };
         for (const [id, e] of this.queue) {
-            if (this.server.findClientByUsername(e.username)) waiting.push(e);
+            if (this.server.findClientByUsername(e.username)) waitingByMode[e.mode].push(e);
             else this.queue.delete(id);
         }
-        waiting.sort((a, b) => a.enqueuedAt - b.enqueuedAt);
 
-        while (waiting.length >= 2) {
-            const a = waiting.shift()!;
-            const b = waiting.shift()!;
-            this.queue.delete(a.userId);
-            this.queue.delete(b.userId);
-            this.createMatch(a, b);
+        for (const modeId of MODE_IDS) {
+            const mode = MODES[modeId];
+            const need = mode.teamSize * 2;
+            const waiting = waitingByMode[modeId].sort((a, b) => a.enqueuedAt - b.enqueuedAt);
+            while (waiting.length >= need) {
+                const group = waiting.splice(0, need);
+                for (const g of group) this.queue.delete(g.userId);
+                this.createMatch(mode, group);
+            }
         }
     }
 
+    /** Divide os `entries` em 2 times equilibrados por MMR (snake: maior+menor de um lado). */
+    private balanceTeams(entries: QueueEntry[]): { teamA: PlayerRef[]; teamB: PlayerRef[] } {
+        const sorted = [...entries].sort((a, b) => b.mmr - a.mmr);
+        const teamA: PlayerRef[] = [];
+        const teamB: PlayerRef[] = [];
+        sorted.forEach((e, i) => {
+            const ref: PlayerRef = { userId: e.userId, username: e.username, mmr: e.mmr };
+            // snake em blocos de 4: A pega índices 0 e 3 (maior+menor), B pega 1 e 2 (do meio) → médias próximas.
+            (i % 4 === 0 || i % 4 === 3 ? teamA : teamB).push(ref);
+        });
+        return { teamA, teamB };
+    }
+
     /** Pareou: cria a batalha e entra no estado "found" (tela de 10s). NÃO entra na batalha ainda. */
-    private createMatch(a: QueueEntry, b: QueueEntry): void {
-        const ca = this.server.findClientByUsername(a.username);
-        const cb = this.server.findClientByUsername(b.username);
-        if (!ca?.user || !cb?.user) {
-            const alive = ca?.user ? a : cb?.user ? b : null;
-            if (alive) this.queue.set(alive.userId, { ...alive, enqueuedAt: Date.now() });
+    private createMatch(mode: RankedModeDef, entries: QueueEntry[]): void {
+        const online = entries.map((e) => ({ e, c: this.server.findClientByUsername(e.username) }));
+        if (online.some((x) => !x.c?.user)) {
+            // Alguém caiu entre o pareamento e agora: devolve os online à fila para reparear.
+            for (const { e, c } of online) if (c?.user) this.queue.set(e.userId, { ...e, enqueuedAt: Date.now() });
             return;
         }
 
-        const battle = this.server.lobbyService.createBattle(rankedBattleSettings());
+        const { teamA, teamB } = this.balanceTeams(entries);
+        const battle = this.server.lobbyService.createBattle(rankedBattleSettings(mode));
         const match: RankedMatch = {
-            matchId: `${a.userId}-${b.userId}-${Date.now()}`,
+            matchId: `${mode.id}-${entries.map((e) => e.userId).join("-")}-${Date.now()}`,
             battleId: battle.battleId,
-            a: { userId: a.userId, username: a.username, mmr: a.mmr },
-            b: { userId: b.userId, username: b.username, mmr: b.mmr },
+            mode,
+            teamA,
+            teamB,
             createdAt: Date.now(),
             state: "found",
             safetyTimer: null,
         };
-        this.matchByUser.set(a.userId, match);
-        this.matchByUser.set(b.userId, match);
+        for (const p of this.allPlayers(match)) this.matchByUser.set(p.userId, match);
         this.matchByBattleId.set(battle.battleId, match);
         // A contagem roda no PAINEL; o servidor só entra quando um painel confirmar (playerReady) OU,
         // como fallback, após SAFETY_ENTER_MS caso nenhum painel avise.
         match.safetyTimer = setTimeout(() => void this.enterNow(match), SAFETY_ENTER_MS);
-        logger.info(`[ranked] partida encontrada ${match.matchId}: ${a.username} x ${b.username}`);
+        logger.info(`[ranked] partida ${mode.id} encontrada ${match.matchId}: [${teamA.map((p) => p.username).join(",")}] x [${teamB.map((p) => p.username).join(",")}]`);
     }
 
-    /** Entra os DOIS na batalha (idempotente via state). a = time 0 (vermelho), b = time 1 (azul). */
+    /** Entra TODOS na batalha (idempotente via state). teamA = time 0 (vermelho), teamB = time 1 (azul). */
     private async enterNow(match: RankedMatch): Promise<void> {
         if (match.state !== "found") return; // já entrou (idempotente)
         match.state = "active";
@@ -334,18 +402,22 @@ export class RankedMatchmakingService implements RankedObserver {
             match.safetyTimer = null;
         }
 
-        const ca = this.server.findClientByUsername(match.a.username);
-        const cb = this.server.findClientByUsername(match.b.username);
-        if (!ca?.user || !cb?.user) {
-            logger.warn(`[ranked] partida ${match.matchId} abortada: um jogador saiu durante a contagem.`);
-            this.server.lobbyService.removeBattle(match.battleId);
-            this.clearMatch(match);
-            return;
+        const entries: { client: GameClient; teamIndex: number }[] = [];
+        for (const [teamIndex, team] of [match.teamA, match.teamB].entries()) {
+            for (const p of team) {
+                const c = this.server.findClientByUsername(p.username);
+                if (!c?.user) {
+                    logger.warn(`[ranked] partida ${match.matchId} abortada: ${p.username} saiu durante a contagem.`);
+                    this.server.lobbyService.removeBattle(match.battleId);
+                    this.clearMatch(match);
+                    return;
+                }
+                entries.push({ client: c, teamIndex });
+            }
         }
 
         try {
-            await this.forceEnter(ca, match.battleId, 0);
-            await this.forceEnter(cb, match.battleId, 1);
+            for (const { client, teamIndex } of entries) await this.forceEnter(client, match.battleId, teamIndex);
         } catch (error: any) {
             logger.error(`[ranked] falha ao iniciar partida ${match.matchId}: ${error?.message}`);
             this.server.lobbyService.removeBattle(match.battleId);
@@ -369,7 +441,7 @@ export class RankedMatchmakingService implements RankedObserver {
         if (!match || match.state !== "active" || match.firstSpawnDone) return null;
 
         (match.readyToPlace ??= new Set()).add(user.id);
-        const expected = [match.a, match.b];
+        const expected = this.allPlayers(match);
         const clients = expected.map((p) => this.server.findClientByUsername(p.username));
         const allReady = expected.every((p) => match.readyToPlace!.has(p.userId)) && clients.every((c) => !!c?.user);
         if (!allReady) {
@@ -404,73 +476,145 @@ export class RankedMatchmakingService implements RankedObserver {
 
     // ===================== resolução da partida (RankedObserver) =====================
 
-    /** Fim do round: resolve pelo placar CTF. a = vermelho (scoreRed), b = azul (scoreBlue). */
+    /** Fim do round: resolve pelo placar CTF (teamA=scoreRed, teamB=scoreBlue). */
     public onRoundFinished(battle: Battle): void {
         const match = this.matchByBattleId.get(battle.battleId);
         if (!match) return;
-        const board = this.captureBoards(battle, match);
         this.clearMatch(match); // remove já para não processar duas vezes (o round pode reiniciar)
-        void this.resolve(match, battle, board, null);
+        void this.resolve(match, battle, null);
     }
 
-    /** Saída/abandono (leave OU não reconectar no grace): W.O. — quem saiu perde, o outro vence. */
+    /** Saída/abandono (leave OU não reconectar no grace): W.O. — o time de quem saiu perde. */
     public onPlayerLeft(battle: Battle, userId: string): void {
         const match = this.matchByBattleId.get(battle.battleId);
         if (!match) return;
-        if (match.a.userId !== userId && match.b.userId !== userId) return; // ignora terceiros
-        const board = this.captureBoards(battle, match);
+        if (this.sideOfUser(match, userId) === null) return; // ignora terceiros
         this.clearMatch(match);
-        void this.resolve(match, battle, board, userId);
+        void this.resolve(match, battle, userId);
     }
 
-    /** Placar de cada lado no momento da resolução. a = vermelho (scoreRed), b = azul (scoreBlue). */
-    private captureBoards(battle: Battle, match: RankedMatch): { a: PlayerBoard; b: PlayerBoard } {
-        const ca = this.server.findClientByUsername(match.a.username);
-        const cb = this.server.findClientByUsername(match.b.username);
-        return {
-            a: { flags: battle.scoreRed ?? 0, kills: ca?.kills ?? 0, deaths: ca?.deaths ?? 0 },
-            b: { flags: battle.scoreBlue ?? 0, kills: cb?.kills ?? 0, deaths: cb?.deaths ?? 0 },
-        };
+    /** kills/deaths de um jogador AGORA (do client vivo, se houver). */
+    private playerKD(username: string): { kills: number; deaths: number } {
+        const c = this.server.findClientByUsername(username);
+        return { kills: c?.kills ?? 0, deaths: c?.deaths ?? 0 };
     }
 
-    /** Decide vencedor (placar, ou W.O. se abandonerId), aplica Elo, guarda o resultado dos dois e encerra. */
-    private async resolve(match: RankedMatch, battle: Battle, board: { a: PlayerBoard; b: PlayerBoard }, abandonerId: string | null): Promise<void> {
-        const nameOf = (uid: string): string => (match.a.userId === uid ? match.a.username : match.b.username);
-        const boardOf = (uid: string): PlayerBoard => (match.a.userId === uid ? board.a : board.b);
+    /**
+     * Decide o time vencedor (placar, ou W.O. se abandonerId → o time do abandonador perde), aplica Elo por
+     * média de time, guarda o resultado de cada jogador e encerra a batalha.
+     */
+    private async resolve(match: RankedMatch, battle: Battle, abandonerId: string | null): Promise<void> {
+        const flagsA = battle.scoreRed ?? 0;
+        const flagsB = battle.scoreBlue ?? 0;
 
-        // Determina os IDs para o Elo (eloA=vencedor no winloss / a no empate) e o desfecho de cada um.
-        const isDraw = !abandonerId && board.a.flags === board.b.flags;
-        let eloA: string, eloB: string, kind: "winloss" | "draw";
-        if (isDraw) {
-            eloA = match.a.userId; eloB = match.b.userId; kind = "draw";
+        let winner: "A" | "B" | null;
+        if (abandonerId) {
+            winner = this.sideOfUser(match, abandonerId) === "A" ? "B" : "A"; // o time do abandonador perde
         } else {
-            eloA = abandonerId ? (match.a.userId === abandonerId ? match.b.userId : match.a.userId) : board.a.flags > board.b.flags ? match.a.userId : match.b.userId;
-            eloB = eloA === match.a.userId ? match.b.userId : match.a.userId; kind = "winloss";
+            winner = flagsA > flagsB ? "A" : flagsB > flagsA ? "B" : null; // null = empate
         }
 
-        const d = await this.applyElo(eloA, eloB, kind, !!abandonerId);
-        if (d) {
-            const deltaOf = (uid: string) => (uid === eloA ? d.a.delta : d.b.delta);
-            const afterOf = (uid: string) => (uid === eloA ? d.a.after : d.b.after);
-            const tagOf = (uid: string) => (uid === eloA ? d.tagA : d.tagB);
-            const outcomeOf = (uid: string): "win" | "loss" | "draw" => (kind === "draw" ? "draw" : uid === eloA ? "win" : "loss");
-            const sideOf = (uid: string): ResultSide => {
-                const bd = boardOf(uid);
-                return { nick: nameOf(uid), tag: tagOf(uid), kills: bd.kills, deaths: bd.deaths, flags: bd.flags, delta: deltaOf(uid) };
-            };
-            const sideA = sideOf(match.a.userId);
-            const sideB = sideOf(match.b.userId);
-            const [pa, pb] = await Promise.all([this.getPlayerPosition(match.a.userId), this.getPlayerPosition(match.b.userId)]);
-            this.storeResult(match.a.userId, outcomeOf(match.a.userId), afterOf(match.a.userId), sideA, sideB, pa);
-            this.storeResult(match.b.userId, outcomeOf(match.b.userId), afterOf(match.b.userId), sideB, sideA, pb);
+        const elo = await this.applyTeamElo(match, winner, !!abandonerId);
+        if (elo.size > 0) {
+            const rowsOf = (team: PlayerRef[]): ResultSide[] =>
+                team.map((p) => {
+                    const kd = this.playerKD(p.username);
+                    const e = elo.get(p.userId);
+                    return { nick: p.username, tag: e?.tag ?? null, kills: kd.kills, deaths: kd.deaths, delta: e?.delta ?? 0 };
+                });
+            const rowsA = rowsOf(match.teamA);
+            const rowsB = rowsOf(match.teamB);
+
+            const positions = new Map<string, { rank: number; total: number } | null>();
+            await Promise.all(this.allPlayers(match).map(async (p) => positions.set(p.userId, await this.getPlayerPosition(p.userId, match.mode.id))));
+
+            for (const p of this.allPlayers(match)) {
+                const side = this.sideOfUser(match, p.userId)!;
+                const e = elo.get(p.userId)!;
+                this.resultByUser.set(p.userId, {
+                    outcome: winner === null ? "draw" : side === winner ? "win" : "loss",
+                    mode: match.mode.id,
+                    mmrAfter: e.after,
+                    rank: positions.get(p.userId)?.rank ?? null,
+                    total: positions.get(p.userId)?.total ?? 0,
+                    youFlags: side === "A" ? flagsA : flagsB,
+                    oppFlags: side === "A" ? flagsB : flagsA,
+                    youTeam: side === "A" ? rowsA : rowsB,
+                    oppTeam: side === "A" ? rowsB : rowsA,
+                    expiresAt: Date.now() + 5 * 60 * 1000,
+                });
+            }
         }
-        logger.info(`[ranked] partida ${match.matchId}: ${isDraw ? `empate (${board.a.flags}x${board.b.flags})` : `${nameOf(eloA)} venceu${abandonerId ? " (W.O.)" : ` ${Math.max(board.a.flags, board.b.flags)}x${Math.min(board.a.flags, board.b.flags)}`}`}.`);
+        logger.info(`[ranked] partida ${match.matchId}: ${winner === null ? `empate (${flagsA}x${flagsB})` : `time ${winner} venceu (${Math.max(flagsA, flagsB)}x${Math.min(flagsA, flagsB)})${abandonerId ? " [W.O.]" : ""}`}.`);
 
         await this.finalize(match, battle);
     }
 
-    private storeResult(userId: string, outcome: "win" | "loss" | "draw", mmrAfter: number, you: ResultSide, opp: ResultSide, pos: { rank: number; total: number } | null): void {
-        this.resultByUser.set(userId, { outcome, mmrAfter, rank: pos?.rank ?? null, total: pos?.total ?? 0, you, opp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    /**
+     * Elo por MÉDIA DE TIME (K=32): a expectativa de cada jogador usa a média de MMR do seu time vs a do
+     * adversário, então os dois membros de um time ganham/perdem o MESMO delta. `winner=null` = empate
+     * (0.5 pra ambos). Persiste ATÔMICO por jogador (só rankedModes.<modo>) + espelha na sessão online — um
+     * doc obsoleto (sessão que relogou) não consegue reverter. Retorna por userId: after/delta/outcome/tag.
+     */
+    private async applyTeamElo(
+        match: RankedMatch,
+        winner: "A" | "B" | null,
+        isAbandon: boolean
+    ): Promise<Map<string, { after: number; delta: number; tag: string | null }>> {
+        const key = match.mode.key;
+        const out = new Map<string, { after: number; delta: number; tag: string | null }>();
+
+        const players = this.allPlayers(match);
+        const docs = new Map<string, UserDocument>();
+        await Promise.all(players.map(async (p) => { const u = await User.findById(p.userId); if (u) docs.set(p.userId, u); }));
+
+        const mmrBefore = (p: PlayerRef): number => (docs.has(p.userId) ? modeStatsOf(docs.get(p.userId)!, key).mmr : p.mmr);
+        const mean = (arr: PlayerRef[]): number => arr.reduce((s, p) => s + mmrBefore(p), 0) / Math.max(1, arr.length);
+        const avgA = mean(match.teamA);
+        const avgB = mean(match.teamB);
+
+        for (const p of players) {
+            const u = docs.get(p.userId);
+            if (!u) continue;
+            const st = modeStatsOf(u, key);
+            const before = st.mmr;
+            const side = this.sideOfUser(match, p.userId)!;
+            const myAvg = side === "A" ? avgA : avgB;
+            const oppAvg = side === "A" ? avgB : avgA;
+            const exp = 1 / (1 + Math.pow(10, (oppAvg - myAvg) / 400));
+            const score = winner === null ? 0.5 : side === winner ? 1 : 0;
+            const delta = Math.round(ELO_K * (score - exp));
+
+            st.mmr = Math.max(MMR_FLOOR, before + delta);
+            st.games += 1;
+            if (winner !== null) {
+                if (side === winner) {
+                    st.wins += 1;
+                    st.currentStreak = st.currentStreak >= 0 ? st.currentStreak + 1 : 1;
+                } else {
+                    st.losses += 1;
+                    st.currentStreak = st.currentStreak <= 0 ? st.currentStreak - 1 : -1;
+                    if (isAbandon) st.abandons += 1;
+                }
+            }
+
+            await User.updateOne({ _id: p.userId }, { $set: { [`rankedModes.${key}`]: st } });
+            this._mirrorRankedStats(p.username, st, key);
+            const tag = await this.server.clanService.getTagForUser(u);
+            out.set(p.userId, { after: st.mmr, delta: st.mmr - before, tag });
+            logger.info(`[ranked] Elo(${key}): ${u.username} ${before}→${st.mmr} (${delta >= 0 ? "+" : ""}${delta})${isAbandon ? " [W.O.]" : ""}`);
+        }
+        return out;
+    }
+
+    /** Espelha os stats do modo no doc EM MEMÓRIA da sessão online (se houver), para que um save() posterior
+     *  de um client.user obsoleto (ex.: sessão que relogou) não reverta o MMR gravado atomicamente. */
+    private _mirrorRankedStats(username: string, stats: RankedModeStats, key: string): void {
+        const client = this.server.findClientByUsername(username);
+        if (!client?.user) return;
+        if (!client.user.rankedModes) client.user.rankedModes = new Map();
+        client.user.rankedModes.set(key, stats);
+        client.user.markModified("rankedModes");
     }
 
     // ===================== classificação / leaderboard (por modo) =====================
@@ -494,19 +638,32 @@ export class RankedMatchmakingService implements RankedObserver {
         return map;
     }
 
-    /** Top jogadores do modo por MMR (só quem já jogou ≥1 partida — a entrada só existe após o Elo). */
-    public async getLeaderboard(limit: number = 20): Promise<Array<{ username: string; tag: string | null; mmr: number; wins: number; losses: number; games: number }>> {
-        const key = `rankedModes.${MODE_KEY}.mmr`;
+    /** Top jogadores de UM modo por MMR (só quem já jogou ≥1 partida — a entrada só existe após o Elo). */
+    public async getLeaderboard(modeId: RankedModeId, limit: number = 20): Promise<Array<{ username: string; tag: string | null; mmr: number; wins: number; losses: number; games: number }>> {
+        const modeKey = MODES[isModeId(modeId) ? modeId : "1v1"].key;
+        const key = `rankedModes.${modeKey}.mmr`;
         const users: any[] = await User.find({ [key]: { $exists: true } })
             .sort({ [key]: -1 })
             .limit(limit)
-            .select(`username clanId rankedModes.${MODE_KEY}`)
+            .select(`username clanId rankedModes.${modeKey}`)
             .lean();
         const tags = await this.tagsByClanId(users.map((u) => String(u.clanId ?? "")));
         return users.map((u) => {
-            const s = u.rankedModes?.[MODE_KEY] ?? {};
+            const s = u.rankedModes?.[modeKey] ?? {};
             return { username: u.username, tag: u.clanId ? tags.get(String(u.clanId)) ?? null : null, mmr: s.mmr ?? 1000, wins: s.wins ?? 0, losses: s.losses ?? 0, games: s.games ?? 0 };
         });
+    }
+
+    /** Posição do jogador no ranking de UM modo (1 = topo) + total de classificados. */
+    public async getPlayerPosition(userId: string, modeId: RankedModeId): Promise<{ rank: number; mmr: number; total: number } | null> {
+        const modeKey = MODES[isModeId(modeId) ? modeId : "1v1"].key;
+        const key = `rankedModes.${modeKey}.mmr`;
+        const u: any = await User.findById(userId).select(`rankedModes.${modeKey}`).lean();
+        const mmr = u?.rankedModes?.[modeKey]?.mmr;
+        const total = await User.countDocuments({ [key]: { $exists: true } });
+        if (mmr == null) return null; // ainda não classificado
+        const higher = await User.countDocuments({ [key]: { $gt: mmr } });
+        return { rank: higher + 1, mmr, total };
     }
 
     /** Top mineiros do servidor: quem mais colocou minas no total (stats.counters.mines_used global). */
@@ -525,90 +682,14 @@ export class RankedMatchmakingService implements RankedObserver {
         }));
     }
 
-    /** Posição do jogador no ranking do modo (1 = topo) + total de classificados. */
-    public async getPlayerPosition(userId: string): Promise<{ rank: number; mmr: number; total: number } | null> {
-        const key = `rankedModes.${MODE_KEY}.mmr`;
-        const u: any = await User.findById(userId).select(`rankedModes.${MODE_KEY}`).lean();
-        const mmr = u?.rankedModes?.[MODE_KEY]?.mmr;
-        const total = await User.countDocuments({ [key]: { $exists: true } });
-        if (mmr == null) return null; // ainda não classificado
-        const higher = await User.countDocuments({ [key]: { $gt: mmr } });
-        return { rank: higher + 1, mmr, total };
-    }
-
-    /** Espelha os stats do modo no doc EM MEMÓRIA da sessão online (se houver), para que um save() posterior
-     *  de um client.user obsoleto (ex.: sessão que relogou) não reverta o MMR gravado atomicamente. */
-    private _mirrorRankedStats(username: string, stats: RankedModeStats): void {
-        const client = this.server.findClientByUsername(username);
-        if (!client?.user) return;
-        if (!client.user.rankedModes) client.user.rankedModes = new Map();
-        client.user.rankedModes.set(MODE_KEY, stats);
-        client.user.markModified("rankedModes");
-    }
-
-    /**
-     * Elo (K=32). `kind="winloss"`: aId=vencedor, bId=perdedor (isAbandon → +abandons no perdedor).
-     * `kind="draw"`: score 0.5 para ambos (sem win/loss). Retorna o delta de cada (a e b) para a UI.
-     */
-    private async applyElo(
-        aId: string,
-        bId: string,
-        kind: "winloss" | "draw",
-        isAbandon: boolean
-    ): Promise<{ a: { before: number; after: number; delta: number }; b: { before: number; after: number; delta: number }; tagA: string | null; tagB: string | null } | null> {
-        const [a, b] = await Promise.all([User.findById(aId), User.findById(bId)]);
-        if (!a || !b) return null;
-        const sa = modeStatsOf(a);
-        const sb = modeStatsOf(b);
-
-        const am = sa.mmr;
-        const bm = sb.mmr;
-        const expA = 1 / (1 + Math.pow(10, (bm - am) / 400));
-        const scoreA = kind === "draw" ? 0.5 : 1;
-        const scoreB = kind === "draw" ? 0.5 : 0;
-        const da = Math.round(ELO_K * (scoreA - expA));
-        const db = Math.round(ELO_K * (scoreB - (1 - expA)));
-
-        sa.mmr = Math.max(MMR_FLOOR, am + da);
-        sb.mmr = Math.max(MMR_FLOOR, bm + db);
-        sa.games += 1;
-        sb.games += 1;
-        if (kind === "winloss") {
-            sa.wins += 1;
-            sa.currentStreak = sa.currentStreak >= 0 ? sa.currentStreak + 1 : 1;
-            sb.losses += 1;
-            sb.currentStreak = sb.currentStreak <= 0 ? sb.currentStreak - 1 : -1;
-            if (isAbandon) sb.abandons += 1;
-        }
-        // Persiste ATÔMICO (só o subcampo rankedModes.<modo>) em vez de save() do doc inteiro. Um jogador
-        // que RELOGOU tem um client.user obsoleto (MMR antigo, carregado no relogin); um save() posterior
-        // desse doc obsoleto reverteria o MMR recém-gravado. O updateOne com $set no subcampo é imune a
-        // esse clobber. Além disso, ESPELHAMOS no doc em memória das sessões online (mesmo padrão dos stats)
-        // para que memória e banco fiquem consistentes e a UI leia o valor certo.
-        await Promise.all([
-            User.updateOne({ _id: aId }, { $set: { [`rankedModes.${MODE_KEY}`]: sa } }),
-            User.updateOne({ _id: bId }, { $set: { [`rankedModes.${MODE_KEY}`]: sb } }),
-        ]);
-        this._mirrorRankedStats(a.username, sa);
-        this._mirrorRankedStats(b.username, sb);
-        const [tagA, tagB] = await Promise.all([this.server.clanService.getTagForUser(a), this.server.clanService.getTagForUser(b)]);
-        logger.info(`[ranked] Elo(${MODE_KEY}): ${a.username} ${am}→${sa.mmr} (${da >= 0 ? "+" : ""}${da}) | ${b.username} ${bm}→${sb.mmr} (${db >= 0 ? "+" : ""}${db})${isAbandon ? " [W.O.]" : ""}`);
-        return {
-            a: { before: am, after: sa.mmr, delta: sa.mmr - am },
-            b: { before: bm, after: sb.mmr, delta: sb.mmr - bm },
-            tagA,
-            tagB,
-        };
-    }
-
     /** Encerra a partida: cancela o restart, ejeta todos para o lobby, APAGA a batalha e reabre o painel de resultado. */
     private async finalize(match: RankedMatch, battle: Battle): Promise<void> {
         battle.timers.clear("finish"); // cancela o restart automático do round
         battle.timers.clear("round");
-        await this.server.battleService.evacuateForRestart(battle); // ejeta os dois → lobby
+        await this.server.battleService.evacuateForRestart(battle); // ejeta todos → lobby
         this.server.lobbyService.removeBattle(battle.battleId); // apaga: ninguém entra mais
 
-        for (const p of [match.a, match.b]) {
+        for (const p of this.allPlayers(match)) {
             const client = this.server.findClientByUsername(p.username);
             if (client) sendWebPanel(client, { width: 0, height: 0 }, "ranked-result"); // reabre em tela cheia (resultado via /ranked/status)
         }
