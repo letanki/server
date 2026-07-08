@@ -209,6 +209,10 @@ export class BonusService {
     /** (Re)initializes the one-time buff seed queue and arms the seeding tick. The first tick fires after
      *  the mode's initial delay (esport ~0, default ~78s); it then re-arms at the mode's tick interval. */
     private _startBuffSeeding(battle: Battle): void {
+        // Guard no PONTO ÚNICO: startAutoSpawn E o re-seed do clearAll (restart de round) passam por aqui.
+        // Sem isso, o restart re-semeava os drops mesmo numa partida com bônus/suprimentos desativados
+        // (a config não some — era o clearAll que ignorava a flag).
+        if (battle.settings.withoutBonuses) return;
         const mode = MODE_TOKEN[battle.settings.battleMode];
         const regions = getMapBonusRegions(battle.mapResourceId);
         // Seed queue: regions that support this mode AND map to a SUPPLY/BUFF type. Crystal/gold regions
