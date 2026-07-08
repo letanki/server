@@ -194,9 +194,14 @@
     function qs(name) { var m = location.search.match(new RegExp("[?&]" + name + "=([^&]*)")); return m ? decodeURIComponent(m[1]) : ""; }
     var TOKEN = qs("token");
     function api(method, path, body, cb) {
+      var url = path + (path.indexOf("?") >= 0 ? "&" : "?") + "token=" + encodeURIComponent(TOKEN);
+      // IE11 (StageWebView) cacheia GET agressivamente → o poll de status devolveria SEMPRE a 1ª resposta
+      // ("idle") e o painel nunca sairia da home. Um param único por chamada quebra o cache.
+      if (method === "GET") url += "&_=" + Date.now();
       var xhr = new XMLHttpRequest();
-      xhr.open(method, path + (path.indexOf("?") >= 0 ? "&" : "?") + "token=" + encodeURIComponent(TOKEN), true);
+      xhr.open(method, url, true);
       xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.setRequestHeader("Cache-Control", "no-cache");
       xhr.onreadystatechange = function () { if (xhr.readyState !== 4) return; var d = null; try { d = JSON.parse(xhr.responseText); } catch (e) {} cb(xhr.status, d); };
       xhr.send(body ? JSON.stringify(body) : null);
     }
@@ -311,12 +316,11 @@
     // sincroniza SÓ o tempo de fila com o servidor (o timer do "found" é 100% local, ver build)
     function updateDyn(s) {
       var mmr = document.getElementById("mmr"); if (mmr && s.mmr != null) mmr.innerHTML = s.mmr;
-      if (s.state === "searching") {
-        // Ancora o INÍCIO da fila num timestamp local a partir do queuedForMs do servidor. Só re-ancora se
-        // divergir muito (>2s = re-fila real), NÃO a cada poll — senão a latência de rede faria o contador
-        // "pular pra trás" 1s a cada sincronização (13→12→13→12…). Assim ele sobe liso.
-        var cand = Date.now() - (s.queuedForMs || 0);
-        if (!searchStartAt || Math.abs(cand - searchStartAt) > 2000) searchStartAt = cand;
+      if (s.state === "searching" && !searchStartAt) {
+        // Ancora o INÍCIO da fila UMA ÚNICA vez (na 1ª sincronização), a partir do queuedForMs do servidor.
+        // Nunca re-ancora depois — assim o contador é imune a jitter/latência/reset do queuedForMs e sobe
+        // sempre liso. Um novo "Buscar" reseta searchStartAt=0 no build(), então a próxima busca re-ancora.
+        searchStartAt = Date.now() - (s.queuedForMs || 0);
       }
       localTick();
     }
@@ -440,14 +444,23 @@
       if (state === "idle") {
         api("POST", "/ranked/enqueue", { mode: selectedMode }, function (st, d) {
           if (d && d.ok === false) { showError(d.error || "Não foi possível buscar partida."); return; }
+          // Troca JÁ para o widget "Buscando" (a janela também encolhe) sem depender do round-trip do poll —
+          // no IE11 o poll pode demorar/vir de cache e o conteúdo ficaria preso na home dentro da janela pequena.
+          render({ state: "searching", mmr: 0, mode: selectedMode, queuedForMs: 0 });
           poll();
         });
       } else {
-        api("POST", "/ranked/cancel", null, function () { poll(); });
+        api("POST", "/ranked/cancel", null, function () { view = "home"; renderedKey = null; poll(); });
       }
     }
     function showError(msg) { var e = document.getElementById("errmsg"); if (e) e.innerHTML = esc(msg); }
-    function playAgain() { state = ""; api("POST", "/ranked/enqueue", { mode: selectedMode }, function () { poll(); }); }
+    function playAgain() {
+      state = "";
+      api("POST", "/ranked/enqueue", { mode: selectedMode }, function () {
+        render({ state: "searching", mmr: 0, mode: selectedMode, queuedForMs: 0 });
+        poll();
+      });
+    }
     function exitRanked() { api("POST", "/ranked/dismiss", null, function () { closePanel(); }); }
 
     // Modal informativo mostrado no login: explica a Ranqueada e como acessá-la. Sem polling.
