@@ -24,6 +24,24 @@ export function issuePanelToken(user: { id: string; username: string }): string 
     return token;
 }
 
+/**
+ * Retorna o token VÁLIDO que o usuário já tem (renovando a validade), ou emite um novo se não houver.
+ * Reusar o token é essencial: o painel é reaberto/redimensionado várias vezes (busca, cancelar, resultado),
+ * e uma página JÁ ABERTA continua usando o token que recebeu na URL. Se cada reabertura emitisse um token
+ * novo (revogando o antigo), a página aberta passaria a receber 401 e CONGELARIA — o conteúdo travava num
+ * estado e o tamanho da janela dessincronizava. Mantendo o MESMO token, a página nunca perde a sessão.
+ */
+export function getOrIssuePanelToken(user: { id: string; username: string }): string {
+    const now = Date.now();
+    for (const [tok, s] of sessions) {
+        if (s.userId === user.id && s.expiresAt >= now) {
+            s.expiresAt = now + TTL_MS; // renova a validade, mantém o mesmo token
+            return tok;
+        }
+    }
+    return issuePanelToken(user);
+}
+
 /** Resolve um token válido (não expirado) para a sessão, ou null. */
 export function resolvePanelToken(token: string | undefined | null): PanelSession | null {
     if (!token) return null;

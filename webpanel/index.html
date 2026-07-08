@@ -180,7 +180,7 @@
     var view = "home";     // sub-tela quando idle: "home" | "board" (classificação)
     var renderedKey = null;
     // timer da "partida encontrada" roda 100% no painel; o servidor só entra/cancela
-    var foundEndsAt = 0, searchMs0 = 0, searchT0 = 0, enterSent = false;
+    var foundEndsAt = 0, searchStartAt = 0, enterSent = false;
     var lastDynShown = -1, lastCardCls = "";
 
     api("GET", "/ranked/whoami", null, function (st, d) { if (st === 200 && d && d.username) { username = d.username; mytag = d.tag || null; touchWho(); } });
@@ -222,6 +222,7 @@
         loadMmrBoard();
         return;
       } else if (s.state === "searching") {
+        searchStartAt = 0; // nova busca: re-ancora no próximo updateDyn (evita herdar o tempo de uma fila anterior)
         html += '<div class="hero"><div class="htitle gold">Buscando Partida</div>';
         html += '<div class="count"><span id="dyn">0</span><span style="font-size:20px">s</span></div></div>';
         html += '<button class="graybtn wide" onclick="onSearchClick()">Cancelar</button>';
@@ -266,7 +267,13 @@
     // sincroniza SÓ o tempo de fila com o servidor (o timer do "found" é 100% local, ver build)
     function updateDyn(s) {
       var mmr = document.getElementById("mmr"); if (mmr && s.mmr != null) mmr.innerHTML = s.mmr;
-      if (s.state === "searching") { searchMs0 = s.queuedForMs || 0; searchT0 = Date.now(); }
+      if (s.state === "searching") {
+        // Ancora o INÍCIO da fila num timestamp local a partir do queuedForMs do servidor. Só re-ancora se
+        // divergir muito (>2s = re-fila real), NÃO a cada poll — senão a latência de rede faria o contador
+        // "pular pra trás" 1s a cada sincronização (13→12→13→12…). Assim ele sobe liso.
+        var cand = Date.now() - (s.queuedForMs || 0);
+        if (!searchStartAt || Math.abs(cand - searchStartAt) > 2000) searchStartAt = cand;
+      }
       localTick();
     }
     // Atualiza o número. Escreve no DOM SÓ quando o valor muda (1x/seg) — o motor IE da StageWebView
@@ -284,7 +291,7 @@
           if (!closing) { closing = true; setTimeout(closePanel, 300); }
         }
       } else if (state === "searching") {
-        val = Math.floor((searchMs0 + (Date.now() - searchT0)) / 1000);
+        val = searchStartAt ? Math.floor((Date.now() - searchStartAt) / 1000) : 0;
       } else {
         return;
       }
@@ -346,7 +353,16 @@
       });
     }
 
-    function poll() { api("GET", "/ranked/status", null, function (st, d) { if (st === 200 && d) render(d); }); }
+    // Rede de segurança: se o status falhar várias vezes seguidas (ex.: sessão dessincronizada → 401),
+    // o widget "Buscando"/"Encontrada" ficaria preso na tela mesmo já dentro da batalha. Recarregamos a
+    // página, que reautentica pelo token da URL e volta a sincronizar com o estado real do servidor.
+    var pollFails = 0;
+    function poll() {
+      api("GET", "/ranked/status", null, function (st, d) {
+        if (st === 200 && d) { pollFails = 0; render(d); return; }
+        if (++pollFails >= 5 && !closing) { pollFails = 0; location.reload(); }
+      });
+    }
 
     // modo demo p/ inspecionar layout no navegador: /panel/?demo=result (ou ?demo=found)
     var demo = qs("demo");
