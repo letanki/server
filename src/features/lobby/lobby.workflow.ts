@@ -124,13 +124,6 @@ export class LobbyWorkflow {
         await LobbyWorkflow.enterLobby(client, server);
         server.notifySubscribersOfStatusChange(user.username, true);
 
-        // Modal informativo (não fullscreen) explicando a Ranqueada e como acessá-la, a cada login no lobby.
-        sendWebPanel(
-            client,
-            { url: `${WEBPANEL.URL}?intro=1`, width: 460, height: 300, x: -1, y: -1 },
-            "ranked-intro"
-        );
-
         // Auto-open the daily-missions window if a mission completed while the player was away and they
         // haven't seen it yet (matches the official; getQuestsForUser then marks it viewed).
         if (server.questService.hasUnviewedCompletion(user)) {
@@ -160,6 +153,15 @@ export class LobbyWorkflow {
         const resourceIds: ResourceId[] = [];
         const dependencies = { resources: ResourceManager.getBulkResources(resourceIds) };
         client.sendPacket(new LoadDependencies(dependencies, CALLBACK.LOBBY_DATA));
+
+        // Modal informativo da Ranqueada: só na PRIMEIRA vez que o cliente chega ao lobby NESTA sessão.
+        // returnToLobby é o ponto único de chegada ao lobby (login→lobby via enterLobby, e sair da
+        // batalha/garagem→lobby), então reconectar direto na batalha não passa por aqui — e ao sair da
+        // batalha depois, este é o 1º acesso ao lobby da sessão e o modal aparece.
+        if (!client.rankedIntroShown) {
+            client.rankedIntroShown = true;
+            sendWebPanel(client, { url: `${WEBPANEL.URL}?intro=1`, width: 460, height: 300, x: -1, y: -1 }, "ranked-intro");
+        }
     }
 
     public static enterBattleLobbyView(client: GameClient, server: GameServer): void {

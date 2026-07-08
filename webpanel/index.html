@@ -3,14 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ranqueada</title>
   <style>
+    /* Windows com escala de tela (125%/150%) fazia o engine IE11 da StageWebView aplicar um "zoom" de
+       legibilidade, deixando o conteúdo grande demais e desalinhado só em ALGUNS usuários (os de alta-DPI).
+       @-ms-viewport=device-width desliga esse snap e força renderização 1:1. DEVE vir antes do resto. */
+    @-ms-viewport { width: device-width; }
+    @viewport { width: device-width; }
+
     /* Tema extraído do cliente: botões com textura escovada real (assets/btn-*.png),
        bandeiras CTF reais (assets/flag-*.png), fundo escuro, destaques em dourado/âmbar. */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       height: 100%; width: 100%; overflow: hidden; color: #dfe3ea;
       font-family: "Segoe UI", Tahoma, sans-serif; -webkit-user-select: none; user-select: none;
+      /* impede o IE de inflar o tamanho da fonte automaticamente em telas escaladas (parte do "grande demais") */
+      -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
     }
     body { position: relative; display: flex; align-items: center; justify-content: center; background: #05070a; }
     /* backdrop: a imagem do jogo pura, repetida lado a lado (tamanho natural, SEM esticar e SEM blur)

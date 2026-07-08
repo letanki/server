@@ -47,6 +47,9 @@ export class GameClient {
   public user: UserDocument | null = null;
   public friendsCache: string[] = [];
   public isChatLoaded: boolean = false;
+  // Modal informativo da Ranqueada: mostrado UMA vez por sessão, na primeira vez que este cliente chega
+  // ao lobby (login→lobby OU sair da batalha→lobby). Em memória → reseta a cada nova conexão/login.
+  public rankedIntroShown: boolean = false;
   public shopCountryCode: string = "BR";
   private packetQueue: PacketQueueItem[] = [];
   private isProcessingQueue: boolean = false;
