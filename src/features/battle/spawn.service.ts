@@ -22,7 +22,14 @@ export class SpawnService {
             return { position: { x: 0, y: 0, z: 200 }, rotation: { x: 0, y: 0, z: 0 } };
         }
 
-        const teamType = team.toLowerCase();
+        // Em alguns mapas os pontos de spawn azul/vermelho estão trocados em relação às bases: invertemos
+        // qual conjunto cada time usa para o lado do servidor casar com o desenho do client.
+        const swapSpawns = battle.settings.mapId === "map_dualiti" || battle.settings.mapId === "map_zone";
+        let effectiveTeam = team;
+        if (swapSpawns && team === "BLUE") effectiveTeam = "RED";
+        else if (swapSpawns && team === "RED") effectiveTeam = "BLUE";
+
+        const teamType = effectiveTeam.toLowerCase();
         let candidateSpawns;
         if (battle.settings.battleMode === BattleMode.CP) {
             candidateSpawns = allMapSpawns.filter((sp) => sp.type.toLowerCase() === "dom");

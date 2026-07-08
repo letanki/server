@@ -69,10 +69,10 @@ export class LobbyService {
             if (settings.battleMode === BattleMode.CTF) {
                 const flags = getMapCtfFlags(battle.mapResourceId);
                 if (flags) {
-                    // Em dualidade e massacre as bandeiras (e suas bases) ficam trocadas no client:
-                    // a bandeira vermelha aparece na base dominada pelo azul e vice-versa. Invertemos
-                    // as posições aqui para que o lado do servidor case com o que o client desenha.
-                    const swapFlags = battle.settings.mapId === "map_dualiti" || battle.settings.mapId === "map_massacre";
+                    // Em alguns mapas as bandeiras (e suas bases) ficam trocadas no client: a bandeira
+                    // vermelha aparece na base dominada pelo azul e vice-versa. Invertemos as posições aqui
+                    // para que o lado do servidor case com o que o client desenha.
+                    const swapFlags = battle.settings.mapId === "map_massacre" || battle.settings.mapId === "map_zone";
                     const blue = swapFlags ? flags.red : flags.blue;
                     const red = swapFlags ? flags.blue : flags.red;
                     battle.flagBasePositionBlue = blue;
