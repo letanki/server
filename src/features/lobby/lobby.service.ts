@@ -1,6 +1,6 @@
 import { Battle, BattleMode, EquipmentConstraintsMode, IBattleCreationSettings, MapTheme } from "@/features/battle/battle.model";
-import { UserDocument } from "@/shared/models/user.model";
 import { getMapCtfFlags, getMapDomKeypoints } from "@/maps/mapData";
+import { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { ValidationUtils } from "@/utils/validation.utils";
 
@@ -72,7 +72,7 @@ export class LobbyService {
                     // Em alguns mapas as bandeiras (e suas bases) ficam trocadas no client: a bandeira
                     // vermelha aparece na base dominada pelo azul e vice-versa. Invertemos as posições aqui
                     // para que o lado do servidor case com o que o client desenha.
-                    const swapFlags = battle.settings.mapId === "map_massacre" || battle.settings.mapId === "map_zone";
+                    const swapFlags = battle.settings.mapId === "map_massacre";
                     const blue = swapFlags ? flags.red : flags.blue;
                     const red = swapFlags ? flags.blue : flags.red;
                     battle.flagBasePositionBlue = blue;

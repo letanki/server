@@ -1,7 +1,7 @@
+import { getMapSpawns } from "@/maps/mapData";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { getMapSpawns } from "@/maps/mapData";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { Battle, BattleMode, BattleRoundState } from "./battle.model";
@@ -24,7 +24,7 @@ export class SpawnService {
 
         // Em alguns mapas os pontos de spawn azul/vermelho estão trocados em relação às bases: invertemos
         // qual conjunto cada time usa para o lado do servidor casar com o desenho do client.
-        const swapSpawns = battle.settings.mapId === "map_dualiti" || battle.settings.mapId === "map_zone";
+        const swapSpawns = battle.settings.mapId === "map_dualiti";
         let effectiveTeam = team;
         if (swapSpawns && team === "BLUE") effectiveTeam = "RED";
         else if (swapSpawns && team === "RED") effectiveTeam = "BLUE";
