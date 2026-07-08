@@ -8,7 +8,7 @@ import { getMapBonusRegions, IBonusRegion } from "@/maps/mapData";
 import { ResourceId } from "@/generated/resourceTypes";
 import { ResourceManager } from "@/utils/resource.manager";
 import logger from "@/utils/logger";
-import { Battle, BattleMode } from "./battle.model";
+import { Battle, BattleMode, EquipmentConstraintsMode } from "./battle.model";
 import { HEAL_DROP_EFFECT_MS, HEAL_MAX_GIVEN, SupplyService } from "./supply.service";
 import { GoldBoxComingNotificationPacket, GoldBoxTakenNotificationPacket, RemoveBonusPacket, SpawnBonusPacket, TakeBonusPacket } from "./battle.packets";
 
@@ -413,10 +413,14 @@ export class BonusService {
         }
 
         if (type === "health") {
-            // Field-drop medkit: gradual regen like the inventory kit, but its HP budget only refills
-            // half the tank (the official drop heals ~5000 normalized, stopping short of full). It
-            // announces the official fixed 15s effect time; the effect ends early when regen finishes.
-            this.supply.startHealing(client, battle, HEAL_MAX_GIVEN.DROP, HEAL_DROP_EFFECT_MS);
+            // Field-drop medkit: gradual regen like the inventory kit. Normalmente cura só metade do tanque
+            // (~5000 normalizado, como no oficial), MAS no XP/BP (equipment-constraint) enche a vida TODA —
+            // igual ao kit de inventário. Anuncia o tempo fixo oficial de 15s; o efeito acaba antes se a
+            // regeneração terminar.
+            const healFraction = battle.settings.equipmentConstraintsMode !== EquipmentConstraintsMode.NONE
+                ? HEAL_MAX_GIVEN.INVENTORY
+                : HEAL_MAX_GIVEN.DROP;
+            this.supply.startHealing(client, battle, healFraction, HEAL_DROP_EFFECT_MS);
             return;
         }
 
