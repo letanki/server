@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -13,7 +14,7 @@ export class StartShootingMachinegunCommandPacket extends BasePacket implements 
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -520655432;
+        return defs.weapons.StartShootingMachinegunCommand.id;
     }
 }
 
@@ -30,7 +31,7 @@ export class StartShootingMachinegunPacket extends BasePacket implements Machine
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return -1616602030;
+        return defs.weapons.StartShootingMachinegun.id;
     }
 }
 
@@ -58,7 +59,7 @@ export class MachinegunShotCommandPacket extends BasePacket implements Machinegu
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return -1889502569;
+        return defs.weapons.MachinegunShotCommand.id;
     }
 }
 
@@ -89,7 +90,7 @@ export class MachinegunShotPacket extends BasePacket implements MachinegunTypes.
         return writer.getBuffer();
     }
     public static getId(): number {
-        return -891286317;
+        return defs.weapons.MachinegunShot.id;
     }
 }
 
@@ -102,7 +103,7 @@ export class StopShootingMachinegunCommandPacket extends BasePacket implements M
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return 1794372798;
+        return defs.weapons.StopShootingMachinegunCommand.id;
     }
 }
 
@@ -119,6 +120,6 @@ export class StopShootingMachinegunPacket extends BasePacket implements Machineg
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 133452238;
+        return defs.weapons.StopShootingMachinegun.id;
     }
 }

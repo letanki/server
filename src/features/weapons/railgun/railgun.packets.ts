@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -47,7 +48,7 @@ export class RailgunShotCommandPacket extends BasePacket implements RailgunTypes
         throw new Error("RailgunShotCommandPacket is a client-to-server packet only and should not be written.");
     }
     public static getId(): number {
-        return -484994657;
+        return defs.weapons.RailgunShotCommand.id;
     }
 }
 
@@ -89,7 +90,7 @@ export class RailgunShotPacket extends BasePacket implements RailgunTypes.IRailg
         return writer.getBuffer();
     }
     public static getId(): number {
-        return -369590613;
+        return defs.weapons.RailgunShot.id;
     }
 }
 
@@ -102,7 +103,7 @@ export class StartChargingCommandPacket extends BasePacket implements RailgunTyp
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -1759063234;
+        return defs.weapons.StartChargingCommand.id;
     }
 }
 
@@ -119,6 +120,6 @@ export class StartChargingPacket extends BasePacket implements RailgunTypes.ISta
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 346830254;
+        return defs.weapons.StartCharging.id;
     }
 }

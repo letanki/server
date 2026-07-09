@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -36,7 +37,7 @@ export class ShotgunShotCommandPacket extends BasePacket {
         }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return -541655881; }
+    public static getId(): number { return defs.weapons.ShotgunShotCommand.id; }
 }
 
 /**
@@ -57,5 +58,5 @@ export class ShotgunShotPacket extends BasePacket {
         }
         return w.getBuffer();
     }
-    public static getId(): number { return 471157826; }
+    public static getId(): number { return defs.weapons.ShotgunShot.id; }
 }

@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -13,7 +14,7 @@ export class ThunderShotNoTargetCommandPacket extends BasePacket implements Thun
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return -136344740;
+        return defs.weapons.ThunderShotNoTargetCommand.id;
     }
 }
 
@@ -30,7 +31,7 @@ export class ThunderShotNoTargetPacket extends BasePacket implements ThunderType
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 958509220;
+        return defs.weapons.ThunderShotNoTarget.id;
     }
 }
 
@@ -46,7 +47,7 @@ export class ThunderStaticShotCommandPacket extends BasePacket implements Thunde
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return 1501310158;
+        return defs.weapons.ThunderStaticShotCommand.id;
     }
 }
 
@@ -68,7 +69,7 @@ export class ThunderStaticShotPacket extends BasePacket implements ThunderTypes.
         return writer.getBuffer();
     }
     public static getId(): number {
-        return 1690491826;
+        return defs.weapons.ThunderStaticShot.id;
     }
 }
 
@@ -92,7 +93,7 @@ export class ThunderTargetShotCommandPacket extends BasePacket implements Thunde
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return 259979915;
+        return defs.weapons.ThunderTargetShotCommand.id;
     }
 }
 
@@ -117,6 +118,6 @@ export class ThunderTargetShotPacket extends BasePacket implements ThunderTypes.
         return writer.getBuffer();
     }
     public static getId(): number {
-        return -190359403;
+        return defs.weapons.ThunderTargetShot.id;
     }
 }

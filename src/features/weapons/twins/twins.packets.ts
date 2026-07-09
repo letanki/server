@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -17,7 +18,7 @@ export class TwinsShotCommandPacket extends BasePacket {
         this.direction = reader.readOptionalVector3();
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return -159686980; }
+    public static getId(): number { return defs.weapons.TwinsShotCommand.id; }
 }
 
 /** S→C: relays a twins shot to other players (the plasma visual). Body = nick, control(i8), direction. */
@@ -31,7 +32,7 @@ export class TwinsShotPacket extends BasePacket {
             .writeOptionalVector3(this.direction)
             .getBuffer();
     }
-    public static getId(): number { return -44282936; }
+    public static getId(): number { return defs.weapons.TwinsShot.id; }
 }
 
 /**
@@ -59,5 +60,5 @@ export class TwinsTargetShotCommandPacket extends BasePacket {
         }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return -1723353904; }
+    public static getId(): number { return defs.weapons.TwinsTargetShotCommand.id; }
 }

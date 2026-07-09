@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as FlamethrowerTypes from "./flamethrower.types";
@@ -19,7 +20,7 @@ export class FirebirdHitCommandPacket extends BasePacket {
         } catch { this.targets = []; }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return 1395251766; }
+    public static getId(): number { return defs.weapons.FirebirdHitCommand.id; }
 }
 
 export class StartShootingFlamethrowerCommandPacket extends BasePacket implements FlamethrowerTypes.IStartShootingFlamethrowerCommand {
@@ -31,7 +32,7 @@ export class StartShootingFlamethrowerCommandPacket extends BasePacket implement
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -1986638927;
+        return defs.weapons.StartShootingFlamethrowerCommand.id;
     }
 }
 
@@ -48,7 +49,7 @@ export class StartShootingFlamethrowerPacket extends BasePacket implements Flame
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 1212381771;
+        return defs.weapons.StartShootingFlamethrower.id;
     }
 }
 
@@ -61,7 +62,7 @@ export class StopShootingFlamethrowerCommandPacket extends BasePacket implements
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -1300958299;
+        return defs.weapons.StopShootingFlamethrowerCommand.id;
     }
 }
 
@@ -78,6 +79,6 @@ export class StopShootingFlamethrowerPacket extends BasePacket implements Flamet
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 1333088437;
+        return defs.weapons.StopShootingFlamethrower.id;
     }
 }

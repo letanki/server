@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as FreezeTypes from "./freeze.types";
@@ -18,7 +19,7 @@ export class FreezeHitCommandPacket extends BasePacket {
         } catch { this.targets = []; }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return -2123941185; }
+    public static getId(): number { return defs.weapons.FreezeHitCommand.id; }
 }
 
 export class StartShootingFreezeCommandPacket extends BasePacket implements FreezeTypes.IStartShootingFreezeCommand {
@@ -30,7 +31,7 @@ export class StartShootingFreezeCommandPacket extends BasePacket implements Free
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -75406982;
+        return defs.weapons.StartShootingFreezeCommand.id;
     }
 }
 
@@ -47,7 +48,7 @@ export class StartShootingFreezePacket extends BasePacket implements FreezeTypes
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return -1171353580;
+        return defs.weapons.StartShootingFreeze.id;
     }
 }
 
@@ -60,7 +61,7 @@ export class StopShootingFreezeCommandPacket extends BasePacket implements Freez
         return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
     }
     public static getId(): number {
-        return -1654947652;
+        return defs.weapons.StopShootingFreezeCommand.id;
     }
 }
 
@@ -77,6 +78,6 @@ export class StopShootingFreezePacket extends BasePacket implements FreezeTypes.
         return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
     }
     public static getId(): number {
-        return 979099084;
+        return defs.weapons.StopShootingFreeze.id;
     }
 }

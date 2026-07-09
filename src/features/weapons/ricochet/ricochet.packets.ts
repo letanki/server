@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import * as RicochetTypes from "./ricochet.types";
@@ -24,7 +25,7 @@ export class RicochetShotCommandPacket extends BasePacket implements RicochetTyp
     }
 
     public static getId(): number {
-        return -1907971330;
+        return defs.weapons.RicochetShotCommand.id;
     }
 }
 
@@ -39,7 +40,7 @@ export class RicochetTargetShotCommandPacket extends BasePacket {
         this.target = reader.readOptionalString();
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
-    public static getId(): number { return 1229701582; }
+    public static getId(): number { return defs.weapons.RicochetTargetShotCommand.id; }
 }
 
 export class RicochetShotPacket extends BasePacket implements RicochetTypes.IRicochetShotPacket {
@@ -70,6 +71,6 @@ export class RicochetShotPacket extends BasePacket implements RicochetTypes.IRic
     }
 
     public static getId(): number {
-        return -118119523;
+        return defs.weapons.RicochetShot.id;
     }
 }

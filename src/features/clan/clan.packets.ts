@@ -2,6 +2,7 @@ import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import { ResourceManager } from "@/utils/resource.manager";
+import { defs } from "protanki-protocol";
 
 // ---- C->S (incoming) ----
 
@@ -10,7 +11,7 @@ export class KickClanMemberPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 459991202; }
+    static getId(): number { return defs.clan.KickClanMember.id; }
 }
 
 /** Owner/officer changes a member's clan position ("cargo"). Body = optionalString(nick) + int32(position 0-6). */
@@ -25,7 +26,7 @@ export class SetClanMemberPositionPacket extends BasePacket {
     write(): Buffer {
         return new BufferWriter().writeOptionalString(this.username).writeInt32BE(this.position).getBuffer();
     }
-    static getId(): number { return 90109270; }
+    static getId(): number { return defs.clan.SetClanMemberPosition.id; }
 }
 
 /** Uploads a new clan logo image (part of "edit clan settings"). Body = int32(byteLength) + raw image bytes
@@ -39,14 +40,14 @@ export class SetClanLogoPacket extends BasePacket {
     write(): Buffer {
         return new BufferWriter().writeInt32BE(this.image.length).writeBuffer(this.image).getBuffer();
     }
-    static getId(): number { return 99387765; }
+    static getId(): number { return defs.clan.SetClanLogo.id; }
 }
 
 /** Member leaves the clan. Empty body. */
 export class LeaveClanPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1298483664; }
+    static getId(): number { return defs.clan.LeaveClan.id; }
 }
 
 /** The recipient's own clan permission flags (drives the client's clan UI). Sent on clan open and whenever
@@ -59,7 +60,7 @@ export class ClanPermissionsPacket extends BasePacket {
         for (const f of this.flags) w.writeInt32BE(f);
         return w.getBuffer();
     }
-    static getId(): number { return -453603415; }
+    static getId(): number { return defs.clan.ClanPermissions.id; }
 }
 
 /** Post-leave cooldown shown in the not-in-clan modal. Body = int(seconds remaining, e.g. 86400 = 24h). */
@@ -67,7 +68,7 @@ export class ClanCooldownPacket extends BasePacket {
     constructor(private readonly seconds: number) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeInt32BE(this.seconds).getBuffer(); }
-    static getId(): number { return -745085341; }
+    static getId(): number { return defs.clan.ClanCooldown.id; }
 }
 
 /** Real-time removal of a member from the owner's clan window. Body = optionalString(username). */
@@ -75,7 +76,7 @@ export class RemoveClanMemberPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 1039356886; }
+    static getId(): number { return defs.clan.RemoveClanMember.id; }
 }
 
 /** Generic member status notify (clears the "new" badge): sent on member add/leave and as the reply to
@@ -84,7 +85,7 @@ export class MemberStatusNotifyPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 1059383280; }
+    static getId(): number { return defs.clan.MemberStatusNotify.id; }
 }
 
 /** Owner viewed a member/notification → clear its "new" badge. Body = optionalString(username). Server
@@ -93,14 +94,14 @@ export class MarkMemberSeenPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1922978824; }
+    static getId(): number { return defs.clan.MarkMemberSeen.id; }
 }
 
 /** A clan MEMBER/owner opens their clan window → server replies MyClanWindow (-8296541). Empty body. */
 export class OpenMyClanWindowPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 2073319841; }
+    static getId(): number { return defs.clan.OpenMyClanWindow.id; }
 }
 
 /** Real-time notify to the online owner: a new join request arrived. Body = optionalString(username). */
@@ -108,7 +109,7 @@ export class NotifyJoinRequestPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 1321902609; }
+    static getId(): number { return defs.clan.NotifyJoinRequest.id; }
 }
 
 /** Real-time notify to the online owner: add the request card to the list. Body = optionalString(username). */
@@ -116,7 +117,7 @@ export class AddJoinRequestPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 273571175; }
+    static getId(): number { return defs.clan.AddJoinRequest.id; }
 }
 
 /** Owner ACCEPTS a pending join request → the requester becomes a member. Body = optionalString(username). */
@@ -124,7 +125,7 @@ export class AcceptJoinRequestPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -2875943; }
+    static getId(): number { return defs.clan.AcceptJoinRequest.id; }
 }
 
 /** Owner selected/opened a pending request (sent before accept AND decline). Body = optionalString(username).
@@ -133,14 +134,14 @@ export class SelectJoinRequestPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -344258352; }
+    static getId(): number { return defs.clan.SelectJoinRequest.id; }
 }
 
 /** Owner DECLINES ALL pending join requests for the clan. Empty body. */
 export class DeclineAllJoinRequestsPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -304905793; }
+    static getId(): number { return defs.clan.DeclineAllJoinRequests.id; }
 }
 
 /** Owner DECLINES a pending join request. Body = optionalString(requester username). */
@@ -148,7 +149,7 @@ export class DeclineJoinRequestPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1327826221; }
+    static getId(): number { return defs.clan.DeclineJoinRequest.id; }
 }
 
 /** Reply to a decline: drop the request card for `username`. Body = optionalString(username). */
@@ -156,7 +157,7 @@ export class JoinRequestDeclinedPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return -1735563082; }
+    static getId(): number { return defs.clan.JoinRequestDeclined.id; }
 }
 
 /** Reply to a decline: remove `username` from the requests list. Body = optionalString(username). */
@@ -164,14 +165,14 @@ export class RemoveJoinRequestPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 1452773298; }
+    static getId(): number { return defs.clan.RemoveJoinRequest.id; }
 }
 
 /** Client opened the clan view while NOT in a clan → server replies ShowNotInClanWindow. Empty body. */
 export class ShowNotInClanPanelPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1123511676; }
+    static getId(): number { return defs.clan.ShowNotInClanPanel.id; }
 }
 
 /** Close the clan window. Empty body — sent C->S, and the server echoes the SAME packet back to
@@ -179,14 +180,14 @@ export class ShowNotInClanPanelPacket extends BasePacket {
 export class CloseClanWindowPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 924070374; }
+    static getId(): number { return defs.clan.CloseClanWindow.id; }
 }
 
 /** Client closed the not-in-clan panel. Empty body. */
 export class HideNotInClanPanelPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -2002206647; }
+    static getId(): number { return defs.clan.HideNotInClanPanel.id; }
 }
 
 /** Client requests a page of the clan leaderboard. Body = int(startIndex) + int(count) — paginates as
@@ -200,7 +201,7 @@ export class GetClanRatingsDataPacket extends BasePacket {
         this.count = r.readInt32BE();
     }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -2080893689; }
+    static getId(): number { return defs.clan.GetClanRatingsData.id; }
 }
 
 /** Clan leaderboard page. Body = int(startIndex) + Vector<light clan model> (sorted by rating, desc). */
@@ -214,7 +215,7 @@ export class SetClanRatingsDataPacket extends BasePacket {
         for (const c of this.clans) writeLightClanModel(w, c);
         return w.getBuffer();
     }
-    static getId(): number { return 134406915; }
+    static getId(): number { return defs.clan.SetClanRatingsData.id; }
 }
 
 /** Client wants to view another clan by its tag. Body = optionalString(tag). */
@@ -222,7 +223,7 @@ export class ShowForeignClanPacket extends BasePacket {
     clanTag: string | null = null;
     read(buffer: Buffer): void { this.clanTag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 947733823; }
+    static getId(): number { return defs.clan.ShowForeignClan.id; }
 }
 
 /**
@@ -238,7 +239,7 @@ export class CreateClanPacket extends BasePacket {
         this.tag = r.readOptionalString();
     }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1267250495; }
+    static getId(): number { return defs.clan.CreateClan.id; }
 }
 
 /** Live availability check as the user types the clan TAG in the create form. Body = optionalString(tag). */
@@ -246,7 +247,7 @@ export class CheckClanTagPacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1879289905; }
+    static getId(): number { return defs.clan.CheckClanTag.id; }
 }
 
 /** Live availability check for the clan NAME. Body = optionalString(name). */
@@ -254,7 +255,7 @@ export class CheckClanNamePacket extends BasePacket {
     name: string | null = null;
     read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1591528838; }
+    static getId(): number { return defs.clan.CheckClanName.id; }
 }
 
 /** Live check (as the leader types) of whether a username can be invited — toggles the invite button.
@@ -263,21 +264,21 @@ export class CheckInviteUserPacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 819097883; }
+    static getId(): number { return defs.clan.CheckInviteUser.id; }
 }
 
 /** Reply to CheckInviteUser: the username CAN be invited (exists, not in a clan) → enables the button. */
 export class InviteUserValidPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1796904481; }
+    static getId(): number { return defs.clan.InviteUserValid.id; }
 }
 
 /** Reply to CheckInviteUser: the username CANNOT be invited (no account / already in a clan) → keeps button disabled. */
 export class InviteUserInvalidPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -616439158; }
+    static getId(): number { return defs.clan.InviteUserInvalid.id; }
 }
 
 /** Owner edits the clan DESCRIPTION. Body = optionalString(description). Server echoes it back. */
@@ -286,7 +287,7 @@ export class SetClanDescriptionPacket extends BasePacket {
     constructor(description: string | null = null) { super(); this.description = description; }
     read(buffer: Buffer): void { this.description = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.description).getBuffer(); }
-    static getId(): number { return -1752335888; }
+    static getId(): number { return defs.clan.SetClanDescription.id; }
 }
 
 /** Owner edits the MINIMUM RANK to request to join. Body = 1 signed byte (rank 1-30, or -1 = no minimum).
@@ -295,7 +296,7 @@ export class SetClanMinRankPacket extends BasePacket {
     minRank: number = -1;
     read(buffer: Buffer): void { this.minRank = new BufferReader(buffer).readInt8(); }
     write(): Buffer { return new BufferWriter().writeInt8(this.minRank).getBuffer(); }
-    static getId(): number { return -1145619463; }
+    static getId(): number { return defs.clan.SetClanMinRank.id; }
 }
 
 /** Owner toggles RECRUITING (open/closed). Body = 1 byte bool (1=open/recruiting, 0=closed). */
@@ -303,7 +304,7 @@ export class SetClanRecruitingPacket extends BasePacket {
     recruiting: boolean = true;
     read(buffer: Buffer): void { this.recruiting = new BufferReader(buffer).readUInt8() !== 0; }
     write(): Buffer { return new BufferWriter().writeUInt8(this.recruiting ? 1 : 0).getBuffer(); }
-    static getId(): number { return -614563927; }
+    static getId(): number { return defs.clan.SetClanRecruiting.id; }
 }
 
 /** Owner SENDS a clan invite to a user. Body = optionalString(username). */
@@ -311,7 +312,7 @@ export class SendClanInvitePacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -2053489715; }
+    static getId(): number { return defs.clan.SendClanInvite.id; }
 }
 
 /** Ack to the owner that the invite was sent. Body = optionalString(username). */
@@ -319,7 +320,7 @@ export class ClanInviteSentAckPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 1921140979; }
+    static getId(): number { return defs.clan.ClanInviteSentAck.id; }
 }
 
 /** Owner CANCELS a pending clan invite. Body = optionalString(username). */
@@ -327,7 +328,7 @@ export class CancelClanInvitePacket extends BasePacket {
     username: string | null = null;
     read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 2041223590; }
+    static getId(): number { return defs.clan.CancelClanInvite.id; }
 }
 
 /** Ack to the owner that the invite was cancelled. Body = optionalString(username). */
@@ -335,7 +336,7 @@ export class ClanInviteCancelledAckPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 112423798; }
+    static getId(): number { return defs.clan.ClanInviteCancelledAck.id; }
 }
 
 /** Invited user opens the clan attached to an invite. Body = optionalString(tag) → server echoes tag. */
@@ -343,7 +344,7 @@ export class ViewInviteClanPacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 405171321; }
+    static getId(): number { return defs.clan.ViewInviteClan.id; }
 }
 
 /** Response to ViewInviteClan. Body = optionalString(tag). */
@@ -351,7 +352,7 @@ export class ViewInviteClanResponsePacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return 781410259; }
+    static getId(): number { return defs.clan.ViewInviteClanResponse.id; }
 }
 
 /** Invited user ACCEPTS the invite. Body = optionalString(clan tag). */
@@ -359,7 +360,7 @@ export class AcceptClanInvitePacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1533026019; }
+    static getId(): number { return defs.clan.AcceptClanInvite.id; }
 }
 
 /** Invited user DECLINES the invite. Body = optionalString(clan tag). */
@@ -367,7 +368,7 @@ export class DeclineClanInvitePacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1010729260; }
+    static getId(): number { return defs.clan.DeclineClanInvite.id; }
 }
 
 /** Notifies the invited user: "you've been invited to clan <tag>". Body = optionalString(tag). */
@@ -375,7 +376,7 @@ export class ClanInviteNotifyPacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return 134379747; }
+    static getId(): number { return defs.clan.ClanInviteNotify.id; }
 }
 
 /** Ack to an invite accept/decline. Body = optionalString(tag). */
@@ -383,7 +384,7 @@ export class ClanInviteAckPacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return 1901058987; }
+    static getId(): number { return defs.clan.ClanInviteAck.id; }
 }
 
 /** Client asks to JOIN a clan (the "request to join" button). Body = optionalString(tag). */
@@ -391,7 +392,7 @@ export class JoinClanRequestPacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1137965580; }
+    static getId(): number { return defs.clan.JoinClanRequest.id; }
 }
 
 /** Search/list panel: live check that a clan with the typed NAME exists. Body = optionalString(name).
@@ -400,21 +401,21 @@ export class SearchClanByNamePacket extends BasePacket {
     name: string | null = null;
     read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -378947621; }
+    static getId(): number { return defs.clan.SearchClanByName.id; }
 }
 
 /** Reply to SearchClanByName: a clan with that name exists AND accepts requests (empty body) → enable button. */
 export class ClanSearchFoundPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1726541163; }
+    static getId(): number { return defs.clan.ClanSearchFound.id; }
 }
 
 /** Reply to SearchClanByName: no joinable clan with that name (doesn't exist OR isn't recruiting) → keep disabled. */
 export class ClanSearchUnavailablePacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -866005248; }
+    static getId(): number { return defs.clan.ClanSearchUnavailable.id; }
 }
 
 /** Client asks to JOIN a clan from the search/list panel, by NAME. Body = optionalString(name). */
@@ -422,7 +423,7 @@ export class JoinClanByNamePacket extends BasePacket {
     name: string | null = null;
     read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -705969616; }
+    static getId(): number { return defs.clan.JoinClanByName.id; }
 }
 
 /** Client CANCELS a pending join request from the foreign-clan window. Body = optionalString(tag). */
@@ -430,7 +431,7 @@ export class CancelJoinClanRequestPacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1913571122; }
+    static getId(): number { return defs.clan.CancelJoinClanRequest.id; }
 }
 
 /** Client CANCELS a pending join request from the "sent requests" modal. Body = optionalString(tag). */
@@ -438,7 +439,7 @@ export class CancelJoinRequestFromModalPacket extends BasePacket {
     tag: string | null = null;
     read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -930926299; }
+    static getId(): number { return defs.clan.CancelJoinRequestFromModal.id; }
 }
 
 // ---- S->C (outgoing) ----
@@ -499,7 +500,7 @@ export class MyClanWindowPacket extends BasePacket {
         presVec(v.sentInvites, (s) => w.writeOptionalString(s));
         return w.getBuffer();
     }
-    static getId(): number { return -8296541; }
+    static getId(): number { return defs.clan.MyClanWindow.id; }
 }
 
 /** Sent with the my-clan window: the clan tag (8-byte body, optionalString). */
@@ -507,7 +508,7 @@ export class ClanTagNotifyPacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return -88976442; }
+    static getId(): number { return defs.clan.ClanTagNotify.id; }
 }
 
 /** Sent when joining a clan: the clan display name (sets the clan name in the UI). Body = optString(name). */
@@ -515,7 +516,7 @@ export class ClanNameNotifyPacket extends BasePacket {
     constructor(private readonly name: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.name).getBuffer(); }
-    static getId(): number { return -1673544562; }
+    static getId(): number { return defs.clan.ClanNameNotify.id; }
 }
 
 /** Real-time add of a new member to the owner's open clan window. Body = the 10-field MemberModel. */
@@ -523,7 +524,7 @@ export class AddClanMemberPacket extends BasePacket {
     constructor(private readonly member: ClanMemberView) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { const w = new BufferWriter(); writeMemberModel(w, this.member); return w.getBuffer(); }
-    static getId(): number { return 1741285576; }
+    static getId(): number { return defs.clan.AddClanMember.id; }
 }
 
 /** Aux notify sent with a member add (officially follows AddClanMember). Body = optString(username). */
@@ -531,7 +532,7 @@ export class MemberAddedNotifyPacket extends BasePacket {
     constructor(private readonly username: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return 385150953; }
+    static getId(): number { return defs.clan.MemberAddedNotify.id; }
 }
 
 /** Sent with the my-clan window: the leader/owner nick. */
@@ -539,7 +540,7 @@ export class ClanLeaderNotifyPacket extends BasePacket {
     constructor(private readonly nick: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nick).getBuffer(); }
-    static getId(): number { return -915300943; }
+    static getId(): number { return defs.clan.ClanLeaderNotify.id; }
 }
 
 /**
@@ -574,7 +575,7 @@ export class JoinRequestModelPacket extends BasePacket {
         w.writeInt32BE(v.rating);
         return w.getBuffer();
     }
-    static getId(): number { return 325031295; }
+    static getId(): number { return defs.clan.JoinRequestModel.id; }
 }
 
 /** Ack: a join request for `tag` is now pending. Body = optionalString(tag). */
@@ -582,7 +583,7 @@ export class JoinRequestSentPacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return -905757704; }
+    static getId(): number { return defs.clan.JoinRequestSent.id; }
 }
 
 /** Ack: the pending join request for `tag` was withdrawn. Body = optionalString(tag). */
@@ -590,29 +591,29 @@ export class JoinRequestCancelledPacket extends BasePacket {
     constructor(private readonly tag: string) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return -2007179326; }
+    static getId(): number { return defs.clan.JoinRequestCancelled.id; }
 }
 
 // Availability results are EMPTY packets — the client distinguishes available vs taken by the id.
 export class ClanTagAvailablePacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -965581529; }
+    static getId(): number { return defs.clan.ClanTagAvailable.id; }
 }
 export class ClanTagTakenPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1873830541; }
+    static getId(): number { return defs.clan.ClanTagTaken.id; }
 }
 export class ClanNameAvailablePacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -148282578; }
+    static getId(): number { return defs.clan.ClanNameAvailable.id; }
 }
 export class ClanNameTakenPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -253044119; }
+    static getId(): number { return defs.clan.ClanNameTaken.id; }
 }
 
 /**
@@ -626,7 +627,7 @@ export class ShowNotInClanWindowPacket extends BasePacket {
         const card = ResourceManager.getIdlowById("clan/card");
         return new BufferWriter().writeResource(intro).writeResource(card).getBuffer();
     }
-    static getId(): number { return 560344632; }
+    static getId(): number { return defs.clan.ShowNotInClanWindow.id; }
 }
 
 export interface ClanMemberView {
@@ -691,7 +692,7 @@ export class ShowForeignClanWindowPacket extends BasePacket {
         w.writeInt32BE(c.rating);
         return w.getBuffer();
     }
-    static getId(): number { return -1855118498; }
+    static getId(): number { return defs.clan.ShowForeignClanWindow.id; }
 }
 
 export interface ClanMissionView {
@@ -709,7 +710,7 @@ export interface ClanMissionView {
 export class OpenClanMissionsPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -2127613673; }
+    static getId(): number { return defs.clan.OpenClanMissions.id; }
 }
 
 /** S->C: the clan mission list (also pushed on progress change). Body = int32 count + count × mission
@@ -729,5 +730,5 @@ export class ShowClanMissionsPacket extends BasePacket {
         }
         return w.getBuffer();
     }
-    static getId(): number { return 1720177051; }
+    static getId(): number { return defs.clan.ShowClanMissions.id; }
 }

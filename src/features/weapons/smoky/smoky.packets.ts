@@ -1,4 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
+import { defs } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
@@ -16,7 +17,7 @@ export class SmokyStaticShotCommandPacket extends BasePacket implements SmokyTyp
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return 1470597926;
+        return defs.weapons.SmokyStaticShotCommand.id;
     }
 }
 
@@ -38,7 +39,7 @@ export class SmokyStaticShotPacket extends BasePacket implements SmokyTypes.ISmo
         return writer.getBuffer();
     }
     public static getId(): number {
-        return 546849203;
+        return defs.weapons.SmokyStaticShot.id;
     }
 }
 
@@ -62,7 +63,7 @@ export class SmokyTargetShotCommandPacket extends BasePacket implements SmokyTyp
         throw new Error("This is a client-to-server packet only.");
     }
     public static getId(): number {
-        return 229267683;
+        return defs.weapons.SmokyTargetShotCommand.id;
     }
 }
 
@@ -93,6 +94,6 @@ export class SmokyTargetShotPacket extends BasePacket implements SmokyTypes.ISmo
         return writer.getBuffer();
     }
     public static getId(): number {
-        return -1334002026;
+        return defs.weapons.SmokyTargetShot.id;
     }
 }
