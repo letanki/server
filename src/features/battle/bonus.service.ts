@@ -312,6 +312,23 @@ export class BonusService {
         return id;
     }
 
+    /** Debug/staff: drops `count` bonuses of `type` at random points inside random bonus regions of the
+     *  battle's map+mode (any region type — the areas only give WHERE, the caller chooses WHAT). One-off
+     *  drops (no regionIndex → no respawn wiring). Returns how many were actually dropped (0 if the map
+     *  has no regions for this mode). */
+    public spawnRandom(battle: Battle, type: string, count: number): number {
+        const mode = MODE_TOKEN[battle.settings.battleMode];
+        const regions = getMapBonusRegions(battle.mapResourceId).filter((r) => r.gameModes.includes(mode));
+        if (regions.length === 0) return 0;
+        const rand = (a: number, b: number) => a + Math.random() * (b - a);
+        for (let i = 0; i < count; i++) {
+            const region = regions[Math.floor(Math.random() * regions.length)];
+            const position = { x: rand(region.min.x, region.max.x), y: rand(region.min.y, region.max.y), z: rand(region.min.z, region.max.z) };
+            this.spawnBonus(battle, type, position);
+        }
+        return count;
+    }
+
     /** Debug/staff: drops ONE bonus at the CENTER of every bonus region of the battle's map+mode, using
      *  the region's own type (crystal→crystall, crystal_100→gold [golden box], crystal_500→special,
      *  medkit→health, nitro/damageup/armorup→their buff). One-off drops (no regionIndex → no respawn
