@@ -627,12 +627,6 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         const supply = suppliesData.find((s) => s.id === supplyId);
         if (!supply) return;
 
-        // Implemented: n2o/double_damage/armor (buffs) + mine + health (repair kit).
-        if (supplyId !== "n2o" && supplyId !== "double_damage" && supplyId !== "armor" && supplyId !== "mine" && supplyId !== "health") {
-            logger.info(`Supply '${supplyId}' activation not implemented yet (user ${user.username}).`);
-            return;
-        }
-
         // SERVER-SIDE cooldown: the client's countdown is only visual, so a macro / lag-burst of
         // activation packets (e.g. 1ms spam of every slot) would consume one supply per packet.
         // Activations arriving before the supply's ready time are discarded without consuming.
