@@ -88,9 +88,9 @@ export class SupplyService {
      * a partial 17th; if it also eats 500hp of damage meanwhile (without dying), it ends right back at
      * 250hp because the kit gave its full 500hp and no more. Re-running supersedes any in-progress heal.
      */
-    public startHealing(client: GameClient, battle: Battle, maxGivenFraction: number, effectDurationMs?: number): void {
+    public startHealing(client: GameClient, battle: Battle, maxGivenFraction: number, effectDurationMs?: number): number {
         const user = client.user;
-        if (!user) return;
+        if (!user) return 0;
         SupplyService.stopHealing(client);
 
         // PARKOUR: the repair kit is TIME-based, not HP-budget-based. Once RUNNING, reaching full health
@@ -104,12 +104,13 @@ export class SupplyService {
         const stepNormalized = (HEAL_HP_PER_TICK * 10000) / hullHP;
         const budgetNormalized = maxGivenFraction * 10000; // total HP the kit can hand out
         let delivered = 0;
-        if (client.currentHealth >= 10000) return;
+        if (client.currentHealth >= 10000) return 0;
 
-        // Parkour tick limit = the kit's real HP ÷ HP healed per tick: full hull HP / 30 for an inventory
-        // kit, half that ((hullHP/2)/30) for a field-drop medkit (maxGivenFraction 1.0 vs 0.5). The heal
-        // stays active for that many ticks, topping the tank up as it takes damage.
-        const tickLimit = Math.ceil((maxGivenFraction * hullHP) / HEAL_HP_PER_TICK);
+        // Parkour tick limit = the kit's real HP ÷ HP healed per tick, floored: full hull HP / 30 for an
+        // inventory kit, half that ((hullHP/2)/30) for a field-drop medkit (maxGivenFraction 1.0 vs 0.5).
+        // Official captures (mammoth 500hp -> 16 ticks/8000ms, wasp 180hp -> 6 ticks/3000ms) confirm floor,
+        // not ceil. The heal stays active for that many ticks, topping the tank up as it takes damage.
+        const tickLimit = Math.floor((maxGivenFraction * hullHP) / HEAL_HP_PER_TICK);
         let ticksElapsed = 0;
 
         // Floating "+health" effect over the tank (HEALTH slot). Parkour shows it for the whole tick budget;
@@ -152,6 +153,8 @@ export class SupplyService {
             // Stop on a full tank or once the kit has poured in its whole budget.
             if (client.currentHealth >= 10000 || delivered >= budgetNormalized) SupplyService.stopHealing(client);
         }, HEAL_TICK_MS);
+
+        return durationMs; // duração do efeito (o handler usa isso como cooldown de reativação no parkour)
     }
 
     /** Cancels any in-progress repair-kit regeneration (completion, death, respawn, disconnect, new

@@ -615,9 +615,6 @@ export class MovementControlCommandHandler implements IPacketHandler<BattlePacke
     }
 }
 
-// Parkour repair-kit reactivation cooldown (official capture: 5s, vs ~30-35s in normal battles).
-const PARKOUR_HEALTH_COOLDOWN_MS = 5000;
-
 export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePackets.ActivateSupplyCommandPacket> {
     public readonly packetId = BattlePackets.ActivateSupplyCommandPacket.getId();
 
@@ -671,10 +668,11 @@ export class ActivateSupplyCommandHandler implements IPacketHandler<BattlePacket
         if (supplyId === "mine") client.roundStats.minesUsed++;
 
         if (supplyId === "health") {
-            // Inventory repair kit: gradual regen up to a full repair. Parkour slashes the reactivation
-            // cooldown to 5s (vs ~30s normal) — both verified against official parkour/normal captures.
-            server.battleService.supply.startHealing(client, battle, HEAL_MAX_GIVEN.INVENTORY);
-            const cooldownMs = battle.settings.parkourMode ? PARKOUR_HEALTH_COOLDOWN_MS : supply.itemRestSec * 1000;
+            // Inventory repair kit: gradual regen up to a full repair. No parkour, o cooldown de reativação
+            // acompanha a DURAÇÃO do efeito (= hullHP/30 s, retornada por startHealing): reabilita quando a
+            // cura termina, escalando com a vida máxima do tanque. Fora do parkour, é o itemRestSec normal.
+            const effectMs = server.battleService.supply.startHealing(client, battle, HEAL_MAX_GIVEN.INVENTORY);
+            const cooldownMs = battle.settings.parkourMode ? effectMs : supply.itemRestSec * 1000;
             client.supplyReadyAt.set(supplyId, now + cooldownMs);
             client.sendPacket(new BattlePackets.ActivatedSupplyPacket(supplyId, cooldownMs, 1));
             return;
