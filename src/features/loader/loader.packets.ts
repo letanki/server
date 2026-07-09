@@ -1,9 +1,7 @@
 import { BasePacket } from "@/packets/base.packet";
 import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import { defs } from "protanki-protocol";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import * as LoaderTypes from "./loader.types";
 
 // IDs e schemas em `protanki-protocol` (defs.loader.*).
@@ -42,8 +40,8 @@ export class ResourceCallback extends BasePacket implements LoaderTypes.IResourc
     static getId(): number { return defs.loader.ResourceCallback.id; }
 }
 
-// Codec manual: o cliente faz JSON.parse(str) as Array, então o corpo é um array
-// bare de descritores de recurso (não um objeto). Mantém read/write próprios.
+// A LÓGICA (o cliente faz JSON.parse(str) as Array, então o corpo é um array bare de descritores)
+// fica aqui; os BYTES vão pela lib. Wire = defs.loader.LoadDependencies { dependenciesJson, callbackId }.
 export class LoadDependencies extends BasePacket implements LoaderTypes.ILoadDependencies {
     dependencies: { resources: LoaderTypes.IDependency[] };
     callbackId: number;
@@ -55,19 +53,17 @@ export class LoadDependencies extends BasePacket implements LoaderTypes.ILoadDep
     }
 
     read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        const jsonString = reader.readOptionalString();
-        const parsed = jsonString ? JSON.parse(jsonString) : [];
+        const { fields } = decodeBody(defs.loader.LoadDependencies, buffer);
+        const parsed = fields.dependenciesJson ? JSON.parse(fields.dependenciesJson) : [];
         this.dependencies = { resources: Array.isArray(parsed) ? parsed : parsed.resources ?? [] };
-        this.callbackId = reader.readInt32BE();
+        this.callbackId = fields.callbackId;
     }
 
     write(): Buffer {
-        const writer = new BufferWriter();
-        const jsonString = JSON.stringify(this.dependencies.resources);
-        writer.writeOptionalString(jsonString);
-        writer.writeInt32BE(this.callbackId);
-        return writer.getBuffer();
+        return encodeBody(defs.loader.LoadDependencies, {
+            dependenciesJson: JSON.stringify(this.dependencies.resources),
+            callbackId: this.callbackId,
+        });
     }
     static getId(): number { return defs.loader.LoadDependencies.id; }
 }
