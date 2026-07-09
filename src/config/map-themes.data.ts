@@ -1,4 +1,4 @@
-import { MapTheme } from "@/features/battle/battle.model";
+import { MapTheme } from "@/features/battle/map-theme.enum";
 
 export interface IMapGraphicConfig {
     angleX: number;
@@ -20,7 +20,7 @@ export interface IMapGraphicConfig {
     dustSize: number;
 }
 
-interface IBonusColorAdjust {
+export interface IBonusColorAdjust {
     redMultiplier: number;
     greenMultiplier: number;
     blueMultiplier: number;
@@ -33,6 +33,10 @@ interface IBonusColorAdjust {
 
 export interface IMapThemeConfig {
     graphicConfig: IMapGraphicConfig;
+    /** Name of a skybox SET under resources/skybox/<name>/v1/{front,back,left,right,top,bottom}.jpg —
+     *  e.g. "default_summer". Reusing an existing set (on another map/theme's row) needs no new files,
+     *  just the same name string; a genuinely new skybox needs a new named folder + `npm run build:resources`. */
+    skybox: string;
     bonusColorAdjust?: IBonusColorAdjust;
     bonusLightIntensity?: number;
 }
@@ -79,10 +83,13 @@ const nightBonusConfig = {
     bonusLightIntensity: 1,
 };
 
+/** THE DEFAULT ROW per theme — every map uses this unless it has its own row in `mapOverrides` below.
+ *  SUMMER_DAY/WINTER_DAY have no dedicated skybox set yet, so they reuse summer's/winter's. */
 export const mapThemeConfigs: Record<MapTheme, IMapThemeConfig> = {
-    [MapTheme.SUMMER]: { graphicConfig: { ...baseGraphicConfig } },
-    [MapTheme.WINTER]: { graphicConfig: { ...baseGraphicConfig } },
+    [MapTheme.SUMMER]: { skybox: "default_summer", graphicConfig: { ...baseGraphicConfig } },
+    [MapTheme.WINTER]: { skybox: "default_winter", graphicConfig: { ...baseGraphicConfig } },
     [MapTheme.SPACE]: {
+        skybox: "default_space",
         graphicConfig: {
             ...baseGraphicConfig,
             lightColor: 7829351,
@@ -91,14 +98,33 @@ export const mapThemeConfigs: Record<MapTheme, IMapThemeConfig> = {
             skyboxRevolutionSpeed: 0.005,
         },
     },
-    [MapTheme.SUMMER_DAY]: { graphicConfig: { ...baseGraphicConfig } },
-    [MapTheme.WINTER_DAY]: { graphicConfig: { ...baseGraphicConfig } },
+    [MapTheme.SUMMER_DAY]: { skybox: "default_summer", graphicConfig: { ...baseGraphicConfig } },
+    [MapTheme.WINTER_DAY]: { skybox: "default_winter", graphicConfig: { ...baseGraphicConfig } },
     [MapTheme.SUMMER_NIGHT]: {
+        skybox: "default_summer_night",
         graphicConfig: { ...baseGraphicConfig, ...nightGraphicConfig },
         ...nightBonusConfig,
     },
     [MapTheme.WINTER_NIGHT]: {
+        skybox: "default_winter_night",
         graphicConfig: { ...baseGraphicConfig, ...nightGraphicConfig },
         ...nightBonusConfig,
     },
 };
+
+/**
+ * CUSTOMIZATIONS — one row per "mapId:TEMA" that should differ from its theme's default row above.
+ * Spread the default row and change only what you need; anything you don't touch stays identical to it.
+ * A map+theme with no entry here just uses `mapThemeConfigs[theme]` untouched.
+ *
+ * Examples:
+ *   "gravity:SPACE": { ...mapThemeConfigs[MapTheme.SPACE], graphicConfig: { ...mapThemeConfigs[MapTheme.SPACE].graphicConfig, gravity: 80 } },
+ *   "sandbox:SUMMER_NIGHT": { ...mapThemeConfigs[MapTheme.SUMMER_NIGHT], skybox: "zone_summer_night" }, // reuse an existing set, no new files
+ */
+export const mapOverrides: Record<string, IMapThemeConfig> = {};
+
+/** Resolves the effective config for a map+theme: its own row in `mapOverrides` if it customized this
+ *  exact theme, else the theme's default row. `mapId` is without the "map_" prefix. */
+export function getMapThemeConfig(mapId: string, theme: MapTheme): IMapThemeConfig {
+    return mapOverrides[`${mapId}:${MapTheme[theme]}`] ?? mapThemeConfigs[theme];
+}

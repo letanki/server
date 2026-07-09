@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>LT skybox viewer</title>
+<!--
+  Visualizador de skyboxes do servidor (resources/skybox/<nome>/vN/{front,back,left,right,top,bottom}.<ext>).
+  Abra este arquivo direto no navegador (file:// funciona; Three.js vem de CDN) e selecione a pasta vN
+  de um skybox (botão "Selecionar pasta") — ele casa os 6 arquivos pelo nome (front/back/left/right/
+  top/bottom, .jpg ou .png) e monta uma visão de dentro do cubo, igual ficaria no jogo.
+
+  NOTA: o mapeamento face->eixo aqui (right=+x, left=-x, top=+y, bottom=-y, front=+z, back=-z) é uma
+  convenção razoável pra bater costura/orientação entre faces vizinhas, mas não foi confirmado pixel-a-
+  pixel contra o cliente da Flash — é suficiente pra pegar erro grosseiro (face invertida, rotacionada,
+  fora de ordem, borrada) mesmo que a orientação global não seja 100% idêntica à do jogo.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 13px/1.4 system-ui, sans-serif; background: #14161a; color: #d7dae0; }
+  #panel { position: fixed; top: 0; left: 0; bottom: 0; width: 300px; overflow-y: auto; background: #1c1f26; padding: 12px; box-sizing: border-box; z-index: 2; }
+  #panel h1 { font-size: 15px; margin: 0 0 10px; }
+  #panel section { margin-bottom: 14px; border-top: 1px solid #30343d; padding-top: 10px; }
+  #panel button { background: #2f6fed; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; margin: 2px 2px 2px 0; }
+  #panel button.sec { background: #3a3f4a; }
+  #panel button.active { outline: 2px solid #7aa2ff; }
+  #faceList { font-family: Consolas, monospace; font-size: 12px; }
+  #faceList .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  #faceList .ok { color: #7aff9c; }
+  #faceList .missing { color: #ff7a7a; }
+  #hint { font-size: 12px; color: #9aa0ab; }
+  #canvas-wrap { position: absolute; inset: 0 0 0 300px; }
+  #cross { position: absolute; inset: 0 0 0 300px; display: none; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); background: #0b0c0f; }
+  #cross img { width: 100%; height: 100%; object-fit: cover; border: 1px solid #262a33; box-sizing: border-box; }
+  #cross .cell { grid-column: var(--c); grid-row: var(--r); position: relative; }
+  #cross .cell span { position: absolute; top: 2px; left: 4px; font: 11px Consolas, monospace; color: #d7dae0; text-shadow: 0 0 3px #000; }
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  } }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>LT skybox viewer</h1>
+  <input type="file" id="dirPicker" webkitdirectory style="display:none" />
+  <input type="file" id="filePicker" multiple accept=".jpg,.jpeg,.png" style="display:none" />
+  <button id="pickDirBtn">Selecionar pasta (v1/)</button>
+  <button id="pickFilesBtn" class="sec">Selecionar arquivos</button>
+  <div id="hint">Aponte pra resources/skybox/&lt;nome&gt;/v1/ — casa front/back/left/right/top/bottom automaticamente.</div>
+
+  <section>
+    <b>Visão</b><br/>
+    <button id="view3dBtn" class="active">Dentro do cubo (3D)</button>
+    <button id="viewCrossBtn" class="sec">Cruz desdobrada (2D)</button>
+  </section>
+
+  <section>
+    <b>Faces detectadas</b>
+    <div id="faceList">nenhuma pasta carregada</div>
+  </section>
+</div>
+<div id="canvas-wrap"></div>
+<div id="cross"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const FACES = ["front", "back", "left", "right", "top", "bottom"];
+// BoxGeometry material group order: [+x, -x, +y, -y, +z, -z]
+const FACE_TO_SLOT = { right: 0, left: 1, top: 2, bottom: 3, front: 4, back: 5 };
+
+const wrap = document.getElementById("canvas-wrap");
+const crossEl = document.getElementById("cross");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, 1, 0.01, 10000);
+camera.position.set(0, 0, 0.0001); // near-origin trick: OrbitControls just "looks around" instead of orbiting
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.rotateSpeed = -0.4; // invert: dragging right looks right, matches a "look around" feel from inside
+
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+resize();
+
+let cubeMesh = null;
+function disposeCube() {
+  if (!cubeMesh) return;
+  scene.remove(cubeMesh);
+  cubeMesh.geometry.dispose();
+  cubeMesh.material.forEach((m) => { m.map?.dispose(); m.dispose(); });
+  cubeMesh = null;
+}
+
+function buildCube(urlsByFace) {
+  disposeCube();
+  const loader = new THREE.TextureLoader();
+  const materials = new Array(6).fill(null).map(() => new THREE.MeshBasicMaterial({ color: 0x1c1f26, side: THREE.BackSide }));
+  for (const face of FACES) {
+    const url = urlsByFace[face];
+    if (!url) continue;
+    const tex = loader.load(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    materials[FACE_TO_SLOT[face]] = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide });
+  }
+  const geo = new THREE.BoxGeometry(1000, 1000, 1000);
+  cubeMesh = new THREE.Mesh(geo, materials);
+  scene.add(cubeMesh);
+}
+
+function buildCross(urlsByFace) {
+  // Standard unfolded cross layout: top at (2,1), left/front/right/back in a row at row 2, bottom at (2,3).
+  const layout = { top: [2, 1], left: [1, 2], front: [2, 2], right: [3, 2], back: [4, 2], bottom: [2, 3] };
+  crossEl.innerHTML = "";
+  for (const face of FACES) {
+    const [c, r] = layout[face];
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.style.setProperty("--c", c);
+    cell.style.setProperty("--r", r);
+    const label = document.createElement("span");
+    label.textContent = face;
+    cell.appendChild(label);
+    if (urlsByFace[face]) {
+      const img = document.createElement("img");
+      img.src = urlsByFace[face];
+      cell.appendChild(img);
+    } else {
+      cell.style.background = "#3a1f22";
+    }
+    crossEl.appendChild(cell);
+  }
+}
+
+function matchFaces(files) {
+  const urlsByFace = {};
+  const matched = [];
+  for (const file of files) {
+    const name = file.name.replace(/\.[^.]+$/, "").toLowerCase();
+    if (FACES.includes(name)) {
+      urlsByFace[name] = URL.createObjectURL(file);
+      matched.push(name);
+    }
+  }
+  return { urlsByFace, matched };
+}
+
+function renderFaceList(matched) {
+  const el = document.getElementById("faceList");
+  el.innerHTML = FACES.map((f) => {
+    const ok = matched.includes(f);
+    return `<div class="row"><span>${f}</span><span class="${ok ? "ok" : "missing"}">${ok ? "OK" : "faltando"}</span></div>`;
+  }).join("");
+}
+
+function loadFiles(files) {
+  const { urlsByFace, matched } = matchFaces(files);
+  renderFaceList(matched);
+  buildCube(urlsByFace);
+  buildCross(urlsByFace);
+}
+
+document.getElementById("pickDirBtn").addEventListener("click", () => document.getElementById("dirPicker").click());
+document.getElementById("pickFilesBtn").addEventListener("click", () => document.getElementById("filePicker").click());
+document.getElementById("dirPicker").addEventListener("change", (e) => loadFiles(Array.from(e.target.files)));
+document.getElementById("filePicker").addEventListener("change", (e) => loadFiles(Array.from(e.target.files)));
+
+const view3dBtn = document.getElementById("view3dBtn");
+const viewCrossBtn = document.getElementById("viewCrossBtn");
+view3dBtn.addEventListener("click", () => {
+  view3dBtn.classList.add("active"); viewCrossBtn.classList.remove("active");
+  wrap.style.display = ""; crossEl.style.display = "none";
+});
+viewCrossBtn.addEventListener("click", () => {
+  viewCrossBtn.classList.add("active"); view3dBtn.classList.remove("active");
+  wrap.style.display = "none"; crossEl.style.display = "grid";
+});
+
+renderFaceList([]);
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

@@ -19,10 +19,36 @@ interface ResourceDefinition {
   versionLow: number;
   sourcePath: string;
   buildPath: string;
+  /** Set only for a single-file resource (skybox faces): the file at `sourcePath` is copied to
+   *  `buildPath/<destFileName>` instead of copying `sourcePath` wholesale as a directory. Needed because
+   *  the client always fetches the literal filename "image.<ext>" — see resolveResourceType. */
+  destFileName?: string;
 }
+
+/** A named skybox SET lives at resources/skybox/<name>/vN/{front,back,left,right,top,bottom}.<ext> — one
+ *  version folder, six human-named face files. Each face becomes its OWN resource ("skybox/<name>/<face>",
+ *  its own idLow) because the client fetches each cube face independently; see findResources below. */
+const SKYBOX_FACES = ["front", "back", "left", "right", "top", "bottom"];
 
 function generateResourceId(friendlyPath: string): number {
   return (crc32.str(friendlyPath) & 0xffffff) >>> 0;
+}
+
+async function findSkyboxFaceResources(setId: string, versionDir: string, latestVersion: number): Promise<ResourceDefinition[]> {
+  const files = await fs.promises.readdir(versionDir);
+  const resources: ResourceDefinition[] = [];
+  for (const face of SKYBOX_FACES) {
+    const faceFile = files.find((f) => path.parse(f).name === face);
+    if (!faceFile) {
+      console.warn(`Warning: skybox set "${setId}" is missing the "${face}" face (expected "${face}.jpg" or "${face}.png" in ${versionDir}).`);
+      continue;
+    }
+    const id = `${setId}/${face}`;
+    const idLow = generateResourceId(id);
+    const buildPath = ResourcePathUtils.getResourcePath({ idLow, versionLow: latestVersion });
+    resources.push({ id, idLow, versionLow: latestVersion, sourcePath: path.join(versionDir, faceFile), buildPath, destFileName: `image${path.extname(faceFile)}` });
+  }
+  return resources;
 }
 
 async function findResources(dir: string, parentPath: string = ""): Promise<ResourceDefinition[]> {
@@ -43,6 +69,12 @@ async function findResources(dir: string, parentPath: string = ""): Promise<Reso
         const latestVersion = versionDirs[0];
         const id = relativePath.replace(/\\/g, "/");
         const sourcePath = path.join(fullPath, `v${latestVersion}`);
+
+        if (parentPath === "skybox") {
+          resources = resources.concat(await findSkyboxFaceResources(id, sourcePath, latestVersion));
+          continue;
+        }
+
         let idLow: number;
 
         const idFilePath = path.join(sourcePath, "id.json");
@@ -158,37 +190,10 @@ async function processMaps(resources: ResourceDefinition[]): Promise<void> {
   console.log(`Processed ${mapResources.length} map resources.`);
 }
 
-async function validateSkyboxDirectories(resources: ResourceDefinition[]): Promise<void> {
-  console.log("Validating skybox directories...");
-  const skyboxSourceDir = path.join(RESOURCES_DIR, "skybox");
-  if (!fs.existsSync(skyboxSourceDir)) {
-    console.log("No skybox directory found, skipping validation.");
-    return;
-  }
-
-  const mapNames = new Set<string>();
-  resources.forEach((res) => {
-    if (res.id.startsWith("map/")) {
-      const parts = res.id.split("/");
-      if (parts.length > 1) {
-        mapNames.add(parts[1]);
-      }
-    }
-  });
-
-  const skyboxDirs = await fs.promises.readdir(skyboxSourceDir, { withFileTypes: true });
-  for (const dir of skyboxDirs) {
-    if (dir.isDirectory() && dir.name !== "default") {
-      if (!mapNames.has(dir.name)) {
-        console.warn(`Warning: Skybox directory "/skybox/${dir.name}/" does not correspond to any known map.`);
-      }
-    }
-  }
-}
-
 async function validateTaraResources(resources: ResourceDefinition[]): Promise<void> {
   console.log("Validating .tara resources...");
   for (const resource of resources) {
+    if (resource.destFileName) continue; // single-file resource (skybox face) — sourcePath isn't a directory
     const sourceFiles = await fs.promises.readdir(resource.sourcePath);
     const isImageTara = sourceFiles.includes("image.tara");
     const hasProperties = sourceFiles.includes("properties.json");
@@ -218,7 +223,6 @@ async function build() {
   }
   console.log(`Found ${resources.length} resources. No collisions detected.`);
 
-  await validateSkyboxDirectories(resources);
   await validateTaraResources(resources);
 
   console.log("Generating 'resourceTypes.ts'...");
@@ -228,7 +232,9 @@ async function build() {
   console.log("Copying categorized resource files to '.resource' directory...");
   for (const res of resources) {
     const destPath = path.join(RESOURCE_BUILD_DIR, res.buildPath);
-    await fse.copy(res.sourcePath, destPath);
+    // Single-file resource (skybox face): copy+rename to "image.<ext>", the literal filename the client
+    // fetches (resolveResourceType matches on it) — not a directory copy like every other resource.
+    await fse.copy(res.sourcePath, res.destFileName ? path.join(destPath, res.destFileName) : destPath);
   }
 
   // Single pass: proplibs.xml, mapDependencies, per-map battle JSON, eager literals + cleaned XML.

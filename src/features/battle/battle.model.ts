@@ -1,3 +1,8 @@
+// Imported+re-exported FIRST (before ResourceManager below) so MapTheme is already resolved on this
+// module's exports by the time anything in that import's own chain asks for it back — see map-theme.enum.ts.
+import { MapTheme } from "./map-theme.enum";
+export { MapTheme };
+
 import { IDependency } from "@/features/loader/loader.types";
 import type { IPacket } from "@/packets/packet.interfaces";
 import type { GameClient } from "@/server/game.client";
@@ -29,16 +34,6 @@ export enum EquipmentConstraintsMode {
     HORNET_RAILGUN,
     WASP_RAILGUN,
     HORNET_WASP_RAILGUN,
-}
-
-export enum MapTheme {
-    SUMMER,
-    WINTER,
-    SPACE,
-    SUMMER_DAY,
-    SUMMER_NIGHT,
-    WINTER_DAY,
-    WINTER_NIGHT,
 }
 
 export interface IBattleCreationSettings {

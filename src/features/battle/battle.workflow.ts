@@ -3,7 +3,7 @@ import { IPacket } from "@/packets/packet.interfaces";
 import { CALLBACK } from "@/config/constants";
 import { getHullMod } from "@/config/hulls.data";
 import { getTurretMod } from "@/config/turrets.data";
-import { mapThemeConfigs } from "@/config/map-themes.data";
+import { getMapThemeConfig } from "@/config/map-themes.data";
 import { weaponPhysicsData } from "@/config/physics.data";
 import { sfxBlueprints } from "@/config/sfx.blueprints";
 import { suppliesData } from "@/config/supplies.data";
@@ -418,7 +418,10 @@ export class BattleWorkflow {
             right: ResourceManager.getIdlowById(skyboxResourceIds[3]),
         };
 
-        const themeConfig = mapThemeConfigs[settings.mapTheme];
+        // The map's own row in mapOverrides (map-themes.data.ts) if it customized this theme, else the
+        // theme's default row — covers lighting, fog, gravity, skybox rotation speed, dust, and the
+        // bonus tint/intensity in one place.
+        const themeConfig = getMapThemeConfig(mapIdWithoutPrefix, settings.mapTheme);
         const gc: any = themeConfig.graphicConfig;
         // The current client reads these exact keys; missing fields -> TypeError #1009.
         const mapGraphicData = {

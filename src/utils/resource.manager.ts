@@ -1,4 +1,5 @@
-import { MapTheme } from "@/features/battle/battle.model";
+import { MapTheme } from "@/features/battle/map-theme.enum";
+import { getMapThemeConfig } from "@/config/map-themes.data";
 import { IDependency } from "@/features/loader/loader.types";
 import { mapDependencies } from "@/generated/mapDependencies";
 import { ResourceData, ResourceId } from "@/generated/resourceTypes";
@@ -122,23 +123,12 @@ export class ResourceManager {
         return mapDependencies[mapIdLow] || [];
     }
 
+    /** The 6 face resource ids for the skybox SET assigned to this map+theme (map-themes.data.ts) —
+     *  purely config-driven, resources/skybox/<name>/v1/{front,back,left,right,top,bottom}.jpg. */
     public static getSkyboxResourceIds(mapIdWithoutPrefix: string, theme: MapTheme): ResourceId[] {
-        const themeStr = MapTheme[theme].toLowerCase();
         const skyboxParts = ["front", "back", "left", "right", "top", "bottom"];
-
-        const specificPathPrefix = `skybox/${mapIdWithoutPrefix}/${themeStr}`;
-        const specificSkyboxTestResource = `${specificPathPrefix}/${skyboxParts[0]}` as ResourceId;
-
-        let basePath = `skybox/default/${themeStr}`;
-
-        if (ResourceData[specificSkyboxTestResource]) {
-            basePath = specificPathPrefix;
-            logger.info(`Using specific skybox path for map: ${mapIdWithoutPrefix}, theme: ${themeStr}`);
-        } else {
-            logger.info(`Using default skybox path for map: ${mapIdWithoutPrefix}, theme: ${themeStr}`);
-        }
-
-        return skyboxParts.map((part) => `${basePath}/${part}` as ResourceId);
+        const { skybox } = getMapThemeConfig(mapIdWithoutPrefix, theme);
+        return skyboxParts.map((part) => `skybox/${skybox}/${part}` as ResourceId);
     }
 
     public static getSkyboxResources(mapIdWithoutPrefix: string, theme: MapTheme): IDependency[] {
