@@ -60,7 +60,12 @@ async function bootstrap() {
   await connectToDatabase();
   logger.info("Database connection established");
 
-  const configPath = path.join(__dirname, "initial-config.json");
+  // Prod: dist/server.js lê dist/initial-config.json (copiado pelo build via cpx).
+  // Dev: server.ts roda da raiz, então o arquivo vive em src/config/initial-config.json.
+  const prodConfigPath = path.join(__dirname, "initial-config.json");
+  const configPath = fs.existsSync(prodConfigPath)
+    ? prodConfigPath
+    : path.join(__dirname, "src", "config", "initial-config.json");
   const defaultConfigs = JSON.parse(fs.readFileSync(configPath, "utf8"));
   await configService.initializeDefaultConfigs(defaultConfigs);
 
