@@ -1,74 +1,36 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
+
+// IDs e schemas em `protanki-protocol` (defs.battle.*).
 
 export class BattleConsumablesPacket extends BasePacket implements BattleTypes.IBattleConsumables {
     jsonData: string | null;
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return -137249251; }
+    static getId(): number { return defs.battle.BattleConsumables.id; }
 }
 
 export class BattleMinesPropertiesPacket extends BasePacket implements BattleTypes.IBattleMinesProperties {
     activateSound: number = 0; activateTimeMsec: number = 0; battleMines: BattleTypes.IBattleMine[] = []; blueMineTexture: number = 0; deactivateSound: number = 0; enemyMineTexture: number = 0; explosionMarkTexture: number = 0; explosionSound: number = 0; farVisibilityRadius: number = 0; friendlyMineTexture: number = 0; idleExplosionTexture: number = 0; impactForce: number = 0; mainExplosionTexture: number = 0; minDistanceFromBase: number = 0; model3ds: number = 0; nearVisibilityRadius: number = 0; radius: number = 0; redMineTexture: number = 0;
-    static readonly schema: PacketSchema = [
-        { name: "activateSound", type: "resource" },
-        { name: "activateTimeMsec", type: "i32" },
-        // Per-mine entry: mineId, ownerId, position (OPTIONAL vector3 = 1 present-byte + 3 floats). There is
-        // NO "armed" flag here — a 351-mine official snapshot from a busy battle had that present-byte = 0 for
-        // EVERY mine (armed ones included), i.e. it's the vector3 present-byte, not an armed bool. Sending an
-        // armed bool of 1 made the client read "position absent", skip the floats, desync and hit EOF (#2030).
-        // Armed state is (re)applied with ActivateMinePacket after this snapshot — see battle.workflow.
-        { name: "battleMines", type: "list", of: [
-            { name: "mineId", type: "string" },
-            { name: "ownerId", type: "string" },
-            { name: "position", type: "vector3" },
-        ] },
-        { name: "blueMineTexture", type: "resource" },
-        { name: "deactivateSound", type: "resource" },
-        { name: "enemyMineTexture", type: "resource" },
-        { name: "explosionMarkTexture", type: "resource" },
-        { name: "explosionSound", type: "resource" },
-        { name: "farVisibilityRadius", type: "f32" },
-        { name: "friendlyMineTexture", type: "resource" },
-        { name: "idleExplosionTexture", type: "resource" },
-        { name: "impactForce", type: "f32" },
-        { name: "mainExplosionTexture", type: "resource" },
-        { name: "minDistanceFromBase", type: "f32" },
-        { name: "model3ds", type: "resource" },
-        { name: "nearVisibilityRadius", type: "f32" },
-        { name: "radius", type: "f32" },
-        { name: "redMineTexture", type: "resource" },
-    ];
+    static readonly schema = defs.battle.BattleMinesProperties.schema!;
     constructor(data?: BattleTypes.IBattleMinesPropertiesData) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, BattleMinesPropertiesPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, BattleMinesPropertiesPacket.schema); }
-    static getId(): number { return -226978906; }
+    static getId(): number { return defs.battle.BattleMinesProperties.id; }
 }
 
 export class BattleStatsPacket extends BasePacket implements BattleTypes.IBattleStats {
-    static readonly schema: PacketSchema = [
-        { name: "battleMode", type: "i32" },
-        { name: "equipmentConstraintsMode", type: "i32" },
-        { name: "fund", type: "i32" },
-        { name: "scoreLimit", type: "i32" },
-        { name: "timeLimitInSec", type: "i32" },
-        { name: "mapName", type: "string" },
-        { name: "maxPeopleCount", type: "i32" },
-        { name: "parkourMode", type: "bool" },
-        { name: "premiumBonusInPercent", type: "i32" },
-        { name: "spectator", type: "bool" },
-        { name: "suspiciousUserIds", type: "optStringArray" },
-        { name: "timeLeft", type: "i32" },
-    ];
+    static readonly schema = defs.battle.BattleStats.schema!;
     battleMode: BattleTypes.BattleMode = BattleTypes.BattleMode.DM; equipmentConstraintsMode: BattleTypes.EquipmentConstraintsMode = BattleTypes.EquipmentConstraintsMode.NONE; fund: number = 0; scoreLimit: number = 0; timeLimitInSec: number = 0; mapName: string | null = null; maxPeopleCount: number = 0; parkourMode: boolean = false; premiumBonusInPercent: number = 0; spectator: boolean = false; suspiciousUserIds: string[] = []; timeLeft: number = 0;
     constructor(data: BattleTypes.IBattleStatsData) { super(); Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, BattleStatsPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, BattleStatsPacket.schema); }
-    static getId(): number { return 522993449; }
+    static getId(): number { return defs.battle.BattleStats.id; }
 }
 
 export class BattleUserEffectsPacket extends BasePacket implements BattleTypes.IBattleUserEffects {
@@ -76,7 +38,7 @@ export class BattleUserEffectsPacket extends BasePacket implements BattleTypes.I
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return 417965410; }
+    static getId(): number { return defs.battle.BattleUserEffects.id; }
 }
 
 export class BonusDataPacket extends BasePacket implements BattleTypes.IBonusData {
@@ -84,7 +46,7 @@ export class BonusDataPacket extends BasePacket implements BattleTypes.IBonusDat
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return 228171466; }
+    static getId(): number { return defs.battle.BonusData.id; }
 }
 
 export class InitBonusesPacket extends BasePacket {
@@ -92,156 +54,70 @@ export class InitBonusesPacket extends BasePacket {
     constructor(jsonData: string | null = "[]") { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return 870278784; }
+    static getId(): number { return defs.battle.InitBonuses.id; }
 }
 
-// Inline (non-optional) 3-float vector — note this is NOT the optVector3 used elsewhere.
-const VEC3_INLINE: PacketSchema = [
-    { name: "x", type: "f32" },
-    { name: "y", type: "f32" },
-    { name: "z", type: "f32" },
-];
-
 export class BonusRegionsPacket extends BasePacket implements BattleTypes.IBonusRegions {
-    static readonly schema: PacketSchema = [
-        { name: "bonusRegionResources", type: "list", of: [
-            { name: "bonusResource", type: "resource" },
-            { name: "bonusType", type: "i32" },
-        ] },
-        { name: "bonusRegionData", type: "list", of: [
-            { name: "position", type: "object", of: VEC3_INLINE },
-            { name: "rotation", type: "object", of: VEC3_INLINE },
-            { name: "bonusType", type: "i32" },
-        ] },
-    ];
+    static readonly schema = defs.battle.BonusRegions.schema!;
     bonusRegionResources: BattleTypes.IBonusRegionResource[]; bonusRegionData: BattleTypes.IBonusRegionData[];
     constructor(data?: BattleTypes.IBonusRegionsData) { super(); this.bonusRegionResources = data?.bonusRegionResources ?? []; this.bonusRegionData = data?.bonusRegionData ?? []; }
     read(buffer: Buffer): void { readSchema(this, BonusRegionsPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, BonusRegionsPacket.schema); }
-    static getId(): number { return -959048700; }
+    static getId(): number { return defs.battle.BonusRegions.id; }
 }
 
 export class InitBattleDMPacket extends BasePacket implements BattleTypes.IInitBattleDM {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 930618015; }
+    static getId(): number { return defs.battle.InitBattleDM.id; }
 }
 
 export class InitBattleTeamPacket extends BasePacket implements BattleTypes.IInitBattleTeam {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 183561709; }
+    static getId(): number { return defs.battle.InitBattleTeam.id; }
 }
 
-// Per-user fields shared by the battle user-list packets (no chatModeratorLevel on the wire).
-// Roster entry for InitBattleUsers (DM + team). MUST match the client's UserInfo codec — the SAME
-// layout as UserConnect's entry — including the leading ChatModeratorLevel, or the joining player's
-// registry has no cargo for anyone already in the room (nor for himself), so their staff badge never
-// shows to them or to anyone who joins after. deaths/kills are i16 here to match UserConnect.
-const BATTLE_USER_FIELDS: PacketSchema = [
-    { name: "chatModeratorLevel", type: "i32" },
-    { name: "deaths", type: "i16" },
-    { name: "kills", type: "i16" },
-    { name: "rank", type: "u8" },
-    { name: "score", type: "i32" },
-    { name: "uid", type: "string" },
-];
-
 export class InitBattleUsersDMPacket extends BasePacket implements BattleTypes.IInitBattleUsersDM {
-    static readonly schema: PacketSchema = [{ name: "users", type: "list", of: BATTLE_USER_FIELDS }];
+    static readonly schema = defs.battle.InitBattleUsersDM.schema!;
     users: BattleTypes.IBattleUser[] = [];
     constructor(users?: BattleTypes.IBattleUser[]) { super(); if (users) this.users = users; }
     read(buffer: Buffer): void { readSchema(this, InitBattleUsersDMPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, InitBattleUsersDMPacket.schema); }
-    static getId(): number { return -1959138292; }
+    static getId(): number { return defs.battle.InitBattleUsersDM.id; }
 }
 
 export class InitBattleUsersTeamPacket extends BasePacket implements BattleTypes.IInitBattleUsersTeam {
-    static readonly schema: PacketSchema = [
-        { name: "scoreBlue", type: "i32" },
-        { name: "scoreRed", type: "i32" },
-        { name: "usersBlue", type: "list", of: BATTLE_USER_FIELDS },
-        { name: "usersRed", type: "list", of: BATTLE_USER_FIELDS },
-    ];
+    static readonly schema = defs.battle.InitBattleUsersTeam.schema!;
     scoreBlue: number; scoreRed: number; usersBlue: BattleTypes.IBattleUser[]; usersRed: BattleTypes.IBattleUser[];
     constructor(scoreBlue: number = 0, scoreRed: number = 0, usersBlue: BattleTypes.IBattleUser[] = [], usersRed: BattleTypes.IBattleUser[] = []) { super(); this.scoreBlue = scoreBlue; this.scoreRed = scoreRed; this.usersBlue = usersBlue; this.usersRed = usersRed; }
     read(buffer: Buffer): void { readSchema(this, InitBattleUsersTeamPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, InitBattleUsersTeamPacket.schema); }
-    static getId(): number { return -1233891872; }
+    static getId(): number { return defs.battle.InitBattleUsersTeam.id; }
 }
 
 export class InitCtfFlagsPacket extends BasePacket implements BattleTypes.IInitCtfFlags {
-    static readonly schema: PacketSchema = [
-        { name: "flagBasePositionBlue", type: "vector3" },
-        { name: "flagCarrierIdBlue", type: "string" },
-        { name: "flagPositionBlue", type: "vector3" },
-        { name: "blueFlagSprite", type: "resource" },
-        { name: "bluePedestalModel", type: "resource" },
-        { name: "flagBasePositionRed", type: "vector3" },
-        { name: "flagCarrierIdRed", type: "string" },
-        { name: "flagPositionRed", type: "vector3" },
-        { name: "redFlagSprite", type: "resource" },
-        { name: "redPedestalModel", type: "resource" },
-        { name: "flagDropSound", type: "resource" },
-        { name: "flagReturnSound", type: "resource" },
-        { name: "flagTakeSound", type: "resource" },
-        { name: "winSound", type: "resource" },
-    ];
+    static readonly schema = defs.battle.InitCtfFlags.schema!;
     flagBasePositionBlue: BattleTypes.IVector3 | null = null; flagCarrierIdBlue: string | null = null; flagPositionBlue: BattleTypes.IVector3 | null = null; blueFlagSprite: number = 0; bluePedestalModel: number = 0; flagBasePositionRed: BattleTypes.IVector3 | null = null; flagCarrierIdRed: string | null = null; flagPositionRed: BattleTypes.IVector3 | null = null; redFlagSprite: number = 0; redPedestalModel: number = 0; flagDropSound: number = 0; flagReturnSound: number = 0; flagTakeSound: number = 0; winSound: number = 0;
     constructor(data: BattleTypes.IInitCtfFlagsData) { super(); Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, InitCtfFlagsPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, InitCtfFlagsPacket.schema); }
-    static getId(): number { return 789790814; }
+    static getId(): number { return defs.battle.InitCtfFlags.id; }
 }
 
 export class InitDomPointsPacket extends BasePacket implements BattleTypes.IInitDomPoints {
     keypointTriggerRadius: number = 0; keypointVisorHeight: number = 0; minesRestrictionRadius: number = 0; points: BattleTypes.IDomPoint[] = []; bigLetters: number = 0; blueCircle: number = 0; bluePedestalTexture: number = 0; blueRay: number = 0; blueRayTip: number = 0; neutralCircle: number = 0; neutralPedestalTexture: number = 0; pedestal: number = 0; redCircle: number = 0; redPedestalTexture: number = 0; redRay: number = 0; redRayTip: number = 0; pointCaptureStartNegativeSound: number = 0; pointCaptureStartPositiveSound: number = 0; pointCaptureStopNegativeSound: number = 0; pointCaptureStopPositiveSound: number = 0; pointCapturedNegativeSound: number = 0; pointCapturedPositiveSound: number = 0; pointNeutralizedNegativeSound: number = 0; pointNeutralizedPositiveSound: number = 0; pointScoreDecreasingSound: number = 0; pointScoreIncreasingSound: number = 0;
-    static readonly schema: PacketSchema = [
-        { name: "keypointTriggerRadius", type: "f32" },
-        { name: "keypointVisorHeight", type: "f32" },
-        { name: "minesRestrictionRadius", type: "f32" },
-        { name: "points", type: "list", of: [
-            { name: "id", type: "i32" },
-            { name: "name", type: "string" },
-            { name: "position", type: "vector3" },
-            { name: "score", type: "f32" },
-            { name: "scoreChangeRate", type: "f32" },
-            { name: "state", type: "i32" },
-            { name: "tankIds", type: "stringArray" },
-        ] },
-        { name: "bigLetters", type: "resource" },
-        { name: "blueCircle", type: "resource" },
-        { name: "bluePedestalTexture", type: "resource" },
-        { name: "blueRay", type: "resource" },
-        { name: "blueRayTip", type: "resource" },
-        { name: "neutralCircle", type: "resource" },
-        { name: "neutralPedestalTexture", type: "resource" },
-        { name: "pedestal", type: "resource" },
-        { name: "redCircle", type: "resource" },
-        { name: "redPedestalTexture", type: "resource" },
-        { name: "redRay", type: "resource" },
-        { name: "redRayTip", type: "resource" },
-        { name: "pointCaptureStartNegativeSound", type: "resource" },
-        { name: "pointCaptureStartPositiveSound", type: "resource" },
-        { name: "pointCaptureStopNegativeSound", type: "resource" },
-        { name: "pointCaptureStopPositiveSound", type: "resource" },
-        { name: "pointCapturedNegativeSound", type: "resource" },
-        { name: "pointCapturedPositiveSound", type: "resource" },
-        { name: "pointNeutralizedNegativeSound", type: "resource" },
-        { name: "pointNeutralizedPositiveSound", type: "resource" },
-        { name: "pointScoreDecreasingSound", type: "resource" },
-        { name: "pointScoreIncreasingSound", type: "resource" },
-    ];
+    static readonly schema = defs.battle.InitDomPoints.schema!;
     constructor(data?: BattleTypes.IInitDomPointsData) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, InitDomPointsPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, InitDomPointsPacket.schema); }
-    static getId(): number { return -1337059439; }
+    static getId(): number { return defs.battle.InitDomPoints.id; }
 }
 
 export class InitializeBattleStatisticsPacket extends BasePacket implements BattleTypes.IInitializeBattleStatistics {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1953272681; }
+    static getId(): number { return defs.battle.InitializeBattleStatistics.id; }
 }
 
 export class InitMapPacket extends BasePacket implements BattleTypes.IInitMap {
@@ -249,13 +125,13 @@ export class InitMapPacket extends BasePacket implements BattleTypes.IInitMap {
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return -152638117; }
+    static getId(): number { return defs.battle.InitMap.id; }
 }
 
 export class LoadBattleChatPacket extends BasePacket implements BattleTypes.ILoadBattleChat {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -643105296; }
+    static getId(): number { return defs.battle.LoadBattleChat.id; }
 }
 
 export class TankModelDataPacket extends BasePacket implements BattleTypes.ITankModelData {
@@ -263,7 +139,7 @@ export class TankModelDataPacket extends BasePacket implements BattleTypes.ITank
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return -1643824092; }
+    static getId(): number { return defs.battle.TankModelData.id; }
 }
 
 export class TankSpecificationPacket extends BasePacket implements BattleTypes.ITankSpecification {
@@ -273,13 +149,13 @@ export class TankSpecificationPacket extends BasePacket implements BattleTypes.I
     constructor(data?: BattleTypes.ITankSpecificationData) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.speed = r.readFloatBE(); this.maxTurnSpeed = r.readFloatBE(); this.turretTurnSpeed = r.readFloatBE(); this.acceleration = r.readFloatBE(); this.sequence = r.readInt16BE(); }
     write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeFloatBE(this.speed); w.writeFloatBE(this.maxTurnSpeed); w.writeFloatBE(this.turretTurnSpeed); w.writeFloatBE(this.acceleration); w.writeInt16BE(this.sequence); return w.getBuffer(); }
-    static getId(): number { return -1672577397; }
+    static getId(): number { return defs.battle.TankSpecification.id; }
 }
 
 export class UnloadSpaceBattlePacket extends BasePacket implements BattleTypes.IUnloadSpaceBattle {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -985579124; }
+    static getId(): number { return defs.battle.UnloadSpaceBattle.id; }
 }
 
 export class WeaponPhysicsPacket extends BasePacket implements BattleTypes.IWeaponPhysics {
@@ -287,5 +163,5 @@ export class WeaponPhysicsPacket extends BasePacket implements BattleTypes.IWeap
     constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
     read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return -2124388778; }
+    static getId(): number { return defs.battle.WeaponPhysics.id; }
 }

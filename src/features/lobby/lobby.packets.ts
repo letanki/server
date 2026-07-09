@@ -1,100 +1,48 @@
 import { BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import { ResourceManager } from "@/utils/resource.manager";
+import { defs } from "protanki-protocol";
 import * as LobbyTypes from "./lobby.types";
+
+// IDs e schemas em `protanki-protocol` (defs.lobby.*).
 
 export class BattleInfo extends BasePacket implements LobbyTypes.IBattleInfo {
     jsonData: string | null = null;
     constructor(jsonData?: string | null) {
         super();
-        if (jsonData) {
-            this.jsonData = jsonData;
-        }
+        if (jsonData) { this.jsonData = jsonData; }
     }
-    read(buffer: Buffer): void {
-        this.jsonData = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.jsonData).getBuffer();
-    }
-    static getId(): number {
-        return -838186985;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.BattleInfo.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.BattleInfo.schema!); }
+    static getId(): number { return defs.lobby.BattleInfo.id; }
 }
 
 export class BattleList extends BasePacket implements LobbyTypes.IBattleList {
     jsonData: string | null = null;
     constructor(jsonData?: string | null) {
         super();
-        if (jsonData) {
-            this.jsonData = jsonData;
-        }
+        if (jsonData) { this.jsonData = jsonData; }
     }
-    read(buffer: Buffer): void {
-        this.jsonData = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.jsonData).getBuffer();
-    }
-    static getId(): number {
-        return 552006706;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.BattleList.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.BattleList.schema!); }
+    static getId(): number { return defs.lobby.BattleList.id; }
 }
 
 export class BattleDetails extends BasePacket implements LobbyTypes.IBattleDetails {
     jsonData: string | null = null;
     constructor(jsonData?: string | null) {
         super();
-        if (jsonData) {
-            this.jsonData = jsonData;
-        }
+        if (jsonData) { this.jsonData = jsonData; }
     }
-    read(buffer: Buffer): void {
-        this.jsonData = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.jsonData).getBuffer();
-    }
-    static getId(): number {
-        return 546722394;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.BattleDetails.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.BattleDetails.schema!); }
+    static getId(): number { return defs.lobby.BattleDetails.id; }
 }
 
 export class CreateBattleRequest extends BasePacket implements LobbyTypes.ICreateBattleRequest {
-    static readonly schema: PacketSchema = [
-        { name: "autoBalance", type: "bool" },
-        { name: "battleMode", type: "i32" },
-        { name: "equipmentConstraintsMode", type: "i32" },
-        { name: "friendlyFire", type: "bool" },
-        { name: "scoreLimit", type: "i32" },
-        { name: "timeLimitInSec", type: "i32" },
-        { name: "mapId", type: "string" },
-        { name: "maxPeopleCount", type: "i32" },
-        { name: "name", type: "string" },
-        { name: "parkourMode", type: "bool" },
-        { name: "privateBattle", type: "bool" },
-        { name: "proBattle", type: "bool" },
-        { name: "maxRank", type: "i32" },
-        { name: "minRank", type: "i32" },
-        { name: "reArmorEnabled", type: "bool" },
-        { name: "mapTheme", type: "i32" },
-        { name: "withoutBonuses", type: "bool" },
-        { name: "withoutCrystals", type: "bool" },
-        { name: "withoutSupplies", type: "bool" },
-        { name: "withoutUpgrades", type: "bool" },
-        { name: "reducedResistances", type: "bool" },
-        { name: "esportDropTiming", type: "bool" },
-        { name: "withoutGoldBoxes", type: "bool" },
-        { name: "withoutGoldSiren", type: "bool" },
-        { name: "withoutGoldZone", type: "bool" },
-        { name: "withoutMedkit", type: "bool" },
-        { name: "withoutMines", type: "bool" },
-        { name: "randomGold", type: "bool" },
-        { name: "dependentCooldownEnabled", type: "bool" },
-    ];
     autoBalance: boolean = false;
     battleMode: BattleMode = BattleMode.DM;
     equipmentConstraintsMode: EquipmentConstraintsMode = EquipmentConstraintsMode.NONE;
@@ -124,39 +72,28 @@ export class CreateBattleRequest extends BasePacket implements LobbyTypes.ICreat
     withoutMines: boolean = false;
     randomGold: boolean = false;
     dependentCooldownEnabled: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, CreateBattleRequest.schema, buffer); }
-    write(): Buffer { return writeSchema(this, CreateBattleRequest.schema); }
-    static getId(): number {
-        return -2135234426;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.CreateBattleRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.CreateBattleRequest.schema!); }
+    static getId(): number { return defs.lobby.CreateBattleRequest.id; }
 }
 
 export class CreateBattleResponse extends BasePacket implements LobbyTypes.ICreateBattleResponse {
     jsonData: string | null = null;
     constructor(jsonData?: string | null) {
         super();
-        if (jsonData) {
-            this.jsonData = jsonData;
-        }
+        if (jsonData) { this.jsonData = jsonData; }
     }
-    read(buffer: Buffer): void {
-        this.jsonData = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.jsonData).getBuffer();
-    }
-    static getId(): number {
-        return 802300608;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.CreateBattleResponse.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.CreateBattleResponse.schema!); }
+    static getId(): number { return defs.lobby.CreateBattleResponse.id; }
 }
 
+// Codec manual: aplica .trim() ao battleId lido.
 export class SelectBattlePacket extends BasePacket implements LobbyTypes.ISelectBattle {
     battleId: string | null = null;
     constructor(battleId?: string | null) {
         super();
-        if (battleId) {
-            this.battleId = battleId;
-        }
+        if (battleId) { this.battleId = battleId; }
     }
     read(buffer: Buffer): void {
         const readId = new BufferReader(buffer).readOptionalString();
@@ -165,71 +102,35 @@ export class SelectBattlePacket extends BasePacket implements LobbyTypes.ISelect
     write(): Buffer {
         return new BufferWriter().writeOptionalString(this.battleId).getBuffer();
     }
-    static getId(): number {
-        return 2092412133;
-    }
+    static getId(): number { return defs.lobby.SelectBattle.id; }
 }
 
 export class RequestBattleByLinkPacket extends BasePacket implements LobbyTypes.IRequestBattleByLink {
     battleId: string | null = null;
-    read(buffer: Buffer): void {
-        this.battleId = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.battleId).getBuffer();
-    }
-    static getId(): number {
-        return -604091695;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.RequestBattleByLink.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.RequestBattleByLink.schema!); }
+    static getId(): number { return defs.lobby.RequestBattleByLink.id; }
 }
 
 export class ValidateBattleNameRequest extends BasePacket implements LobbyTypes.IValidateBattleName {
     name: string | null = null;
-    read(buffer: Buffer): void {
-        this.name = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.name).getBuffer();
-    }
-    static getId(): number {
-        return 566652736;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.ValidateBattleNameRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.ValidateBattleNameRequest.schema!); }
+    static getId(): number { return defs.lobby.ValidateBattleNameRequest.id; }
 }
 
 export class ValidateBattleNameResponse extends BasePacket implements LobbyTypes.IValidateBattleName {
     name: string | null = null;
     constructor(name?: string | null) {
         super();
-        if (name) {
-            this.name = name;
-        }
+        if (name) { this.name = name; }
     }
-    read(buffer: Buffer): void {
-        this.name = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.name).getBuffer();
-    }
-    static getId(): number {
-        return 120401338;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.ValidateBattleNameResponse.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.ValidateBattleNameResponse.schema!); }
+    static getId(): number { return defs.lobby.ValidateBattleNameResponse.id; }
 }
 
 export class LobbyData extends BasePacket implements LobbyTypes.ILobbyData {
-    static readonly schema: PacketSchema = [
-        { name: "crystals", type: "i32" },
-        { name: "currentRankScore", type: "i32" },
-        { name: "durationCrystalAbonement", type: "i32" },
-        { name: "hasDoubleCrystal", type: "bool" },
-        { name: "nextRankScore", type: "i32" },
-        { name: "place", type: "i32" },
-        { name: "rank", type: "u8" },
-        { name: "rating", type: "f32" },
-        { name: "score", type: "i32" },
-        { name: "serverNumber", type: "i32" },
-        { name: "nickname", type: "string" },
-        { name: "userProfileUrl", type: "string" },
-    ];
     crystals: number = 0;
     currentRankScore: number = 0;
     durationCrystalAbonement: number = 0;
@@ -244,15 +145,11 @@ export class LobbyData extends BasePacket implements LobbyTypes.ILobbyData {
     userProfileUrl: string = "";
     constructor(data?: LobbyTypes.ILobbyDataProps) {
         super();
-        if (data) {
-            Object.assign(this, data);
-        }
+        if (data) { Object.assign(this, data); }
     }
-    read(buffer: Buffer): void { readSchema(this, LobbyData.schema, buffer); }
-    write(): Buffer { return writeSchema(this, LobbyData.schema); }
-    static getId(): number {
-        return 907073245;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.LobbyData.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.LobbyData.schema!); }
+    static getId(): number { return defs.lobby.LobbyData.id; }
 }
 
 export class UserNotInBattlePacket extends BasePacket implements LobbyTypes.IUserNotInBattle {
@@ -261,22 +158,12 @@ export class UserNotInBattlePacket extends BasePacket implements LobbyTypes.IUse
         super();
         this.nickname = nickname;
     }
-    read(buffer: Buffer): void {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId(): number {
-        return 1941694508;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.UserNotInBattle.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.UserNotInBattle.schema!); }
+    static getId(): number { return defs.lobby.UserNotInBattle.id; }
 }
 
 export class ReleasePlayerSlotDmPacket extends BasePacket implements LobbyTypes.IReleasePlayerSlotDm {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null;
     nickname: string | null;
     constructor(data?: LobbyTypes.IReleasePlayerSlotDmData) {
@@ -284,18 +171,12 @@ export class ReleasePlayerSlotDmPacket extends BasePacket implements LobbyTypes.
         this.battleId = data?.battleId ?? null;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void { readSchema(this, ReleasePlayerSlotDmPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ReleasePlayerSlotDmPacket.schema); }
-    static getId(): number {
-        return 504016996;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.ReleasePlayerSlotDm.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.ReleasePlayerSlotDm.schema!); }
+    static getId(): number { return defs.lobby.ReleasePlayerSlotDm.id; }
 }
 
 export class ReservePlayerSlotDmPacket extends BasePacket implements LobbyTypes.IReservePlayerSlotDm {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null;
     nickname: string | null;
     constructor(battleId: string | null = null, nickname: string | null = null) {
@@ -303,21 +184,12 @@ export class ReservePlayerSlotDmPacket extends BasePacket implements LobbyTypes.
         this.battleId = battleId;
         this.nickname = nickname;
     }
-    read(buffer: Buffer): void { readSchema(this, ReservePlayerSlotDmPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ReservePlayerSlotDmPacket.schema); }
-    static getId(): number {
-        return -2133657895;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.ReservePlayerSlotDm.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.ReservePlayerSlotDm.schema!); }
+    static getId(): number { return defs.lobby.ReservePlayerSlotDm.id; }
 }
 
 export class AddUserToBattleDmPacket extends BasePacket implements LobbyTypes.IAddUserToBattleDm {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "kills", type: "i32" },
-        { name: "score", type: "i32" },
-        { name: "suspicious", type: "bool" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null;
     nickname: string | null;
     kills: number;
@@ -331,18 +203,12 @@ export class AddUserToBattleDmPacket extends BasePacket implements LobbyTypes.IA
         this.score = data?.score ?? 0;
         this.suspicious = data?.suspicious ?? false;
     }
-    read(buffer: Buffer): void { readSchema(this, AddUserToBattleDmPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, AddUserToBattleDmPacket.schema); }
-    static getId(): number {
-        return -911626491;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.AddUserToBattleDm.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.AddUserToBattleDm.schema!); }
+    static getId(): number { return defs.lobby.AddUserToBattleDm.id; }
 }
 
 export class RemoveUserFromBattleLobbyPacket extends BasePacket implements LobbyTypes.IRemoveUserFromBattleLobby {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null;
     nickname: string | null;
     constructor(data?: LobbyTypes.IRemoveUserFromBattleLobbyData) {
@@ -350,25 +216,12 @@ export class RemoveUserFromBattleLobbyPacket extends BasePacket implements Lobby
         this.battleId = data?.battleId ?? null;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void { readSchema(this, RemoveUserFromBattleLobbyPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, RemoveUserFromBattleLobbyPacket.schema); }
-    static getId(): number {
-        return 1924874982;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.RemoveUserFromBattleLobby.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.RemoveUserFromBattleLobby.schema!); }
+    static getId(): number { return defs.lobby.RemoveUserFromBattleLobby.id; }
 }
 
 export class NotifyFriendOfBattlePacket extends BasePacket implements LobbyTypes.INotifyFriendOfBattle {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "mapName", type: "string" },
-        { name: "mode", type: "i32" },
-        { name: "privateBattle", type: "bool" },
-        { name: "probattle", type: "bool" },
-        { name: "maxRank", type: "i32" },
-        { name: "minRank", type: "i32" },
-        { name: "serverNumber", type: "i32" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null;
     mapName: string | null;
     mode: BattleMode;
@@ -390,37 +243,24 @@ export class NotifyFriendOfBattlePacket extends BasePacket implements LobbyTypes
         this.serverNumber = data?.serverNumber ?? 0;
         this.nickname = data?.nickname ?? null;
     }
-    read(buffer: Buffer): void { readSchema(this, NotifyFriendOfBattlePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, NotifyFriendOfBattlePacket.schema); }
-    static getId(): number {
-        return -1895446889;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.NotifyFriendOfBattle.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.NotifyFriendOfBattle.schema!); }
+    static getId(): number { return defs.lobby.NotifyFriendOfBattle.id; }
 }
 
 export class UnloadBattleListPacket extends BasePacket implements LobbyTypes.IUnloadBattleList {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return -324155151;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.UnloadBattleList.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.UnloadBattleList.schema!); }
+    static getId(): number { return defs.lobby.UnloadBattleList.id; }
 }
 
 export class RequestLobbyPacket extends BasePacket implements LobbyTypes.IRequestLobby {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return 1452181070;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.RequestLobby.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.RequestLobby.schema!); }
+    static getId(): number { return defs.lobby.RequestLobby.id; }
 }
 
 export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetBattleInviteSound {
-    static readonly schema: PacketSchema = [
-        { name: "soundIdLow", type: "resource" },
-    ];
     soundIdLow: number;
 
     constructor(soundIdLow: number) {
@@ -428,13 +268,11 @@ export class SetBattleInviteSound extends BasePacket implements LobbyTypes.ISetB
         this.soundIdLow = soundIdLow;
     }
 
-    read(buffer: Buffer): void { readSchema(this, SetBattleInviteSound.schema, buffer); }
-
-    write(): Buffer { return writeSchema(this, SetBattleInviteSound.schema); }
-    static getId(): number {
-        return 834877801;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.SetBattleInviteSound.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.SetBattleInviteSound.schema!); }
+    static getId(): number { return defs.lobby.SetBattleInviteSound.id; }
 }
+
 // S->C: initializes the clan module in the lobby (this is what makes the CLAN button appear). It
 // carries the static clan-system config (7 nested Alternativa sub-models). We ASSEMBLE it field by
 // field; the layout matches the official capture (2026-06-18_07-43). The only fields with a
@@ -467,52 +305,35 @@ export class InitUserClanModelsPacket extends BasePacket {
             .writeResource(ResourceManager.getIdlowById("clan/podium"));
         return w.getBuffer();
     }
-    static getId(): number { return -1338449818; }
+    static getId(): number { return defs.lobby.InitUserClanModels.id; }
 }
 
 // --- Team-mode battle-lobby roster (mirror the DM packets, with a `team` field; 0=red, 1=blue). ---
 
 // S->C (battle list): a player reserved a team slot in a battle.
 export class OnReserveSlotTeamPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-        { name: "team", type: "i32" },
-    ];
     battleId: string | null; nickname: string | null; team: number;
     constructor(battleId: string | null = null, nickname: string | null = null, team: number = 0) {
         super(); this.battleId = battleId; this.nickname = nickname; this.team = team;
     }
-    read(buffer: Buffer): void { readSchema(this, OnReserveSlotTeamPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, OnReserveSlotTeamPacket.schema); }
-    static getId(): number { return -169305322; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.OnReserveSlotTeam.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.OnReserveSlotTeam.schema!); }
+    static getId(): number { return defs.lobby.OnReserveSlotTeam.id; }
 }
 
 // S->C (battle list): a player released their team slot.
 export class OnReleaseSlotTeamPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-    ];
     battleId: string | null; nickname: string | null;
     constructor(battleId: string | null = null, nickname: string | null = null) {
         super(); this.battleId = battleId; this.nickname = nickname;
     }
-    read(buffer: Buffer): void { readSchema(this, OnReleaseSlotTeamPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, OnReleaseSlotTeamPacket.schema); }
-    static getId(): number { return 1447204641; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.OnReleaseSlotTeam.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.OnReleaseSlotTeam.schema!); }
+    static getId(): number { return defs.lobby.OnReleaseSlotTeam.id; }
 }
 
 // S->C (battle-details watchers): add a user to a team battle's roster.
 export class AddUserTeamPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "kills", type: "i32" },
-        { name: "score", type: "i32" },
-        { name: "suspicious", type: "bool" },
-        { name: "nickname", type: "string" },
-        { name: "team", type: "i32" },
-    ];
     battleId: string | null; nickname: string | null; kills: number; score: number; suspicious: boolean; team: number;
     constructor(data?: { battleId?: string | null; nickname?: string | null; kills?: number; score?: number; suspicious?: boolean; team?: number }) {
         super();
@@ -523,68 +344,55 @@ export class AddUserTeamPacket extends BasePacket {
         this.suspicious = data?.suspicious ?? false;
         this.team = data?.team ?? 0;
     }
-    read(buffer: Buffer): void { readSchema(this, AddUserTeamPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, AddUserTeamPacket.schema); }
-    static getId(): number { return 118447426; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.AddUserTeam.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.AddUserTeam.schema!); }
+    static getId(): number { return defs.lobby.AddUserTeam.id; }
 }
 
 // S->C (battle-details watchers): update a user's score in the battle roster.
 export class UpdateUserScorePacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "nickname", type: "string" },
-        { name: "score", type: "i32" },
-    ];
     battleId: string | null; nickname: string | null; score: number;
     constructor(battleId: string | null = null, nickname: string | null = null, score: number = 0) {
         super(); this.battleId = battleId; this.nickname = nickname; this.score = score;
     }
-    read(buffer: Buffer): void { readSchema(this, UpdateUserScorePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, UpdateUserScorePacket.schema); }
-    static getId(): number { return -375282889; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.UpdateUserScore.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.UpdateUserScore.schema!); }
+    static getId(): number { return defs.lobby.UpdateUserScore.id; }
 }
 
 // S->C: hide a battle's info panel (e.g. the battle is no longer selectable).
 export class HideBattleInfoPacket extends BasePacket {
-    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
     battleId: string | null;
     constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
-    read(buffer: Buffer): void { readSchema(this, HideBattleInfoPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, HideBattleInfoPacket.schema); }
-    static getId(): number { return -602527073; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.HideBattleInfo.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.HideBattleInfo.schema!); }
+    static getId(): number { return defs.lobby.HideBattleInfo.id; }
 }
 
 // S->C: remove a battle from the lobby battle list (e.g. it expired empty). Body: battleId. This is
 // the actual list-removal packet (id -1848001147), distinct from HideBattleInfo (panel toggle).
 export class RemoveBattleFromListPacket extends BasePacket {
-    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
     battleId: string | null;
     constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
-    read(buffer: Buffer): void { readSchema(this, RemoveBattleFromListPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, RemoveBattleFromListPacket.schema); }
-    static getId(): number { return -1848001147; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.RemoveBattleFromList.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.RemoveBattleFromList.schema!); }
+    static getId(): number { return defs.lobby.RemoveBattleFromList.id; }
 }
 
 // S->C (lobby battle-preview watchers): the running match round finished — resets the preview timer.
 export class RoundFinishPacket extends BasePacket {
-    static readonly schema: PacketSchema = [{ name: "battleId", type: "string" }];
     battleId: string | null;
     constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
-    read(buffer: Buffer): void { readSchema(this, RoundFinishPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, RoundFinishPacket.schema); }
-    static getId(): number { return 1534651002; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.RoundFinish.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.RoundFinish.schema!); }
+    static getId(): number { return defs.lobby.RoundFinish.id; }
 }
 
 // S->C (lobby battle-preview watchers): a team's score changed in the running battle. team 0=red,1=blue.
 export class UpdateTeamScorePacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "battleId", type: "string" },
-        { name: "team", type: "i32" },
-        { name: "score", type: "i32" },
-    ];
     battleId: string | null; team: number; score: number;
     constructor(battleId: string | null = null, team: number = 0, score: number = 0) { super(); this.battleId = battleId; this.team = team; this.score = score; }
-    read(buffer: Buffer): void { readSchema(this, UpdateTeamScorePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, UpdateTeamScorePacket.schema); }
-    static getId(): number { return 1428217189; }
+    read(buffer: Buffer): void { readSchema(this, defs.lobby.UpdateTeamScore.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.lobby.UpdateTeamScore.schema!); }
+    static getId(): number { return defs.lobby.UpdateTeamScore.id; }
 }

@@ -1,36 +1,37 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
+
+// IDs e schemas em `protanki-protocol` (defs.battle.*). Os HOT PATH (movimento) e os
+// S->C de write customizado (listas) mantêm o codec manual verbatim; só id/schema apontam
+// para a lib.
 
 export class ActivateTankPacket extends BasePacket {
     nickname: string | null;
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return 1868573511; }
+    static getId(): number { return defs.battle.ActivateTank.id; }
 }
 
 // C->S: the player activated a supply (consumable). Body is just the supply id (e.g. "n2o").
 export class ActivateSupplyCommandPacket extends BasePacket {
-    static readonly schema: PacketSchema = [{ name: "itemId", type: "string" }];
+    static readonly schema = defs.battle.ActivateSupplyCommand.schema!;
     itemId: string | null = null;
     // HOT PATH — hand-written monomorphic read (received on every supply activation; mine-spam macros fire
     // this hundreds of times/second). Byte-identical to `schema`.
     read(buffer: Buffer): void { this.itemId = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return writeSchema(this, ActivateSupplyCommandPacket.schema); }
-    static getId(): number { return -2102525054; }
+    static getId(): number { return defs.battle.ActivateSupplyCommand.id; }
 }
 
 // S->C (to the activating client): confirms the activation so the client greys out the slot for
 // `cooldownMs` (effectTime + restSec) and decrements the count. `flag` is 1 in every observed case.
 export class ActivatedSupplyPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "itemId", type: "string" },
-        { name: "cooldownMs", type: "i32" },
-        { name: "flag", type: "i8" },
-    ];
+    static readonly schema = defs.battle.ActivatedSupply.schema!;
     itemId: string | null; cooldownMs: number; flag: number;
     constructor(itemId: string | null = null, cooldownMs: number = 0, flag: number = 1) { super(); this.itemId = itemId; this.cooldownMs = cooldownMs; this.flag = flag; }
     read(buffer: Buffer): void { readSchema(this, ActivatedSupplyPacket.schema, buffer); }
@@ -42,120 +43,85 @@ export class ActivatedSupplyPacket extends BasePacket {
             .writeInt8(this.flag)
             .getBuffer();
     }
-    static getId(): number { return 2032104949; }
+    static getId(): number { return defs.battle.ActivatedSupply.id; }
 }
 
 // S->C: updates a single consumable's count in the in-battle supply panel after a garage purchase
 // (e.g. bought more mines mid-battle). Body = optionalString(base supply id, e.g. "mine") + i32(new
 // total count).
 export class UpdateConsumableCountPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "itemId", type: "string" },
-        { name: "count", type: "i32" },
-    ];
+    static readonly schema = defs.battle.UpdateConsumableCount.schema!;
     itemId: string | null; count: number;
     constructor(itemId: string | null = null, count: number = 0) { super(); this.itemId = itemId; this.count = count; }
     read(buffer: Buffer): void { readSchema(this, UpdateConsumableCountPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UpdateConsumableCountPacket.schema); }
-    static getId(): number { return -502907094; }
+    static getId(): number { return defs.battle.UpdateConsumableCount.id; }
 }
 
 // S->C (broadcast): a supply effect started on a tank, so every client renders it. `effectType`
 // is the supply slotId (armor=2, double_damage=3, n2o=4, mine=5), `durationMs` is effectTime*1000.
 export class EffectStartedPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "effectType", type: "i32" },
-        { name: "durationMs", type: "i32" },
-        { name: "unknown", type: "i16" },
-    ];
+    static readonly schema = defs.battle.EffectStarted.schema!;
     nickname: string | null; effectType: number; durationMs: number; unknown: number;
     constructor(nickname: string | null = null, effectType: number = 0, durationMs: number = 0, unknown: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; this.durationMs = durationMs; this.unknown = unknown; }
     read(buffer: Buffer): void { readSchema(this, EffectStartedPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, EffectStartedPacket.schema); }
-    static getId(): number { return -1639713644; }
+    static getId(): number { return defs.battle.EffectStarted.id; }
 }
 
 // S->C (broadcast): a supply effect ended on a tank, so every client removes its visual. Sent at
 // the end of the effect duration, right before the spec is reverted (for movement effects).
 export class EffectStoppedPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "effectType", type: "i32" },
-    ];
+    static readonly schema = defs.battle.EffectStopped.schema!;
     nickname: string | null; effectType: number;
     constructor(nickname: string | null = null, effectType: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; }
     read(buffer: Buffer): void { readSchema(this, EffectStoppedPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, EffectStoppedPacket.schema); }
-    static getId(): number { return -1994318624; }
+    static getId(): number { return defs.battle.EffectStopped.id; }
 }
 
 export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.IConfirmDestruction {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "delaytoSpawn", type: "i32" },
-    ];
+    static readonly schema = defs.battle.ConfirmDestruction.schema!;
     nickname: string | null; delaytoSpawn: number;
     constructor(nickname: string | null = null, delaytoSpawn: number = 0) { super(); this.nickname = nickname; this.delaytoSpawn = delaytoSpawn; }
     read(buffer: Buffer): void { readSchema(this, ConfirmDestructionPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, ConfirmDestructionPacket.schema); }
-    static getId(): number { return -173682854; }
+    static getId(): number { return defs.battle.ConfirmDestruction.id; }
 }
 
 // S->C (broadcast): floating damage number on a tank. count is always 1 here. damageType drives the
 // number's colour in the client: 0 = normal (white), 1 = critical (yellow), 2 = fatal/kill (red),
 // 3 = heal (green).
 export class DamageIndicatorPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "count", type: "i32" },
-        { name: "damage", type: "f32" },
-        { name: "damageType", type: "i32" },
-        { name: "target", type: "string" },
-    ];
+    static readonly schema = defs.battle.DamageIndicator.schema!;
     count: number; damage: number; damageType: number; target: string | null;
     constructor(target: string | null = null, damage: number = 0, damageType: number = 0) { super(); this.count = 1; this.damage = damage; this.damageType = damageType; this.target = target; }
     read(buffer: Buffer): void { readSchema(this, DamageIndicatorPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, DamageIndicatorPacket.schema); }
-    static getId(): number { return -1165230470; }
+    static getId(): number { return defs.battle.DamageIndicator.id; }
 }
 
 // S->C (broadcast): a tank was killed — victim, killer, and respawn delay (ms).
 export class KillPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "victim", type: "string" },
-        { name: "killer", type: "string" },
-        { name: "respawnDelayMs", type: "i32" },
-    ];
+    static readonly schema = defs.battle.Kill.schema!;
     victim: string | null; killer: string | null; respawnDelayMs: number;
     constructor(victim: string | null = null, killer: string | null = null, respawnDelayMs: number = 3000) { super(); this.victim = victim; this.killer = killer; this.respawnDelayMs = respawnDelayMs; }
     read(buffer: Buffer): void { readSchema(this, KillPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, KillPacket.schema); }
-    static getId(): number { return -42520728; }
+    static getId(): number { return defs.battle.Kill.id; }
 }
 
 export class DestroyTankPacket extends BasePacket implements BattleTypes.IDestroyTankPacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "readyToSpawnInMs", type: "i32" },
-    ];
+    static readonly schema = defs.battle.DestroyTank.schema!;
     nickname: string | null; readyToSpawnInMs: number;
     constructor(nickname: string | null = null, readyToSpawnInMs: number = 0) { super(); this.nickname = nickname; this.readyToSpawnInMs = readyToSpawnInMs; }
     read(buffer: Buffer): void { readSchema(this, DestroyTankPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, DestroyTankPacket.schema); }
-    static getId(): number { return 162656882; }
+    static getId(): number { return defs.battle.DestroyTank.id; }
 }
 
 export class FullMoveCommandPacket extends BasePacket implements BattleTypes.IFullMoveCommand {
-    static readonly schema: PacketSchema = [
-        { name: "clientTime", type: "i32" },
-        { name: "incarnation", type: "i16" },
-        { name: "angularVelocity", type: "vector3" },
-        { name: "control", type: "i8" },
-        { name: "linearVelocity", type: "vector3" },
-        { name: "orientation", type: "vector3" },
-        { name: "position", type: "vector3" },
-        { name: "direction", type: "f32" },
-    ];
+    static readonly schema = defs.battle.FullMoveCommand.schema!;
     clientTime: number = 0; incarnation: number = 0; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null; direction: number = 0;
     // HOT PATH — hand-written monomorphic read (received on every movement tick from every client). The
     // generic readSchema shares one megamorphic property site across all packet types; this doesn't. Must
@@ -172,19 +138,11 @@ export class FullMoveCommandPacket extends BasePacket implements BattleTypes.IFu
         this.direction = r.readFloatBE();
     }
     write(): Buffer { return writeSchema(this, FullMoveCommandPacket.schema); }
-    static getId(): number { return -1683279062; }
+    static getId(): number { return defs.battle.FullMoveCommand.id; }
 }
 
 export class FullMovePacket extends BasePacket implements BattleTypes.IFullMovePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "angularVelocity", type: "vector3" },
-        { name: "control", type: "i8" },
-        { name: "linearVelocity", type: "vector3" },
-        { name: "orientation", type: "vector3" },
-        { name: "position", type: "vector3" },
-        { name: "direction", type: "f32" },
-    ];
+    static readonly schema = defs.battle.FullMove.schema!;
     nickname: string | null; angularVelocity: BattleTypes.IVector3 | null; control: number; linearVelocity: BattleTypes.IVector3 | null; orientation: BattleTypes.IVector3 | null; position: BattleTypes.IVector3 | null; direction: number;
     constructor(data: BattleTypes.IFullMovePacketData) { super(); this.nickname = data.nickname; this.angularVelocity = data.angularVelocity; this.control = data.control; this.linearVelocity = data.linearVelocity; this.orientation = data.orientation; this.position = data.position; this.direction = data.direction; }
     read(buffer: Buffer): void { readSchema(this, FullMovePacket.schema, buffer); }
@@ -201,19 +159,11 @@ export class FullMovePacket extends BasePacket implements BattleTypes.IFullMoveP
             .writeFloatBE(this.direction)
             .getBuffer();
     }
-    static getId(): number { return 1516578027; }
+    static getId(): number { return defs.battle.FullMove.id; }
 }
 
 export class MoveCommandPacket extends BasePacket implements BattleTypes.IMoveCommand {
-    static readonly schema: PacketSchema = [
-        { name: "clientTime", type: "i32" },
-        { name: "incarnation", type: "i16" },
-        { name: "angularVelocity", type: "vector3" },
-        { name: "control", type: "i8" },
-        { name: "linearVelocity", type: "vector3" },
-        { name: "orientation", type: "vector3" },
-        { name: "position", type: "vector3" },
-    ];
+    static readonly schema = defs.battle.MoveCommand.schema!;
     clientTime: number = 0; incarnation: number = 0; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null;
     // HOT PATH — hand-written monomorphic read (see FullMoveCommandPacket). Byte-identical to `schema`.
     read(buffer: Buffer): void {
@@ -227,18 +177,11 @@ export class MoveCommandPacket extends BasePacket implements BattleTypes.IMoveCo
         this.position = r.readOptionalVector3();
     }
     write(): Buffer { return writeSchema(this, MoveCommandPacket.schema); }
-    static getId(): number { return 329279865; }
+    static getId(): number { return defs.battle.MoveCommand.id; }
 }
 
 export class MovePacket extends BasePacket implements BattleTypes.IMovePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "angularVelocity", type: "vector3" },
-        { name: "control", type: "i8" },
-        { name: "linearVelocity", type: "vector3" },
-        { name: "orientation", type: "vector3" },
-        { name: "position", type: "vector3" },
-    ];
+    static readonly schema = defs.battle.Move.schema!;
     nickname: string | null = null; angularVelocity: BattleTypes.IVector3 | null = null; control: number = 0; linearVelocity: BattleTypes.IVector3 | null = null; orientation: BattleTypes.IVector3 | null = null; position: BattleTypes.IVector3 | null = null;
     // Explicit field assignment (not Object.assign) so every instance shares one hidden class — keeps the
     // hot write() below monomorphic and avoids Object.assign's per-relay hasOwnProperty scan.
@@ -255,65 +198,55 @@ export class MovePacket extends BasePacket implements BattleTypes.IMovePacket {
             .writeOptionalVector3(this.position)
             .getBuffer();
     }
-    static getId(): number { return -64696933; }
+    static getId(): number { return defs.battle.Move.id; }
 }
 
 // C->S: the tank's input/control state (pressed-keys bitmask). Other clients simulate the
 // tank's physics from this; without relaying it (especially the key-release), remote tanks
 // keep moving/spinning. `control` is the bitmask; the other two are client timing fields.
 export class MovementControlCommandPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "throttleTime", type: "i32" },
-        { name: "turnControl", type: "i16" },
-        { name: "control", type: "i8" },
-    ];
+    static readonly schema = defs.battle.MovementControlCommand.schema!;
     throttleTime = 0; turnControl = 0; control = 0;
     read(buffer: Buffer): void { readSchema(this, MovementControlCommandPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, MovementControlCommandPacket.schema); }
-    static getId(): number { return -1749108178; }
+    static getId(): number { return defs.battle.MovementControlCommand.id; }
 }
 
 // S->C: relays a tank's control state to the other players in the battle.
 export class MovementControlPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "control", type: "i8" },
-    ];
+    static readonly schema = defs.battle.MovementControl.schema!;
     nickname: string | null = null; control = 0;
     constructor(data?: Partial<MovementControlPacket>) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, MovementControlPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, MovementControlPacket.schema); }
-    static getId(): number { return -301298508; }
+    static getId(): number { return defs.battle.MovementControl.id; }
 }
 
 export class PrepareToSpawnPacket extends BasePacket implements BattleTypes.IPrepareToSpawn {
-    static readonly schema: PacketSchema = [
-        { name: "position", type: "vector3" },
-        { name: "rotation", type: "vector3" },
-    ];
+    static readonly schema = defs.battle.PrepareToSpawn.schema!;
     position: BattleTypes.IVector3 | null; rotation: BattleTypes.IVector3 | null;
     constructor(position: BattleTypes.IVector3 | null = null, rotation: BattleTypes.IVector3 | null = null) { super(); this.position = position; this.rotation = rotation; }
     read(buffer: Buffer): void { readSchema(this, PrepareToSpawnPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, PrepareToSpawnPacket.schema); }
-    static getId(): number { return -157204477; }
+    static getId(): number { return defs.battle.PrepareToSpawn.id; }
 }
 
 export class ReadyToActivatePacket extends BasePacket implements BattleTypes.IReadyToActivate {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1178028365; }
+    static getId(): number { return defs.battle.ReadyToActivate.id; }
 }
 
 export class ReadyToPlacePacket extends BasePacket implements BattleTypes.IReadyToPlace {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1378839846; }
+    static getId(): number { return defs.battle.ReadyToPlace.id; }
 }
 
 export class ReadyToSpawnPacket extends BasePacket implements BattleTypes.IReadyToSpawn {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 268832557; }
+    static getId(): number { return defs.battle.ReadyToSpawn.id; }
 }
 
 // C->S: the client signals it left the "pause" state (resuming / spawning). Empty body, fire-and-
@@ -322,7 +255,7 @@ export class ReadyToSpawnPacket extends BasePacket implements BattleTypes.IReady
 export class DisablePausePacket extends BasePacket {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 1156768699; }
+    static getId(): number { return defs.battle.DisablePause.id; }
 }
 
 export class RemoveTankPacket extends BasePacket implements BattleTypes.IRemoveTank {
@@ -330,58 +263,46 @@ export class RemoveTankPacket extends BasePacket implements BattleTypes.IRemoveT
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return 1719707347; }
+    static getId(): number { return defs.battle.RemoveTank.id; }
 }
 
 export class RotateTurretCommandPacket extends BasePacket implements BattleTypes.IRotateTurretCommand {
-    static readonly schema: PacketSchema = [
-        { name: "clientTime", type: "i32" },
-        { name: "angle", type: "f32" },
-        { name: "control", type: "i8" },
-        { name: "incarnation", type: "i16" },
-    ];
+    static readonly schema = defs.battle.RotateTurretCommand.schema!;
     clientTime: number = 0; angle: number = 0; control: number = 0; incarnation: number = 0;
     read(buffer: Buffer): void { readSchema(this, RotateTurretCommandPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, RotateTurretCommandPacket.schema); }
-    static getId(): number { return -114968993; }
+    static getId(): number { return defs.battle.RotateTurretCommand.id; }
 }
 
 export class TurretRotationPacket extends BasePacket implements BattleTypes.IRotateTurretPacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "angle", type: "f32" },
-        { name: "control", type: "i8" },
-    ];
+    static readonly schema = defs.battle.TurretRotation.schema!;
     nickname: string | null = null; angle: number = 0; control: number = 0;
     constructor(data: BattleTypes.IRotateTurretPacketData) { super(); Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, TurretRotationPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, TurretRotationPacket.schema); }
-    static getId(): number { return 1927704181; }
+    static getId(): number { return defs.battle.TurretRotation.id; }
 }
 
 // C->S: the continuous turret-direction stream (bare angle, no control). The client sends this every
 // frame while the turret turns, IN ADDITION to the discrete RotateTurretCommand (start/stop). Without
 // relaying it, remote turrets only update on the sparse control commands → jerky/stuck aim on others.
 export class TurretDirectionCommandPacket extends BasePacket {
-    static readonly schema: PacketSchema = [{ name: "angle", type: "f32" }];
+    static readonly schema = defs.battle.TurretDirectionCommand.schema!;
     angle: number = 0;
     read(buffer: Buffer): void { readSchema(this, TurretDirectionCommandPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, TurretDirectionCommandPacket.schema); }
-    static getId(): number { return 1224288585; }
+    static getId(): number { return defs.battle.TurretDirectionCommand.id; }
 }
 
 // S->C: relays the continuous turret direction to the other players (nickname + angle). Pairs with
 // TurretDirectionCommandPacket, exactly like TurretRotationPacket pairs with RotateTurretCommandPacket.
 export class TurretDirectionPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "angle", type: "f32" },
-    ];
+    static readonly schema = defs.battle.TurretDirection.schema!;
     nickname: string | null = null; angle: number = 0;
     constructor(data?: Partial<TurretDirectionPacket>) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, TurretDirectionPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, TurretDirectionPacket.schema); }
-    static getId(): number { return -534192254; }
+    static getId(): number { return defs.battle.TurretDirection.id; }
 }
 
 export class SelfDestructScheduledPacket extends BasePacket implements BattleTypes.ISelfDestructScheduled {
@@ -389,19 +310,16 @@ export class SelfDestructScheduledPacket extends BasePacket implements BattleTyp
     constructor(time: number = 0) { super(); this.time = time; }
     read(buffer: Buffer): void { this.time = new BufferReader(buffer).readInt32BE(); }
     write(): Buffer { return new BufferWriter().writeInt32BE(this.time).getBuffer(); }
-    static getId(): number { return -911983090; }
+    static getId(): number { return defs.battle.SelfDestructScheduled.id; }
 }
 
 export class SetHealthPacket extends BasePacket implements BattleTypes.ISetHealth {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "health", type: "f32" },
-    ];
+    static readonly schema = defs.battle.SetHealth.schema!;
     nickname: string | null; health: number;
     constructor(data?: BattleTypes.ISetHealthData) { super(); this.nickname = data?.nickname ?? null; this.health = data?.health ?? 0; }
     read(buffer: Buffer): void { readSchema(this, SetHealthPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, SetHealthPacket.schema); }
-    static getId(): number { return -611961116; }
+    static getId(): number { return defs.battle.SetHealth.id; }
 }
 
 /**
@@ -415,29 +333,22 @@ export class TankTemperaturePacket extends BasePacket {
     write(): Buffer {
         return new BufferWriter().writeOptionalString(this.nickname).writeFloatBE(this.temperature).getBuffer();
     }
-    static getId(): number { return 581377054; }
+    static getId(): number { return defs.battle.TankTemperature.id; }
 }
 
 export class SpawnPacket extends BasePacket implements BattleTypes.ISpawn {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "team", type: "i32" },
-        { name: "position", type: "vector3" },
-        { name: "orientation", type: "vector3" },
-        { name: "health", type: "i16" },
-        { name: "incarnation", type: "i16" },
-    ];
+    static readonly schema = defs.battle.Spawn.schema!;
     nickname: string | null; team: number; position: BattleTypes.IVector3 | null; orientation: BattleTypes.IVector3 | null; health: number; incarnation: number;
     constructor(data?: BattleTypes.ISpawnData) { super(); this.nickname = data?.nickname ?? null; this.team = data?.team ?? 2; this.position = data?.position ?? null; this.orientation = data?.orientation ?? null; this.health = data?.health ?? 0; this.incarnation = data?.incarnation ?? 0; }
     read(buffer: Buffer): void { readSchema(this, SpawnPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, SpawnPacket.schema); }
-    static getId(): number { return 875259457; }
+    static getId(): number { return defs.battle.Spawn.id; }
 }
 
 export class SuicidePacket extends BasePacket implements BattleTypes.ISuicidePacket {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return 988664577; }
+    static getId(): number { return defs.battle.Suicide.id; }
 }
 
 // --- Round lifecycle (decoded from log 2026-06-19_02-28) ---
@@ -447,7 +358,7 @@ export class SetRoundTimePacket extends BasePacket {
     constructor(private readonly seconds: number = 0) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer { return new BufferWriter().writeInt32BE(this.seconds).getBuffer(); }
-    static getId(): number { return 732434644; }
+    static getId(): number { return defs.battle.SetRoundTime.id; }
 }
 
 // (Team score = the existing SetCtfScorePacket, id 561771020 — reused on restart to reset to 0.)
@@ -459,7 +370,7 @@ export class ChangeFundPacket extends BasePacket {
     constructor(private readonly fund: number = 0) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer { return new BufferWriter().writeInt32BE(this.fund).getBuffer(); }
-    static getId(): number { return 1149211509; }
+    static getId(): number { return defs.battle.ChangeFund.id; }
 }
 
 export interface IFinishBattleReward {
@@ -483,7 +394,7 @@ export class FinishBattlePacket extends BasePacket {
         w.writeInt32BE(this.breakSeconds);
         return w.getBuffer();
     }
-    static getId(): number { return 560336625; }
+    static getId(): number { return defs.battle.FinishBattle.id; }
 }
 
 // S->C: rebuild the battle scoreboard rosters on round restart (this is what reassigns players to
@@ -500,7 +411,7 @@ export class RestartRoundTeamPacket extends BasePacket {
         }
         return w.getBuffer();
     }
-    static getId(): number { return -1668779175; }
+    static getId(): number { return defs.battle.RestartRoundTeam.id; }
 }
 
 // S->C: DM variant — one Vector<entry> (the full roster) rebuilt on round restart.
@@ -512,5 +423,5 @@ export class RestartRoundDmPacket extends BasePacket {
         for (const nick of this.users) w.writeInt32BE(0).writeInt32BE(0).writeOptionalString(nick);
         return w.getBuffer();
     }
-    static getId(): number { return 1061006142; }
+    static getId(): number { return defs.battle.RestartRoundDm.id; }
 }

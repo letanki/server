@@ -1,44 +1,40 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
 
+// IDs e schemas em `protanki-protocol` (defs.battle.*). Corpos read/write com codec
+// manual são mantidos verbatim; só id/schema referenciam a lib.
+
 export class BattleChatMessagePacket extends BasePacket implements BattleTypes.IBattleChatMessage {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "message", type: "string" },
-        { name: "team", type: "i32" },
-    ];
+    static readonly schema = defs.battle.BattleChatMessage.schema!;
     nickname: string | null;
     message: string | null;
     team: number;
     constructor(data?: BattleTypes.IBattleChatMessageData) { super(); this.nickname = data?.nickname ?? null; this.message = data?.message ?? null; this.team = data?.team ?? 2; }
     read(buffer: Buffer): void { readSchema(this, BattleChatMessagePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, BattleChatMessagePacket.schema); }
-    static getId(): number { return 1259981343; }
+    static getId(): number { return defs.battle.BattleChatMessage.id; }
 }
 
 export class BattleChatTeamMessagePacket extends BasePacket implements BattleTypes.IBattleChatMessage {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "message", type: "string" },
-        { name: "team", type: "i32" },
-    ];
+    static readonly schema = defs.battle.BattleChatTeamMessage.schema!;
     nickname: string | null;
     message: string | null;
     team: number;
     constructor(data?: BattleTypes.IBattleChatMessageData) { super(); this.nickname = data?.nickname ?? null; this.message = data?.message ?? null; this.team = data?.team ?? 2; }
     read(buffer: Buffer): void { readSchema(this, BattleChatTeamMessagePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, BattleChatTeamMessagePacket.schema); }
-    static getId(): number { return -449356094; }
+    static getId(): number { return defs.battle.BattleChatTeamMessage.id; }
 }
 
 export class EnterBattlePacket extends BasePacket implements BattleTypes.IEnterBattle {
     battleTeam: number = 0;
     read(buffer: Buffer): void { this.battleTeam = new BufferReader(buffer).readInt32BE(); }
     write(): Buffer { return new BufferWriter().writeInt32BE(this.battleTeam).getBuffer(); }
-    static getId(): number { return -1284211503; }
+    static getId(): number { return defs.battle.EnterBattle.id; }
 }
 
 /**
@@ -51,7 +47,7 @@ export class EquipmentNotAllowedPacket extends BasePacket {
     constructor(private readonly battleId: string | null = null) { super(); }
     read(): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return -10847382; }
+    static getId(): number { return defs.battle.EquipmentNotAllowed.id; }
 }
 
 /**
@@ -63,7 +59,7 @@ export class BattleSystemMessagePacket extends BasePacket {
     constructor(private readonly message: string | null = null) { super(); }
     read(): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.message).getBuffer(); }
-    static getId(): number { return 606668848; }
+    static getId(): number { return defs.battle.BattleSystemMessage.id; }
 }
 
 /**
@@ -77,13 +73,13 @@ export class BattleSpectatorMessagePacket extends BasePacket {
     constructor(private readonly message: string | null = null, private readonly uid: string | null = "") { super(); }
     read(): void {}
     write(): Buffer { return new BufferWriter().writeOptionalString(this.uid).writeOptionalString(this.message).getBuffer(); }
-    static getId(): number { return 1532749363; }
+    static getId(): number { return defs.battle.BattleSpectatorMessage.id; }
 }
 
 export class EnterBattleAsSpectatorPacket extends BasePacket implements BattleTypes.IEnterBattleAsSpectator {
     read(buffer: Buffer): void { }
     write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return -1315002220; }
+    static getId(): number { return defs.battle.EnterBattleAsSpectator.id; }
 }
 
 export class EquipmentChangedPacket extends BasePacket implements BattleTypes.IEquipmentChanged {
@@ -91,79 +87,59 @@ export class EquipmentChangedPacket extends BasePacket implements BattleTypes.IE
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return -1767633906; }
+    static getId(): number { return defs.battle.EquipmentChanged.id; }
 }
 
 export class ExitFromBattlePacket extends BasePacket implements BattleTypes.IExitFromBattle {
     layout: number = 0;
     read(buffer: Buffer): void { this.layout = new BufferReader(buffer).readInt32BE(); }
     write(): Buffer { return new BufferWriter().writeInt32BE(this.layout).getBuffer(); }
-    static getId(): number { return 377959142; }
+    static getId(): number { return defs.battle.ExitFromBattle.id; }
 }
 
 export class SendBattleChatMessagePacket extends BasePacket implements BattleTypes.ISendBattleChatMessage {
-    static readonly schema: PacketSchema = [
-        { name: "message", type: "string" },
-        { name: "team", type: "bool" },
-    ];
+    static readonly schema = defs.battle.SendBattleChatMessage.schema!;
     message: string | null; team: boolean;
     constructor(message: string | null = null, team: boolean = false) { super(); this.message = message; this.team = team; }
     read(buffer: Buffer): void { readSchema(this, SendBattleChatMessagePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, SendBattleChatMessagePacket.schema); }
-    static getId(): number { return 945463181; }
+    static getId(): number { return defs.battle.SendBattleChatMessage.id; }
 }
 
 export class TimeCheckerPacket extends BasePacket implements BattleTypes.ITimeChecker {
-    static readonly schema: PacketSchema = [
-        { name: "value1", type: "i32" },
-        { name: "value2", type: "i32" },
-    ];
+    static readonly schema = defs.battle.TimeChecker.schema!;
     value1: number; value2: number;
     constructor(value1: number = 0, value2: number = 0) { super(); this.value1 = value1; this.value2 = value2; }
     read(buffer: Buffer): void { readSchema(this, TimeCheckerPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, TimeCheckerPacket.schema); }
-    static getId(): number { return 34068208; }
+    static getId(): number { return defs.battle.TimeChecker.id; }
 }
 
 export class TimeCheckerResponsePacket extends BasePacket implements BattleTypes.ITimeCheckerResponse {
-    static readonly schema: PacketSchema = [
-        { name: "clientTime", type: "i32" },
-        { name: "serverTime", type: "i32" },
-    ];
+    static readonly schema = defs.battle.TimeCheckerResponse.schema!;
     clientTime: number; serverTime: number;
     constructor(clientTime: number = 0, serverTime: number = 0) { super(); this.clientTime = clientTime; this.serverTime = serverTime; }
     read(buffer: Buffer): void { readSchema(this, TimeCheckerResponsePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, TimeCheckerResponsePacket.schema); }
-    static getId(): number { return 2074243318; }
+    static getId(): number { return defs.battle.TimeCheckerResponse.id; }
 }
 
 export class UpdateBattleUserDMPacket extends BasePacket implements BattleTypes.IUpdateBattleUserDM {
-    static readonly schema: PacketSchema = [
-        { name: "deaths", type: "i16" },
-        { name: "kills", type: "i16" },
-        { name: "score", type: "i32" },
-        { name: "nickname", type: "string" },
-    ];
+    static readonly schema = defs.battle.UpdateBattleUserDM.schema!;
     deaths: number; kills: number; score: number; nickname: string | null;
     constructor(data?: BattleTypes.IUpdateBattleUserDMData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; }
     read(buffer: Buffer): void { readSchema(this, UpdateBattleUserDMPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UpdateBattleUserDMPacket.schema); }
-    static getId(): number { return 696140460; }
+    static getId(): number { return defs.battle.UpdateBattleUserDM.id; }
 }
 
 export class UpdateBattleUserTeamPacket extends BasePacket implements BattleTypes.IUpdateBattleUserTeam {
-    static readonly schema: PacketSchema = [
-        { name: "deaths", type: "i16" },
-        { name: "kills", type: "i16" },
-        { name: "score", type: "i32" },
-        { name: "nickname", type: "string" },
-        { name: "team", type: "i32" },
-    ];
+    static readonly schema = defs.battle.UpdateBattleUserTeam.schema!;
     deaths: number; kills: number; score: number; nickname: string | null; team: number;
     constructor(data?: BattleTypes.IUpdateBattleUserTeamData) { super(); this.deaths = data?.deaths ?? 0; this.kills = data?.kills ?? 0; this.score = data?.score ?? 0; this.nickname = data?.nickname ?? null; this.team = data?.team ?? 2; }
     read(buffer: Buffer): void { readSchema(this, UpdateBattleUserTeamPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UpdateBattleUserTeamPacket.schema); }
-    static getId(): number { return -497293992; }
+    static getId(): number { return defs.battle.UpdateBattleUserTeam.id; }
 }
 
 export class UpdateSpectatorListPacket extends BasePacket implements BattleTypes.IUpdateSpectatorList {
@@ -171,26 +147,16 @@ export class UpdateSpectatorListPacket extends BasePacket implements BattleTypes
     constructor(spectatorList: string | null = null) { super(); this.spectatorList = spectatorList; }
     read(buffer: Buffer): void { this.spectatorList = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.spectatorList).getBuffer(); }
-    static getId(): number { return -1331361684; }
+    static getId(): number { return defs.battle.UpdateSpectatorList.id; }
 }
 
 export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUserConnectDM {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "usersInfo", type: "list", of: [
-            { name: "ChatModeratorLevel", type: "i32" },
-            { name: "deaths", type: "i16" },
-            { name: "kills", type: "i16" },
-            { name: "rank", type: "u8" },
-            { name: "score", type: "i32" },
-            { name: "nickname", type: "string" },
-        ] },
-    ];
+    static readonly schema = defs.battle.UserConnectDM.schema!;
     nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[];
     constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
     read(buffer: Buffer): void { readSchema(this, UserConnectDMPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UserConnectDMPacket.schema); }
-    static getId(): number { return 862913394; }
+    static getId(): number { return defs.battle.UserConnectDM.id; }
 }
 
 // Team-battle variant of UserConnectDM: registers a joining player (and the user list)
@@ -201,23 +167,12 @@ export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUser
 // rebuilds that team's column from it. (A per-entry team only coincides for a 1-entry list and
 // corrupts 2+ entries → the same-team join bug.)
 export class UserConnectTeamPacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "usersInfo", type: "list", of: [
-            { name: "ChatModeratorLevel", type: "i32" },
-            { name: "deaths", type: "i16" },
-            { name: "kills", type: "i16" },
-            { name: "rank", type: "u8" },
-            { name: "score", type: "i32" },
-            { name: "nickname", type: "string" },
-        ] },
-        { name: "team", type: "i32" },
-    ];
+    static readonly schema = defs.battle.UserConnectTeam.schema!;
     nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[]; team: number;
     constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[], team: number = 0) { super(); this.nickname = nickname; this.usersInfo = usersInfo; this.team = team; }
     read(buffer: Buffer): void { readSchema(this, UserConnectTeamPacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, UserConnectTeamPacket.schema); }
-    static getId(): number { return 2040021062; }
+    static getId(): number { return defs.battle.UserConnectTeam.id; }
 }
 
 export class UserDisconnectedDmPacket extends BasePacket implements BattleTypes.IUserDisconnectedDm {
@@ -225,36 +180,24 @@ export class UserDisconnectedDmPacket extends BasePacket implements BattleTypes.
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return -1689876764; }
+    static getId(): number { return defs.battle.UserDisconnectedDm.id; }
 }
 
 // ===== Battle invite system =====
 
 // C->S: a player invites another to their battle.
 export class SendBattleInvitePacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "targetNickname", type: "string" },
-        { name: "battleId", type: "string" },
-    ];
+    static readonly schema = defs.battle.SendBattleInvite.schema!;
     targetNickname: string | null = null;
     battleId: string | null = null;
     read(buffer: Buffer): void { readSchema(this, SendBattleInvitePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, SendBattleInvitePacket.schema); }
-    static getId(): number { return -864265623; }
+    static getId(): number { return defs.battle.SendBattleInvite.id; }
 }
 
 // S->C: the invite popup shown to the invited player.
 export class ShowBattleInvitePacket extends BasePacket {
-    static readonly schema: PacketSchema = [
-        { name: "inviterNickname", type: "string" },
-        { name: "flag1", type: "bool" },
-        { name: "flag2", type: "bool" },
-        { name: "battleId", type: "string" },
-        { name: "battleName", type: "string" },
-        { name: "battleMode", type: "i32" },
-        { name: "flag3", type: "bool" },
-        { name: "flag4", type: "bool" },
-    ];
+    static readonly schema = defs.battle.ShowBattleInvite.schema!;
     inviterNickname: string | null = null;
     flag1 = false; flag2 = false;
     battleId: string | null = null;
@@ -264,7 +207,7 @@ export class ShowBattleInvitePacket extends BasePacket {
     constructor(data?: Partial<ShowBattleInvitePacket>) { super(); if (data) Object.assign(this, data); }
     read(buffer: Buffer): void { readSchema(this, ShowBattleInvitePacket.schema, buffer); }
     write(): Buffer { return writeSchema(this, ShowBattleInvitePacket.schema); }
-    static getId(): number { return 810713262; }
+    static getId(): number { return defs.battle.ShowBattleInvite.id; }
 }
 
 // C->S: invited player declines.
@@ -272,7 +215,7 @@ export class DeclineBattleInvitePacket extends BasePacket {
     inviterNickname: string | null = null;
     read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
-    static getId(): number { return 1152865919; }
+    static getId(): number { return defs.battle.DeclineBattleInvite.id; }
 }
 
 // S->C: tells the inviter their invite was declined (by `targetNickname`).
@@ -281,7 +224,7 @@ export class BattleInviteDeclinedPacket extends BasePacket {
     constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
     read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
-    static getId(): number { return 1015650019; }
+    static getId(): number { return defs.battle.BattleInviteDeclined.id; }
 }
 
 // C->S: invited player accepts.
@@ -289,7 +232,7 @@ export class AcceptBattleInvitePacket extends BasePacket {
     inviterNickname: string | null = null;
     read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
-    static getId(): number { return 814687528; }
+    static getId(): number { return defs.battle.AcceptBattleInvite.id; }
 }
 
 // S->C: tells the inviter their invite was accepted (by `targetNickname`).
@@ -298,7 +241,7 @@ export class BattleInviteAcceptedPacket extends BasePacket {
     constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
     read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
-    static getId(): number { return -1851236532; }
+    static getId(): number { return defs.battle.BattleInviteAccepted.id; }
 }
 
 // C->S: invited player asks to enter the battle (handshake before RequestBattleByLink).
@@ -306,7 +249,7 @@ export class RequestBattleEntrancePacket extends BasePacket {
     battleId: string | null = null;
     read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return -983139626; }
+    static getId(): number { return defs.battle.RequestBattleEntrance.id; }
 }
 
 // S->C: acks the entrance request so the client proceeds to open the battle.
@@ -315,7 +258,7 @@ export class BattleEntranceAckPacket extends BasePacket {
     constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
     read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return 1152930968; }
+    static getId(): number { return defs.battle.BattleEntranceAck.id; }
 }
 
 // Team-battle variant of the "user left battle" notification (removes the player from
@@ -325,5 +268,5 @@ export class UserDisconnectTeamPacket extends BasePacket {
     constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
     read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return 1411656080; }
+    static getId(): number { return defs.battle.UserDisconnectTeam.id; }
 }

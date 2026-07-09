@@ -2,8 +2,10 @@ import { BasePacket } from "@/packets/base.packet";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 
 // Mine lifecycle packets. Wire formats verified against the 2026-06-19 logs.
+// IDs em `protanki-protocol` (defs.battle.*). Codec manual (hot-path / S->C only).
 
 // S->C: a mine is placed on the field. Wire: optString id, vector3 position (PLAIN — 3 floats, no
 // present byte), optString owner nickname. The client hides enemies' mines until they activate.
@@ -17,7 +19,7 @@ export class PutMinePacket extends BasePacket {
             .writeOptionalString(this.owner)
             .getBuffer();
     }
-    static getId(): number { return 272183855; }
+    static getId(): number { return defs.battle.PutMine.id; }
 }
 
 // S->C: a mine becomes ARMED (sent ~1s after PutMine). Wire: optString id.
@@ -25,7 +27,7 @@ export class ActivateMinePacket extends BasePacket {
     constructor(private readonly id: string) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.id).getBuffer(); }
-    static getId(): number { return -624217047; }
+    static getId(): number { return defs.battle.ActivateMine.id; }
 }
 
 // S->C: an armed mine detonates (an enemy stepped on it). Wire: optString id, optString victim
@@ -34,7 +36,7 @@ export class DetonateMinePacket extends BasePacket {
     constructor(private readonly id: string, private readonly victim: string) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.id).writeOptionalString(this.victim).getBuffer(); }
-    static getId(): number { return 1387974401; }
+    static getId(): number { return defs.battle.DetonateMine.id; }
 }
 
 // S->C: removes all of a player's mines (e.g. on death/leave). Wire: optString owner nickname.
@@ -42,5 +44,5 @@ export class RemoveMinesPacket extends BasePacket {
     constructor(private readonly owner: string) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer { return new BufferWriter().writeOptionalString(this.owner).getBuffer(); }
-    static getId(): number { return -1200619383; }
+    static getId(): number { return defs.battle.RemoveMines.id; }
 }
