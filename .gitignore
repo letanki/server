@@ -162,6 +162,8 @@ wiki/*
 
 # Autoplay bot (local-only, not part of the server) — kept out of version control.
 bot-autoplay/
+# Recursos baixados do servidor oficial para referência (scripts/extractSkyboxes.ts) — não versionar.
+downloads/
 # RABCDAsm binaries (auto-baixados por scripts/patch-supplies-center.js)
 tools/rabcdasm/
 scripts/patch-supplies-center.js
