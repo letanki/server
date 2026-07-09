@@ -4,7 +4,7 @@ import * as readline from 'readline';
 function runServer() {
     console.log('Iniciando os servidores de desenvolvimento...');
     const command = 'ts-node-dev';
-    const args = ['-r', 'tsconfig-paths/register', '--respawn', '--transpile-only', 'server.ts'];
+    const args = ['-r', 'tsconfig-paths/register', '--respawn', '--transpile-only', 'src/server.ts'];
 
     const serverProcess = spawn(command, args, { stdio: 'inherit', shell: true });
 
