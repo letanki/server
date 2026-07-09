@@ -1,9 +1,12 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as AuthTypes from "./auth.types";
+
+// IDs e schemas vêm da lib compartilhada `protanki-protocol` (defs.auth.*),
+// fonte única também consumida pelo protanki-bridge. As classes mantêm seus
+// construtores/campos; read/write/getId apenas referenciam a definição.
 
 export class Language extends BasePacket implements AuthTypes.ILanguage {
     lang: string | null;
@@ -11,47 +14,27 @@ export class Language extends BasePacket implements AuthTypes.ILanguage {
         super();
         this.lang = lang;
     }
-    read(buffer: Buffer) {
-        this.lang = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.lang).getBuffer();
-    }
-    static getId() {
-        return -1864333717;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.Language.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.Language.schema!); }
+    static getId() { return defs.auth.Language.id; }
 }
 
 export class CreateAccount extends BasePacket implements AuthTypes.ICreateAccount {
-    static readonly schema: PacketSchema = [
-        { name: "nickname", type: "string" },
-        { name: "password", type: "string" },
-        { name: "rememberMe", type: "bool" },
-    ];
     nickname: string | null = null;
     password: string | null = null;
     rememberMe: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, CreateAccount.schema, buffer); }
-    write(): Buffer { return writeSchema(this, CreateAccount.schema); }
-    static getId() {
-        return 427083290;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.CreateAccount.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.CreateAccount.schema!); }
+    static getId() { return defs.auth.CreateAccount.id; }
 }
 
 export class Login extends BasePacket implements AuthTypes.ILogin {
-    static readonly schema: PacketSchema = [
-        { name: "username", type: "string" },
-        { name: "password", type: "string" },
-        { name: "rememberMe", type: "bool" },
-    ];
     username: string | null = null;
     password: string | null = null;
     rememberMe: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, Login.schema, buffer); }
-    write(): Buffer { return writeSchema(this, Login.schema); }
-    static getId() {
-        return -739684591;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.Login.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.Login.schema!); }
+    static getId() { return defs.auth.Login.id; }
 }
 
 export class LoginByTokenRequestPacket extends BasePacket implements AuthTypes.ILoginByTokenRequest {
@@ -60,15 +43,9 @@ export class LoginByTokenRequestPacket extends BasePacket implements AuthTypes.I
         super();
         this.hash = hash;
     }
-    read(buffer: Buffer) {
-        this.hash = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.hash).getBuffer();
-    }
-    static getId() {
-        return -845588810;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.LoginByTokenRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.LoginByTokenRequest.schema!); }
+    static getId() { return defs.auth.LoginByTokenRequest.id; }
 }
 
 export class LoginTokenPacket extends BasePacket implements AuthTypes.ILoginToken {
@@ -77,25 +54,15 @@ export class LoginTokenPacket extends BasePacket implements AuthTypes.ILoginToke
         super();
         this.hash = hash;
     }
-    read(buffer: Buffer) {
-        this.hash = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.hash).getBuffer();
-    }
-    static getId() {
-        return 932564569;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.LoginToken.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.LoginToken.schema!); }
+    static getId() { return defs.auth.LoginToken.id; }
 }
 
 export class IncorrectPassword extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return 103812952;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.IncorrectPassword.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.IncorrectPassword.schema!); }
+    static getId() { return defs.auth.IncorrectPassword.id; }
 }
 
 export class CheckNicknameAvailable extends BasePacket implements AuthTypes.ICheckNicknameAvailable {
@@ -104,25 +71,15 @@ export class CheckNicknameAvailable extends BasePacket implements AuthTypes.IChe
         super();
         this.nickname = nickname;
     }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 1083705823;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.CheckNicknameAvailable.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.CheckNicknameAvailable.schema!); }
+    static getId() { return defs.auth.CheckNicknameAvailable.id; }
 }
 
 export class NicknameAvailable extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -706679202;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.NicknameAvailable.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.NicknameAvailable.schema!); }
+    static getId() { return defs.auth.NicknameAvailable.id; }
 }
 
 export class NicknameUnavailable extends BasePacket implements AuthTypes.INicknameUnavailable {
@@ -133,25 +90,15 @@ export class NicknameUnavailable extends BasePacket implements AuthTypes.INickna
             this.suggestions = suggestions;
         }
     }
-    read(buffer: Buffer) {
-        this.suggestions = new BufferReader(buffer).readStringArray();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalStringArray(this.suggestions).getBuffer();
-    }
-    static getId() {
-        return 442888643;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.NicknameUnavailable.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.NicknameUnavailable.schema!); }
+    static getId() { return defs.auth.NicknameUnavailable.id; }
 }
 
 export class InvalidNickname extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return 1480924803;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.InvalidNickname.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.InvalidNickname.schema!); }
+    static getId() { return defs.auth.InvalidNickname.id; }
 }
 
 export class RequestCaptcha extends BasePacket implements AuthTypes.IRequestCaptcha {
@@ -160,24 +107,12 @@ export class RequestCaptcha extends BasePacket implements AuthTypes.IRequestCapt
         super();
         this.view = view;
     }
-    read(buffer: Buffer) {
-        this.view = new BufferReader(buffer).readInt32BE();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.view).getBuffer();
-    }
-    static getId() {
-        return -349828108;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RequestCaptcha.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RequestCaptcha.schema!); }
+    static getId() { return defs.auth.RequestCaptcha.id; }
 }
 
-const CAPTCHA_FIELDS: PacketSchema = [
-    { name: "view", type: "i32" },
-    { name: "image", type: "bytes" },
-];
-
 export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
-    static readonly schema = CAPTCHA_FIELDS;
     view: number;
     image: Buffer;
     constructor(view: number = 0, image: Buffer = Buffer.alloc(0)) {
@@ -185,18 +120,12 @@ export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
         this.view = view;
         this.image = image;
     }
-    read(buffer: Buffer): void { readSchema(this, Captcha.schema, buffer); }
-    write(): Buffer { return writeSchema(this, Captcha.schema); }
-    static getId() {
-        return -1670408519;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.Captcha.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.Captcha.schema!); }
+    static getId() { return defs.auth.Captcha.id; }
 }
 
 export class CaptchaVerify extends BasePacket implements AuthTypes.ICaptchaVerify {
-    static readonly schema: PacketSchema = [
-        { name: "view", type: "i32" },
-        { name: "solution", type: "string" },
-    ];
     view: number;
     solution: string | null;
     constructor(view: number = 0, solution: string | null) {
@@ -204,11 +133,9 @@ export class CaptchaVerify extends BasePacket implements AuthTypes.ICaptchaVerif
         this.view = view;
         this.solution = solution;
     }
-    read(buffer: Buffer): void { readSchema(this, CaptchaVerify.schema, buffer); }
-    write(): Buffer { return writeSchema(this, CaptchaVerify.schema); }
-    static getId() {
-        return 1271163230;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaVerify.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.CaptchaVerify.schema!); }
+    static getId() { return defs.auth.CaptchaVerify.id; }
 }
 
 export class CaptchaIsValid extends BasePacket implements AuthTypes.ICaptchaView {
@@ -217,19 +144,12 @@ export class CaptchaIsValid extends BasePacket implements AuthTypes.ICaptchaView
         super();
         if (view !== undefined) this.view = view;
     }
-    read(buffer: Buffer) {
-        this.view = new BufferReader(buffer).readInt32BE();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.view).getBuffer();
-    }
-    static getId() {
-        return -819536476;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaIsValid.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.CaptchaIsValid.schema!); }
+    static getId() { return defs.auth.CaptchaIsValid.id; }
 }
 
 export class CaptchaIsInvalid extends BasePacket implements AuthTypes.ICaptcha {
-    static readonly schema = CAPTCHA_FIELDS;
     view: number = 0;
     image: Buffer = Buffer.alloc(0);
     constructor(view?: number, image?: Buffer) {
@@ -237,11 +157,9 @@ export class CaptchaIsInvalid extends BasePacket implements AuthTypes.ICaptcha {
         if (view !== undefined) this.view = view;
         if (image) this.image = image;
     }
-    read(buffer: Buffer): void { readSchema(this, CaptchaIsInvalid.schema, buffer); }
-    write(): Buffer { return writeSchema(this, CaptchaIsInvalid.schema); }
-    static getId() {
-        return -373510957;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaIsInvalid.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.CaptchaIsInvalid.schema!); }
+    static getId() { return defs.auth.CaptchaIsInvalid.id; }
 }
 
 export class RecoveryAccountSendCode extends BasePacket implements AuthTypes.IRecoveryAccountSendCode {
@@ -250,35 +168,21 @@ export class RecoveryAccountSendCode extends BasePacket implements AuthTypes.IRe
         super();
         this.email = email;
     }
-    read(buffer: Buffer) {
-        this.email = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.email).getBuffer();
-    }
-    static getId() {
-        return 1744584433;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryAccountSendCode.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RecoveryAccountSendCode.schema!); }
+    static getId() { return defs.auth.RecoveryAccountSendCode.id; }
 }
 
 export class RecoveryEmailSent extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -1607756600;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailSent.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailSent.schema!); }
+    static getId() { return defs.auth.RecoveryEmailSent.id; }
 }
 
 export class RecoveryEmailNotExists extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -262455387;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailNotExists.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailNotExists.schema!); }
+    static getId() { return defs.auth.RecoveryEmailNotExists.id; }
 }
 
 export class RecoveryAccountVerifyCode extends BasePacket implements AuthTypes.IRecoveryAccountVerifyCode {
@@ -287,25 +191,15 @@ export class RecoveryAccountVerifyCode extends BasePacket implements AuthTypes.I
         super();
         this.code = code;
     }
-    read(buffer: Buffer) {
-        this.code = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.code).getBuffer();
-    }
-    static getId() {
-        return 903498755;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryAccountVerifyCode.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RecoveryAccountVerifyCode.schema!); }
+    static getId() { return defs.auth.RecoveryAccountVerifyCode.id; }
 }
 
 export class RecoveryEmailInvalidCode extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -16447159;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailInvalidCode.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailInvalidCode.schema!); }
+    static getId() { return defs.auth.RecoveryEmailInvalidCode.id; }
 }
 
 export class GoToRecoveryPassword extends BasePacket implements AuthTypes.IGoToRecoveryPassword {
@@ -314,34 +208,18 @@ export class GoToRecoveryPassword extends BasePacket implements AuthTypes.IGoToR
         super();
         if (email) this.email = email;
     }
-    read(buffer: Buffer) {
-        this.email = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.email).getBuffer();
-    }
-    static getId() {
-        return -2118900410;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.GoToRecoveryPassword.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.GoToRecoveryPassword.schema!); }
+    static getId() { return defs.auth.GoToRecoveryPassword.id; }
 }
 
 export class HideLoginForm extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return -1923286328;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.HideLoginForm.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.HideLoginForm.schema!); }
+    static getId(): number { return defs.auth.HideLoginForm.id; }
 }
 
 export class Punishment extends BasePacket implements AuthTypes.IPunishment {
-    static readonly schema: PacketSchema = [
-        { name: "reason", type: "string" },
-        { name: "minutes", type: "i32" },
-        { name: "hours", type: "i32" },
-        { name: "days", type: "i32" },
-    ];
     reason: string | null = null;
     days: number = 0;
     hours: number = 0;
@@ -355,21 +233,12 @@ export class Punishment extends BasePacket implements AuthTypes.IPunishment {
         if (minutes !== undefined) this.minutes = minutes;
     }
 
-    read(buffer: Buffer): void { readSchema(this, Punishment.schema, buffer); }
-
-    write(): Buffer { return writeSchema(this, Punishment.schema); }
-    static getId(): number {
-        return 1200280053;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.Punishment.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.Punishment.schema!); }
+    static getId(): number { return defs.auth.Punishment.id; }
 }
 
 export class Registration extends BasePacket implements AuthTypes.IRegistration {
-    static readonly schema: PacketSchema = [
-        { name: "bgResource", type: "resource" },
-        { name: "enableRequiredEmail", type: "bool" },
-        { name: "maxPasswordLength", type: "i32" },
-        { name: "minPasswordLength", type: "i32" },
-    ];
     bgResource: number;
     enableRequiredEmail: boolean;
     maxPasswordLength: number;
@@ -383,10 +252,7 @@ export class Registration extends BasePacket implements AuthTypes.IRegistration 
         this.minPasswordLength = minPasswordLength;
     }
 
-    read(buffer: Buffer): void { readSchema(this, Registration.schema, buffer); }
-
-    write(): Buffer { return writeSchema(this, Registration.schema); }
-    static getId(): number {
-        return -1277343167;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.auth.Registration.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.auth.Registration.schema!); }
+    static getId(): number { return defs.auth.Registration.id; }
 }
