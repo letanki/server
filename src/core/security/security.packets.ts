@@ -1,7 +1,10 @@
 import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as SecurityTypes from "./security.types";
+
+// ID em `protanki-protocol` (defs.security.*). Codec manual (lista de i8 sem flag).
 
 export class Protection extends BasePacket implements SecurityTypes.IProtection {
     keys: Array<number>;
@@ -28,7 +31,5 @@ export class Protection extends BasePacket implements SecurityTypes.IProtection 
         });
         return writer.getBuffer();
     }
-    static getId(): number {
-        return 2001736388;
-    }
+    static getId(): number { return defs.security.Protection.id; }
 }

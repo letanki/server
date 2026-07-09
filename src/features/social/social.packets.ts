@@ -1,7 +1,10 @@
 import { BasePacket } from "@/packets/base.packet";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as SocialTypes from "./social.types";
+
+// ID em `protanki-protocol` (defs.social.*). Codec manual (lista de botões).
 
 export class SocialNetwork extends BasePacket implements SocialTypes.ISocialNetwork {
     socialNetworkParams: Array<Array<String>>;
@@ -36,7 +39,5 @@ export class SocialNetwork extends BasePacket implements SocialTypes.ISocialNetw
         return writer.getBuffer();
     }
 
-    static getId(): number {
-        return -1715719586;
-    }
+    static getId(): number { return defs.social.SocialNetwork.id; }
 }

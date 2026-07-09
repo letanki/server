@@ -1,8 +1,7 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import {
     IAcceptFriendRequest,
     IAcknowledgeNewFriend,
@@ -27,353 +26,162 @@ import {
     ISendFriendRequest,
 } from "./friends.types";
 
+// IDs e schemas em `protanki-protocol` (defs.friends.*).
+
 export class AcceptFriendRequest extends BasePacket implements IAcceptFriendRequest {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1926185291;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.AcceptFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.AcceptFriendRequest.schema!); }
+    static getId() { return defs.friends.AcceptFriendRequest.id; }
 }
 export class AcknowledgeNewFriend extends BasePacket implements IAcknowledgeNewFriend {
     nickname: string | null;
-    constructor(nickname: string | null = null) {
-        super();
-        this.nickname = nickname;
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 1286861380;
-    }
+    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
+    read(buffer: Buffer) { readSchema(this, defs.friends.AcknowledgeNewFriend.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.AcknowledgeNewFriend.schema!); }
+    static getId() { return defs.friends.AcknowledgeNewFriend.id; }
 }
 export class AcknowledgeNewFriendRequest extends BasePacket implements IAcknowledgeNewFriendRequest {
     nickname: string | null;
-    constructor(nickname: string | null = null) {
-        super();
-        this.nickname = nickname;
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1041660861;
-    }
+    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
+    read(buffer: Buffer) { readSchema(this, defs.friends.AcknowledgeNewFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.AcknowledgeNewFriendRequest.schema!); }
+    static getId() { return defs.friends.AcknowledgeNewFriendRequest.id; }
 }
 export class AlreadyFriends extends BasePacket implements IAlreadyFriends {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -2089008699;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.AlreadyFriends.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.AlreadyFriends.schema!); }
+    static getId() { return defs.friends.AlreadyFriends.id; }
 }
 export class CancelFriendRequest extends BasePacket implements ICancelFriendRequest {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 84050355;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.CancelFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.CancelFriendRequest.schema!); }
+    static getId() { return defs.friends.CancelFriendRequest.id; }
 }
 export class CheckUserExistsForFriend extends BasePacket implements ICheckUserExistsForFriend {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 126880779;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.CheckUserExistsForFriend.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.CheckUserExistsForFriend.schema!); }
+    static getId() { return defs.friends.CheckUserExistsForFriend.id; }
 }
 export class DeclineAllFriendRequests extends BasePacket implements IDeclineAllFriendRequests {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -1590185083;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.DeclineAllFriendRequests.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.DeclineAllFriendRequests.schema!); }
+    static getId() { return defs.friends.DeclineAllFriendRequests.id; }
 }
 export class DeclineFriendRequest extends BasePacket implements IDeclineFriendRequest {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1588006900;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.DeclineFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.DeclineFriendRequest.schema!); }
+    static getId() { return defs.friends.DeclineFriendRequest.id; }
 }
 export class FriendRemoved extends BasePacket implements IFriendRemoved {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 1716773193;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRemoved.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRemoved.schema!); }
+    static getId() { return defs.friends.FriendRemoved.id; }
 }
 export class FriendRequestAccepted extends BasePacket implements IFriendRequestAccepted {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -139645601;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRequestAccepted.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRequestAccepted.schema!); }
+    static getId() { return defs.friends.FriendRequestAccepted.id; }
 }
 export class FriendRequestAlreadySent extends BasePacket implements IFriendRequestAlreadySent {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 2064692768;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRequestAlreadySent.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRequestAlreadySent.schema!); }
+    static getId() { return defs.friends.FriendRequestAlreadySent.id; }
 }
 export class FriendRequestCanceledOrDeclined extends BasePacket implements IFriendRequestCanceledOrDeclined {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 614714702;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRequestCanceledOrDeclined.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRequestCanceledOrDeclined.schema!); }
+    static getId() { return defs.friends.FriendRequestCanceledOrDeclined.id; }
 }
 export class FriendRequestDeclined extends BasePacket implements IFriendRequestDeclined {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1885167992;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRequestDeclined.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRequestDeclined.schema!); }
+    static getId() { return defs.friends.FriendRequestDeclined.id; }
 }
 export class FriendRequestSent extends BasePacket implements IFriendRequestSent {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1241704092;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.FriendRequestSent.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendRequestSent.schema!); }
+    static getId() { return defs.friends.FriendRequestSent.id; }
 }
 export class FriendsList extends BasePacket implements IFriendsList {
-    static readonly schema: PacketSchema = [
-        { name: "acceptedFriends", type: "optStringArray" },
-        { name: "newAcceptedFriends", type: "optStringArray" },
-        { name: "incomingRequests", type: "optStringArray" },
-        { name: "newIncomingRequests", type: "optStringArray" },
-        { name: "outgoingRequests", type: "optStringArray" },
-    ];
     acceptedFriends: string[] = [];
     newAcceptedFriends: string[] = [];
     incomingRequests: string[] = [];
     newIncomingRequests: string[] = [];
     outgoingRequests: string[] = [];
-    constructor(data?: IFriendsListProps) {
-        super();
-        if (data) {
-            Object.assign(this, data);
-        }
-    }
-    read(buffer: Buffer): void { readSchema(this, FriendsList.schema, buffer); }
-    write(): Buffer { return writeSchema(this, FriendsList.schema); }
-    static getId() {
-        return 1422563374;
-    }
+    constructor(data?: IFriendsListProps) { super(); if (data) { Object.assign(this, data); } }
+    read(buffer: Buffer): void { readSchema(this, defs.friends.FriendsList.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.FriendsList.schema!); }
+    static getId() { return defs.friends.FriendsList.id; }
 }
 export class IncomingFriendRequestExists extends BasePacket implements IIncomingFriendRequestExists {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1258754138;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.IncomingFriendRequestExists.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.IncomingFriendRequestExists.schema!); }
+    static getId() { return defs.friends.IncomingFriendRequestExists.id; }
 }
 export class LoadFriends extends BasePacket implements ILoadFriends {
     unknown: boolean = false;
-    read(buffer: Buffer) {
-        this.unknown = new BufferReader(buffer).readUInt8() === 1;
-    }
-    write(): Buffer {
-        return new BufferWriter().writeUInt8(this.unknown ? 1 : 0).getBuffer();
-    }
-    static getId() {
-        return -731115522;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.LoadFriends.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.LoadFriends.schema!); }
+    static getId() { return defs.friends.LoadFriends.id; }
 }
 export class NewFriendRequest extends BasePacket implements INewFriendRequest {
     nickname: string | null = null;
-    constructor(nickname?: string | null) {
-        super();
-        if (nickname) {
-            this.nickname = nickname;
-        }
-    }
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return 553380510;
-    }
+    constructor(nickname?: string | null) { super(); if (nickname) { this.nickname = nickname; } }
+    read(buffer: Buffer) { readSchema(this, defs.friends.NewFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.NewFriendRequest.schema!); }
+    static getId() { return defs.friends.NewFriendRequest.id; }
 }
 export class RemoveFriend extends BasePacket implements IRemoveFriend {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -221757454;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.RemoveFriend.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.RemoveFriend.schema!); }
+    static getId() { return defs.friends.RemoveFriend.id; }
 }
 export class UserExistsForFriend extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -707501253;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.UserExistsForFriend.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.UserExistsForFriend.schema!); }
+    static getId() { return defs.friends.UserExistsForFriend.id; }
 }
 export class UserInvalidForFriend extends BasePacket implements IEmpty {
-    read(buffer: Buffer) { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId() {
-        return -1490761936;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.UserInvalidForFriend.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.UserInvalidForFriend.schema!); }
+    static getId() { return defs.friends.UserInvalidForFriend.id; }
 }
 export class SendFriendRequest extends BasePacket implements ISendFriendRequest {
     nickname: string | null = null;
-    read(buffer: Buffer) {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    static getId() {
-        return -1457773660;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.friends.SendFriendRequest.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.SendFriendRequest.schema!); }
+    static getId() { return defs.friends.SendFriendRequest.id; }
 }
 
 export class RequestFriendsListWindow extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return 1441234714;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.friends.RequestFriendsListWindow.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.RequestFriendsListWindow.schema!); }
+    static getId(): number { return defs.friends.RequestFriendsListWindow.id; }
 }
 
 export class ShowFriendsListWindow extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return -437587751;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.friends.ShowFriendsListWindow.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.friends.ShowFriendsListWindow.schema!); }
+    static getId(): number { return defs.friends.ShowFriendsListWindow.id; }
 }

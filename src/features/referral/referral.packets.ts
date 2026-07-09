@@ -1,40 +1,30 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
 import { BufferReader } from "@/utils/buffer/buffer.reader";
 import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as ReferralTypes from "./referral.types";
 
+// IDs e schemas em `protanki-protocol` (defs.referral.*).
+
 export class ReferralInfo extends BasePacket implements ReferralTypes.IReferralInfo {
-    static readonly schema: PacketSchema = [
-        { name: "hash", type: "string" },
-        { name: "host", type: "string" },
-    ];
     hash: string = "";
     host: string = "";
-
     constructor(hash?: string, host?: string) {
         super();
         if (hash) this.hash = hash;
         if (host) this.host = host;
     }
-
-    read(buffer: Buffer): void { readSchema(this, ReferralInfo.schema, buffer); }
-
-    write(): Buffer { return writeSchema(this, ReferralInfo.schema); }
-    static getId(): number {
-        return 832270655;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.referral.ReferralInfo.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.referral.ReferralInfo.schema!); }
+    static getId(): number { return defs.referral.ReferralInfo.id; }
 }
 
 export class RequestReferralInfo extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return -169921234;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.referral.RequestReferralInfo.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.referral.RequestReferralInfo.schema!); }
+    static getId(): number { return defs.referral.RequestReferralInfo.id; }
 }
 
 export class ReferralInfoDetails extends BasePacket implements ReferralTypes.IReferralInfoDetails {
@@ -42,7 +32,6 @@ export class ReferralInfoDetails extends BasePacket implements ReferralTypes.IRe
     url: string = "";
     bannerCodeString: string = "";
     defaultRefMessage: string = "";
-
     constructor(data?: { referredUsers?: ReferralTypes.IReferredUser[]; url?: string; bannerCode?: string; defaultMessage?: string }) {
         super();
         if (data) {
@@ -52,7 +41,7 @@ export class ReferralInfoDetails extends BasePacket implements ReferralTypes.IRe
             this.defaultRefMessage = data.defaultMessage ?? "";
         }
     }
-
+    // Codec manual (lista de referredUsers + campos trailing).
     read(buffer: Buffer): void {
         const reader = new BufferReader(buffer);
         const count = reader.readInt32BE();
@@ -67,7 +56,6 @@ export class ReferralInfoDetails extends BasePacket implements ReferralTypes.IRe
         this.bannerCodeString = reader.readOptionalString() ?? "";
         this.defaultRefMessage = reader.readOptionalString() ?? "";
     }
-
     write(): Buffer {
         const writer = new BufferWriter();
         writer.writeInt32BE(this.referredUsers.length);
@@ -80,7 +68,5 @@ export class ReferralInfoDetails extends BasePacket implements ReferralTypes.IRe
         writer.writeOptionalString(this.defaultRefMessage);
         return writer.getBuffer();
     }
-    static getId(): number {
-        return 1587315905;
-    }
+    static getId(): number { return defs.referral.ReferralInfoDetails.id; }
 }

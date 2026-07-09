@@ -1,15 +1,12 @@
 import { BasePacket } from "@/packets/base.packet";
-import { PacketSchema, readSchema, writeSchema } from "@/packets/packet-schema";
+import { readSchema, writeSchema } from "@/packets/packet-schema";
 import { IEmpty } from "@/packets/packet.interfaces";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { defs } from "protanki-protocol";
 import * as ChatTypes from "./chat.types";
 
+// IDs e schemas em `protanki-protocol` (defs.chat.*).
+
 export class SendChatMessage extends BasePacket implements ChatTypes.ISendChatMessage {
-    static readonly schema: PacketSchema = [
-        { name: "targetNickname", type: "string" },
-        { name: "message", type: "string" },
-    ];
     targetNickname: string | null = null;
     message: string | null;
     constructor(targetNickname: string | null, message: string | null) {
@@ -17,30 +14,12 @@ export class SendChatMessage extends BasePacket implements ChatTypes.ISendChatMe
         this.targetNickname = targetNickname;
         this.message = message;
     }
-    read(buffer: Buffer): void { readSchema(this, SendChatMessage.schema, buffer); }
-    write(): Buffer { return writeSchema(this, SendChatMessage.schema); }
-    static getId() {
-        return 705454610;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.chat.SendChatMessage.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.chat.SendChatMessage.schema!); }
+    static getId() { return defs.chat.SendChatMessage.id; }
 }
 
-const CHAT_USER: PacketSchema = [
-    { name: "moderatorLevel", type: "i32" },
-    { name: "ip", type: "string" },
-    { name: "rank", type: "i32" },
-    { name: "uid", type: "string" },
-];
-
 export class ChatHistory extends BasePacket implements ChatTypes.IChatHistory {
-    static readonly schema: PacketSchema = [
-        { name: "messages", type: "list", of: [
-            { name: "source", type: "optObject", of: CHAT_USER },
-            { name: "isSystem", type: "bool" },
-            { name: "target", type: "optObject", of: CHAT_USER },
-            { name: "message", type: "string" },
-            { name: "isWarning", type: "bool" },
-        ] },
-    ];
     messages: ChatTypes.IChatMessageData[] = [];
     constructor(messages?: ChatTypes.IChatMessageData[]) {
         super();
@@ -48,11 +27,9 @@ export class ChatHistory extends BasePacket implements ChatTypes.IChatHistory {
             this.messages = messages;
         }
     }
-    read(buffer: Buffer): void { readSchema(this, ChatHistory.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ChatHistory.schema); }
-    static getId() {
-        return -1263520410;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.chat.ChatHistory.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.chat.ChatHistory.schema!); }
+    static getId() { return defs.chat.ChatHistory.id; }
 }
 
 export class ChatProperties extends BasePacket implements ChatTypes.IChatProperties {
@@ -67,35 +44,16 @@ export class ChatProperties extends BasePacket implements ChatTypes.IChatPropert
     selfName: string = "";
     showLinks: boolean = false;
     typingSpeedAntifloodEnabled: boolean = false;
-    static readonly schema: PacketSchema = [
-        { name: "admin", type: "bool" },
-        { name: "antifloodEnabled", type: "bool" },
-        { name: "bufferSize", type: "i32" },
-        { name: "chatEnabled", type: "bool" },
-        { name: "chatModeratorLevel", type: "i32" },
-        { name: "linksWhiteList", type: "optStringArray" },
-        { name: "minChar", type: "i32" },
-        { name: "minWord", type: "i16" },
-        { name: "selfName", type: "string" },
-        { name: "showLinks", type: "bool" },
-        { name: "typingSpeedAntifloodEnabled", type: "bool" },
-    ];
     constructor(data?: ChatTypes.IChatPropertiesProps) {
         super();
         if (data) Object.assign(this, data);
     }
-    read(buffer: Buffer) { readSchema(this, ChatProperties.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ChatProperties.schema); }
-    static getId() {
-        return 178154988;
-    }
+    read(buffer: Buffer) { readSchema(this, defs.chat.ChatProperties.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.chat.ChatProperties.schema!); }
+    static getId() { return defs.chat.ChatProperties.id; }
 }
 
 export class AntifloodSettings extends BasePacket implements ChatTypes.IAntifloodSettings {
-    static readonly schema: PacketSchema = [
-        { name: "charDelayFactor", type: "i32" },
-        { name: "messageBaseDelay", type: "i32" },
-    ];
     charDelayFactor: number = 0;
     messageBaseDelay: number = 0;
     constructor(charDelayFactor?: number, messageBaseDelay?: number) {
@@ -103,19 +61,13 @@ export class AntifloodSettings extends BasePacket implements ChatTypes.IAntifloo
         if (charDelayFactor !== undefined) this.charDelayFactor = charDelayFactor;
         if (messageBaseDelay !== undefined) this.messageBaseDelay = messageBaseDelay;
     }
-    read(buffer: Buffer): void { readSchema(this, AntifloodSettings.schema, buffer); }
-    write(): Buffer { return writeSchema(this, AntifloodSettings.schema); }
-    static getId() {
-        return 744948472;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.chat.AntifloodSettings.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.chat.AntifloodSettings.schema!); }
+    static getId() { return defs.chat.AntifloodSettings.id; }
 }
 
 export class UnloadLobbyChatPacket extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { }
-    write(): Buffer {
-        return new BufferWriter().getBuffer();
-    }
-    static getId(): number {
-        return -920985123;
-    }
+    read(buffer: Buffer): void { readSchema(this, defs.chat.UnloadLobbyChat.schema!, buffer); }
+    write(): Buffer { return writeSchema(this, defs.chat.UnloadLobbyChat.schema!); }
+    static getId(): number { return defs.chat.UnloadLobbyChat.id; }
 }
