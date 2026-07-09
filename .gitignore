@@ -157,6 +157,8 @@ scripts/image.jpg
 src/generated/
 client-decompiled
 *.ndjson
+# Capturas de pacotes (.ndjson) — não versionar.
+captures/
 PHYSICS-CAPTURE-STATUS.md
 wiki/*
 
@@ -168,3 +170,5 @@ downloads/
 tools/rabcdasm/
 scripts/patch-supplies-center.js
 library-mod.swf
+# Documentação interna / notas de revisão — não versionar.
+docs-internal/
