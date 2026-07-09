@@ -616,13 +616,12 @@ export class ClanNameTakenPacket extends BasePacket {
 }
 
 /**
- * The "you're not in a clan" window (create for CLAN_CREATION_COST / join). Body = 2 resources (the
- * window's icons). We send our own clan resource as a placeholder for both until dedicated icons exist.
+ * The "you're not in a clan" window (create for CLAN_CREATION_COST / join). Body = 2 resources: the
+ * clan-system intro illustration and the clan card (own dedicated images, matching the official).
  */
 export class ShowNotInClanWindowPacket extends BasePacket {
     read(_buffer: Buffer): void {}
     write(): Buffer {
-        // The official sends two distinct images: the clan-system intro illustration and the clan card.
         const intro = ResourceManager.getIdlowById("clan/intro");
         const card = ResourceManager.getIdlowById("clan/card");
         return new BufferWriter().writeResource(intro).writeResource(card).getBuffer();
