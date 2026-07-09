@@ -312,13 +312,16 @@ export class BonusService {
         return id;
     }
 
-    /** Debug/staff: drops `count` bonuses of `type` at random points inside random bonus regions of the
-     *  battle's map+mode (any region type — the areas only give WHERE, the caller chooses WHAT). One-off
-     *  drops (no regionIndex → no respawn wiring). Returns how many were actually dropped (0 if the map
-     *  has no regions for this mode). */
+    /** Debug/staff: drops `count` bonuses of `type` at random points inside the map+mode's bonus regions
+     *  OF THAT TYPE (a gold drops only in crystal_100 zones, a medkit only in medkit zones, etc.). Types
+     *  with no region of their own on the map (e.g. moon/pumpkin, which no map XML declares) fall back to
+     *  any region of the mode. One-off drops (no regionIndex → no respawn wiring). Returns how many were
+     *  actually dropped (0 if the map has no regions for this mode). */
     public spawnRandom(battle: Battle, type: string, count: number): number {
         const mode = MODE_TOKEN[battle.settings.battleMode];
-        const regions = getMapBonusRegions(battle.mapResourceId).filter((r) => r.gameModes.includes(mode));
+        const inMode = getMapBonusRegions(battle.mapResourceId).filter((r) => r.gameModes.includes(mode));
+        const typed = inMode.filter((r) => REGION_TYPE_MAP[r.bonusType] === type);
+        const regions = typed.length > 0 ? typed : inMode;
         if (regions.length === 0) return 0;
         const rand = (a: number, b: number) => a + Math.random() * (b - a);
         for (let i = 0; i < count; i++) {
