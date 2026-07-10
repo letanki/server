@@ -23,6 +23,8 @@ export interface ClanAttributes {
     rating: number; // ranking score (clan leaderboard)
     recruiting: boolean; // accepts join requests ("open"); false = "closed"
     minRank: number; // minimum rank (1-30) required to request to join, or -1 = no minimum
+    blocked: boolean; // staff-blocked clan: the foreign-clan window hides the join button and shows blockReason
+    blockReason: string; // message shown when blocked=true (staff moderation note)
     logo: string; // CDN-relative resource path to the clan logo image (e.g. /clanlogo/<id>/<v>/BIG); "" = none
     missions: IClanMission[]; // the current daily clan-mission set (regenerated when missionResetAt passes)
     missionResetAt: Date | null; // when the current mission set expires and regenerates
@@ -47,6 +49,8 @@ const ClanSchema = new Schema<ClanDocument>({
     rating: { type: Number, default: 0 },
     recruiting: { type: Boolean, default: true },
     minRank: { type: Number, default: -1 },
+    blocked: { type: Boolean, default: false },
+    blockReason: { type: String, default: "" },
     logo: { type: String, default: "" },
     missions: {
         type: [

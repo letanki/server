@@ -417,6 +417,18 @@ export class ClanService {
         return { tag: clan.tag, members };
     }
 
+    /** Staff-blocks (or unblocks) a clan by tag. When blocked, the foreign-clan window hides the join
+     *  button and shows `reason`. Returns the updated clan, or null if not found. */
+    public async staffSetClanBlocked(tag: string, blocked: boolean, reason = ""): Promise<ClanDocument | null> {
+        const clan = await this.getClanByTag(tag);
+        if (!clan) return null;
+        clan.blocked = blocked;
+        clan.blockReason = blocked ? reason : "";
+        await clan.save();
+        logger.info(`[staff] clan [${clan.tag}] ${blocked ? `blocked (reason: "${reason}")` : "unblocked"}.`);
+        return clan;
+    }
+
     /** Seconds a member has been in the clan (since their join, or the clan's creation for legacy members
      *  that predate per-member join tracking). Drives the member-list "time in clan" display. */
     private secondsInClan(clan: ClanDocument, memberId: unknown): number {
@@ -532,6 +544,8 @@ export class ClanService {
             // minRank EFETIVO: sempre 8-30 (nunca -1). O -1 armazenado = "sem mínimo" é normalizado
             // pelo piso CLAN_MIN_RANK aqui, então o fio nunca recebe rank negativo.
             minRank: effectiveMinRank(clan),
+            blocked: clan.blocked ?? false,
+            blockReason: clan.blockReason ?? "",
             joinRequests: await this.getJoinRequestNicks(clan),
             sentInvites: await this.getInviteNicks(clan),
             members: members.map((m) => this.buildMemberView(clan, m)),

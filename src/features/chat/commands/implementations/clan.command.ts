@@ -5,17 +5,30 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 /** Staff clan moderation: inspect a clan, force-remove a member, or disband an abusive clan. */
 export default class ClanCommand implements ICommand {
     name = "clan";
-    description = "Moderação de clã: info <tag>, kick <username>, disband <tag>. Uso: /clan [info/kick/disband] <alvo>.";
+    description = "Moderação de clã: info <tag>, kick <username>, disband <tag>, block <tag> [motivo], unblock <tag>. Uso: /clan [info/kick/disband/block/unblock] <alvo>.";
     permissionLevel: ChatModeratorLevel = ChatModeratorLevel.ADMINISTRATOR;
-    usage = "[info/kick/disband] <alvo>";
-    example = "/clan info LGC";
+    usage = "[info/kick/disband/block/unblock] <alvo> [motivo]";
+    example = "/clan block LGC Clã punido por trapaça";
 
     async execute(context: CommandContext, args: string[]): Promise<void> {
         const { server } = context;
         const action = (args[0] ?? "").toLowerCase();
         const target = args[1];
-        if (!target || !["info", "kick", "disband"].includes(action)) {
-            context.reply("Uso: /clan [info/kick/disband] <alvo> (info/disband = tag; kick = username).");
+        if (!target || !["info", "kick", "disband", "block", "unblock"].includes(action)) {
+            context.reply("Uso: /clan [info/kick/disband/block/unblock] <alvo> (kick = username; demais = tag).");
+            return;
+        }
+
+        if (action === "block" || action === "unblock") {
+            const reason = args.slice(2).join(" ");
+            const clan = await server.clanService.staffSetClanBlocked(target, action === "block", reason);
+            if (!clan) {
+                context.reply(`Clã "${target}" não encontrado.`);
+                return;
+            }
+            context.reply(action === "block"
+                ? `Clã [${clan.tag}] bloqueado${reason ? ` (motivo: ${reason})` : ""}.`
+                : `Clã [${clan.tag}] desbloqueado.`);
             return;
         }
 

@@ -25,6 +25,8 @@ export interface ClanView {
     logo: string | null;
     recruiting: boolean; // f5: true => the client shows "Request to join" instead of "not recruiting"
     minRank: number; // minimum rank to join, EFETIVO (8-30, nunca -1 — já normalizado por effectiveMinRank)
+    blocked: boolean; // clã bloqueado por staff → janela esconde o botão de entrada e mostra blockReason
+    blockReason: string; // mensagem exibida quando blocked=true
     joinRequests: string[]; // usernames with a pending join request — received (my-clan window list #4)
     sentInvites: string[]; // usernames the clan invited — sent invites (my-clan window list #5)
     members: ClanMemberView[];
@@ -46,10 +48,23 @@ const memberModel = (m: ClanMemberView) => ({
     secondsInClan: m.secondsInClan, deaths: m.deaths, kills: m.kills, lastOnlineDate: m.lastOnlineDate.readBigInt64BE(0),
     permission: m.permission, score: m.score, nick: m.nick, minesUsed: m.minesUsed, clanScore: m.clanScore, weeklyClanScore: m.weeklyClanScore,
 });
-const lightClanModel = (v: ClanView) => ({
-    f1: 0, clanId: v.clanId.readBigInt64BE(0), leader: v.leader, description: v.description, recruiting: v.recruiting,
-    f6: 3000, f7: 16, minRank: v.minRank, name: v.name, s10: null, f11: 1, tag: v.tag,
-    memberNicks: v.members.map((m) => m.nick), logo: v.logo ?? "", rating: v.rating,
+// `editable` = flag do client p/ o clã ser editável; o oficial manda true (própria janela e ratings).
+const lightClanModel = (v: ClanView, editable: boolean) => ({
+    blocked: v.blocked,
+    creationDate: v.clanId.readBigInt64BE(0), // ClanView.clanId já é msToLong(createdAt)
+    founder: v.leader,
+    description: v.description,
+    recruiting: v.recruiting,
+    maxDescriptionLength: 3000, // limite de caracteres da descrição (client)
+    maxMembers: 16, // CLAN_MAX_MEMBERS
+    minRank: v.minRank,
+    name: v.name,
+    blockReason: v.blockReason || null,
+    editable,
+    tag: v.tag,
+    memberNicks: v.members.map((m) => m.nick),
+    logo: v.logo ?? "",
+    score: v.rating,
 });
 
 // ---- C->S (incoming): read pela lib; write é stub (o server só lê estes) ----
@@ -151,7 +166,7 @@ export class SetClanRatingsDataPacket extends BasePacket {
     constructor(private readonly startIndex: number, private readonly clans: ClanView[]) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer {
-        return encodeBody(defs.clan.SetClanRatingsData, { startIndex: this.startIndex, clans: this.clans.map(lightClanModel) });
+        return encodeBody(defs.clan.SetClanRatingsData, { startIndex: this.startIndex, clans: this.clans.map((c) => lightClanModel(c, true)) }); // oficial manda editable=true também na lista
     }
     static getId(): number { return defs.clan.SetClanRatingsData.id; }
 }
@@ -278,7 +293,7 @@ export class MyClanWindowPacket extends BasePacket {
     write(): Buffer {
         const v = this.v;
         return encodeBody(defs.clan.MyClanWindow, {
-            clanModel: lightClanModel(v),
+            clanModel: lightClanModel(v, true), // própria janela → editável
             members: v.members.map(memberModel),
             perms: [0, 1, 2, 3, 4, 5, 6, 7].map((ordinal) => ({ ordinal })),
             memberNicks: v.members.map((m) => m.nick),
@@ -375,8 +390,8 @@ export class ShowForeignClanWindowPacket extends BasePacket {
     write(): Buffer {
         const c = this.clan;
         return encodeBody(defs.clan.ShowForeignClanWindow, {
-            blocked: false, creationDate: c.clanId.readBigInt64BE(0), founder: c.leader, description: c.description, recruiting: c.recruiting,
-            maxMembers: 16, joinHidden: this.viewer.joinHidden, minRank: c.minRank, name: c.name, blockReason: null,
+            blocked: c.blocked, creationDate: c.clanId.readBigInt64BE(0), founder: c.leader, description: c.description, recruiting: c.recruiting,
+            maxMembers: 16, joinHidden: this.viewer.joinHidden, minRank: c.minRank, name: c.name, blockReason: c.blockReason || null,
             invitedYou: this.viewer.invitedYou, requestSent: this.viewer.requestSent, tag: c.tag, // maxMembers = CLAN_MAX_MEMBERS
             members: c.members.map(memberModel), logo: c.logo, score: c.rating,
         });
