@@ -75,15 +75,17 @@ export class ShaftArcadeShotCommandHandler implements IPacketHandler<ShaftPacket
         const { user, currentBattle } = client;
         if (!user || !currentBattle || client.battleState !== "active") return;
 
-        // Relay the beam to the others — on a HIT and on a MISS (wall/void) alike.
-        const relay = new ShaftPackets.ShaftShotPacket(user.username, packet.origin, packet.target, packet.hit, SHAFT_ARCADE_POWER);
+        // Relay the beam to the others — hit(s) and miss (wall/void) alike.
+        const relay = new ShaftPackets.ShaftShotPacket(user.username, packet.staticHitPoint, packet.targets, packet.localHitPoints, SHAFT_ARCADE_POWER);
         currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
 
-        // Damage only when an actual tank was hit.
-        const targetClient = packet.target ? server.findClientByUsername(packet.target) : undefined;
-        if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
-            const { from, to } = turretDamage(user);
-            await server.battleService.applyDamage(currentBattle, client, targetClient, from + Math.random() * (to - from), 0);
+        // Damage cada tank perfurado (o shaft atravessa vários).
+        const { from, to } = turretDamage(user);
+        for (const nick of packet.targets ?? []) {
+            const targetClient = server.findClientByUsername(nick);
+            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+                await server.battleService.applyDamage(currentBattle, client, targetClient, from + Math.random() * (to - from), 0);
+            }
         }
     }
 }
@@ -102,14 +104,16 @@ export class ShaftAimingShotCommandHandler implements IPacketHandler<ShaftPacket
 
         // Relay the beam (hit or miss). The aim-EXIT relay is sent separately, driven by the client's
         // ShaftExitAiming (843751647) command that follows the shot — matching the official ordering.
-        const relay = new ShaftPackets.ShaftShotPacket(user.username, packet.origin, packet.target, packet.hit, SHAFT_AIMING_POWER);
+        const relay = new ShaftPackets.ShaftShotPacket(user.username, packet.staticHitPoint, packet.targets, packet.localHitPoints, SHAFT_AIMING_POWER);
         currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
 
-        // Damage only when an actual tank was hit.
-        const targetClient = packet.target ? server.findClientByUsername(packet.target) : undefined;
-        if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
-            const { to, aimMax } = turretDamage(user);
-            await server.battleService.applyDamage(currentBattle, client, targetClient, to + (aimMax - to) * ratio, 0);
+        // Damage cada tank perfurado, com o dano de mira carregado.
+        const { to, aimMax } = turretDamage(user);
+        for (const nick of packet.targets ?? []) {
+            const targetClient = server.findClientByUsername(nick);
+            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+                await server.battleService.applyDamage(currentBattle, client, targetClient, to + (aimMax - to) * ratio, 0);
+            }
         }
     }
 }

@@ -51,8 +51,11 @@ export type FriendsList = InstanceType<typeof FriendsList>;
 export const IncomingFriendRequestExists = packetClass(defs.friends.IncomingFriendRequestExists);
 export type IncomingFriendRequestExists = InstanceType<typeof IncomingFriendRequestExists>;
 
-export const LoadFriends = packetClass(defs.friends.LoadFriends);
-export type LoadFriends = InstanceType<typeof LoadFriends>;
+// id -731115522: o client ENVIA isto pela janela de configurações (init + ao fechar) com o
+// checkbox "SHOW_DAMAGE". O servidor aproveita o gatilho (chega no login) para responder com a
+// lista de amigos — ver SetShowDamageSettingHandler.
+export const SetShowDamageSetting = packetClass(defs.friends.SetShowDamageSetting);
+export type SetShowDamageSetting = InstanceType<typeof SetShowDamageSetting>;
 
 export const NewFriendRequest = packetClass(defs.friends.NewFriendRequest);
 export type NewFriendRequest = InstanceType<typeof NewFriendRequest>;

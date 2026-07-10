@@ -134,11 +134,13 @@ export class DeclineFriendRequestHandler implements IPacketHandler<FriendPackets
     }
 }
 
-export class LoadFriendsHandler implements IPacketHandler<FriendPackets.LoadFriends> {
-    public readonly packetId = FriendPackets.LoadFriends.getId();
-    public async execute(client: GameClient, server: GameServer, packet: FriendPackets.LoadFriends): Promise<void> {
+export class SetShowDamageSettingHandler implements IPacketHandler<FriendPackets.SetShowDamageSetting> {
+    public readonly packetId = FriendPackets.SetShowDamageSetting.getId();
+    public async execute(client: GameClient, server: GameServer, _packet: FriendPackets.SetShowDamageSetting): Promise<void> {
         if (!client.user) return;
 
+        // O client manda este pacote no init das configurações (login) — usamos como gatilho para
+        // carregar a lista de amigos. (O valor showDamage em si não é aplicado no servidor ainda.)
         const friendsData = await server.friendsService.getFriendsData(client.user.id);
         client.sendPacket(new FriendPackets.FriendsList(friendsData));
     }

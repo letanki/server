@@ -24,7 +24,7 @@ export class ShotgunShotCommandPacket extends BasePacket {
             if (!target) continue;
             const entry = this.hitsByTarget.get(target);
             if (entry) entry.pellets++;
-            else this.hitsByTarget.set(target, { pellets: 1, worldHit: h.worldHit, center: h.center });
+            else this.hitsByTarget.set(target, { pellets: 1, worldHit: h.localHitPoint, center: h.position });
         }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }

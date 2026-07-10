@@ -91,7 +91,7 @@ export class InitUserClanModelsPacket extends BasePacket {
     write(): Buffer {
         return encodeBody(defs.lobby.InitUserClanModels, {
             tag: null,
-            requestPending: true,
+            giveBonusesToClan: true,
             clansEnabled: true,
             joinCooldownSeconds: 0,
             unknownPanelFlag: true,
@@ -100,9 +100,9 @@ export class InitUserClanModelsPacket extends BasePacket {
             notificationsCount: 0,
             canCreateClan: true,
             minRankToCreate: 8,
-            incomingInviteClanIds: [],
-            outgoingRequestClanIds: this.outgoingRequestTags,
-            viewedInviteClanIds: [],
+            incomingInviteClanTags: [],
+            outgoingRequestClanTags: this.outgoingRequestTags,
+            viewedInviteClanTags: [],
             memberNotificationNicks: [],
             joinRequestNicks: [],
             logoImageId: { high: 0, low: ResourceManager.getIdlowById("clan/podium") },
