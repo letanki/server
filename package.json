@@ -52,6 +52,7 @@
     "fs-extra": "^11.2.0",
     "mkdirp": "^3.0.1",
     "mongoose": "^8.4.1",
+    "protanki-protocol": "github:DaniloPalmeira/protanki-protocol",
     "rimraf": "^5.0.7",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
