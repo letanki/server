@@ -79,13 +79,13 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
             const battleDetailWatchers = server.getClients().filter((c) => (c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId);
 
             if (battle.settings.battleMode === BattleMode.DM) {
-                server.broadcastToBattleList(new ReservePlayerSlotDmPacket(battle.battleId, client.user.username));
+                server.broadcastToBattleList(new ReservePlayerSlotDmPacket({ battleId: battle.battleId, nickname: client.user.username }));
                 const addUserPacket = new AddUserToBattleDmPacket({ battleId: battle.battleId, nickname: client.user.username, kills: 0, score: 0, suspicious: false });
                 for (const watcher of battleDetailWatchers) watcher.sendPacket(addUserPacket);
             } else {
                 // Team modes (CTF/TDM/DOM): the lobby roster uses the team variants + the player's team.
                 const team = battle.usersRed.some((u) => u.id === client.user!.id) ? 0 : 1;
-                server.broadcastToBattleList(new OnReserveSlotTeamPacket(battle.battleId, client.user.username, team));
+                server.broadcastToBattleList(new OnReserveSlotTeamPacket({ battleId: battle.battleId, nickname: client.user.username, team }));
                 const addUserPacket = new AddUserTeamPacket({ battleId: battle.battleId, nickname: client.user.username, kills: 0, score: 0, suspicious: false, team });
                 for (const watcher of battleDetailWatchers) watcher.sendPacket(addUserPacket);
             }
@@ -118,7 +118,7 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
             // Equipment-constraint rejection (XP/BP): tell the client so it shows "equipment not
             // allowed" and keeps the player in the lobby, echoing the battleId they tried to enter.
             if (error instanceof EquipmentConstraintError) {
-                client.sendPacket(new BattlePackets.EquipmentNotAllowedPacket(client.lastViewedBattleId));
+                client.sendPacket(new BattlePackets.EquipmentNotAllowedPacket({ battleId: client.lastViewedBattleId }));
             }
             logger.warn(`Usuário ${client.user.username} falhou ao entrar na batalha ${client.lastViewedBattleId}`, {
                 error: error.message,
@@ -239,7 +239,7 @@ export class ReadyToActivateHandler implements IPacketHandler<BattlePackets.Read
         client.supplyReadyAt.clear();
 
         const battle = client.currentBattle;
-        battle.broadcast(new BattlePackets.ActivateTankPacket(client.user.username));
+        battle.broadcast(new BattlePackets.ActivateTankPacket({ nickname: client.user.username }));
     }
 }
 
@@ -365,7 +365,7 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             // team involved, so it also works for spectators (whose nickname isn't in the scoreboard and
             // would #1009 the client on a regular chat line — see spectator-chat).
             const replyFunction = (message: string) => {
-                client.sendPacket(new BattlePackets.BattleSystemMessagePacket(message));
+                client.sendPacket(new BattlePackets.BattleSystemMessagePacket({ message }));
             };
 
             const context: CommandContext = {
@@ -418,7 +418,7 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
             if (packet.team) {
                 // Message goes CLEAN — the spectator-name client patch renders the uid as the yellow
                 // name label ("nick: msg"); unpatched clients just show the generic "Espectador: msg".
-                sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket(packet.message, user.username));
+                sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket({ message: packet.message, uid: user.username }));
                 return;
             }
             // Spectators' copy carries the sender as the "*nick" sentinel — the spectator-name client
@@ -551,7 +551,7 @@ export class SendBattleInviteHandler implements IPacketHandler<BattlePackets.Sen
         // Inviting a player to a private battle grants them list visibility (and pushes the card so the
         // battle shows in their list even though it was hidden at creation).
         if (battle.settings.privateBattle && battle.grantViewer(targetClient.user)) {
-            targetClient.sendPacket(new CreateBattleResponse(JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle))));
+            targetClient.sendPacket(new CreateBattleResponse({ jsonData: JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle)) }));
         }
 
         targetClient.sendPacket(new BattlePackets.ShowBattleInvitePacket({
@@ -575,7 +575,7 @@ export class DeclineBattleInviteHandler implements IPacketHandler<BattlePackets.
         if (!client.user || !packet.inviterNickname) return;
         const inviterClient = server.findClientByUsername(packet.inviterNickname);
         if (inviterClient) {
-            inviterClient.sendPacket(new BattlePackets.BattleInviteDeclinedPacket(client.user.username));
+            inviterClient.sendPacket(new BattlePackets.BattleInviteDeclinedPacket({ targetNickname: client.user.username }));
         }
     }
 }
@@ -587,7 +587,7 @@ export class AcceptBattleInviteHandler implements IPacketHandler<BattlePackets.A
         if (!client.user || !packet.inviterNickname) return;
         const inviterClient = server.findClientByUsername(packet.inviterNickname);
         if (inviterClient) {
-            inviterClient.sendPacket(new BattlePackets.BattleInviteAcceptedPacket(client.user.username));
+            inviterClient.sendPacket(new BattlePackets.BattleInviteAcceptedPacket({ targetNickname: client.user.username }));
         }
     }
 }
@@ -597,7 +597,7 @@ export class RequestBattleEntranceHandler implements IPacketHandler<BattlePacket
 
     public async execute(client: GameClient, server: GameServer, packet: BattlePackets.RequestBattleEntrancePacket): Promise<void> {
         // Ack the entrance request so the client proceeds to open the battle (RequestBattleByLink).
-        client.sendPacket(new BattlePackets.BattleEntranceAckPacket(packet.battleId));
+        client.sendPacket(new BattlePackets.BattleEntranceAckPacket({ battleId: packet.battleId }));
     }
 }
 

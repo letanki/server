@@ -1,8 +1,7 @@
 import { BasePacket } from "@/packets/base.packet";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import { defs } from "protanki-protocol";
+import { defs, encodeBody } from "protanki-protocol";
 
-// IDs em `protanki-protocol` (defs.system.*). Codec manual (S->C only).
+// IDs e schemas em `protanki-protocol` (defs.system.*). S->C only — a lib escreve os bytes.
 
 /**
  * Server-restart countdown shown to every client ("server restarts in N seconds").
@@ -11,9 +10,7 @@ import { defs } from "protanki-protocol";
 export class HaltServerPacket extends BasePacket {
     constructor(private readonly seconds: number = 0) { super(); }
     read(): void {}
-    write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.seconds).getBuffer();
-    }
+    write(): Buffer { return encodeBody(defs.system.HaltServer, { seconds: this.seconds }); }
     static getId(): number { return defs.system.HaltServer.id; }
 }
 
@@ -25,8 +22,6 @@ export class HaltServerPacket extends BasePacket {
 export class BattleHaltPacket extends BasePacket {
     constructor(private readonly text: string | null = null) { super(); }
     read(): void {}
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.text).getBuffer();
-    }
+    write(): Buffer { return encodeBody(defs.system.BattleHalt, { text: this.text }); }
     static getId(): number { return defs.system.BattleHalt.id; }
 }

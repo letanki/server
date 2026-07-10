@@ -20,7 +20,7 @@ export class InviteCodeHandler implements IPacketHandler<InvitePackets.InviteCod
         }
 
         if (result.nickname) {
-            client.sendPacket(new InvitePackets.InviteCodeLogin(result.nickname));
+            client.sendPacket(new InvitePackets.InviteCodeLogin({ nickname: result.nickname }));
             return;
         }
 

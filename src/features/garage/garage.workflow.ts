@@ -60,7 +60,7 @@ export class GarageWorkflow {
         }
 
         client.setState("chat_garage");
-        client.sendPacket(new SetLayout(1));
+        client.sendPacket(new SetLayout({ layoutId: 1 }));
         client.sendPacket(new UnloadBattleListPacket());
 
         this._loadGarageDependencies(client);
@@ -80,7 +80,7 @@ export class GarageWorkflow {
 
     public static enterBattleGarageView(client: GameClient, server: GameServer): void {
         client.setState("battle_garage");
-        client.sendPacket(new SetLayout(1));
+        client.sendPacket(new SetLayout({ layoutId: 1 }));
         this._loadGarageDependencies(client);
     }
 
@@ -95,7 +95,7 @@ export class GarageWorkflow {
         }
 
         const selfDestructTime = 3000;
-        client.sendPacket(new SelfDestructScheduledPacket(selfDestructTime));
+        client.sendPacket(new SelfDestructScheduledPacket({ time: selfDestructTime }));
 
         setTimeout(() => {
             if (client.isDestroyed || !client.currentBattle) {
@@ -128,12 +128,12 @@ export class GarageWorkflow {
 
     public static returnToBattleView(client: GameClient, server: GameServer): void {
         client.setState("battle");
-        client.sendPacket(new SetLayout(3));
+        client.sendPacket(new SetLayout({ layoutId: 3 }));
         client.sendPacket(new GaragePackets.UnloadGaragePacket());
 
         this.applyEquipmentChange(client, server);
 
-        client.sendPacket(new ConfirmLayoutChange(3, 3));
+        client.sendPacket(new ConfirmLayoutChange({ fromLayout: 3, toLayout: 3 }));
     }
 
     /** Applies a pending equipment change (flagged via client.equipmentChangedInGarage) to the current
@@ -248,7 +248,7 @@ export class GarageWorkflow {
             items: garageItems,
             garageBoxId: ResourceManager.getIdlowById("garage"),
         };
-        client.sendPacket(new GaragePackets.GarageItemsPacket(JSON.stringify(garageData)));
+        client.sendPacket(new GaragePackets.GarageItemsPacket({ jsonData: JSON.stringify(garageData) }));
 
         // Equipment-change cooldowns (per category) only apply inside a re-arm battle; 0 elsewhere.
         const inReArm = client.currentBattle?.settings.reArmorEnabled ?? false;
@@ -259,7 +259,7 @@ export class GarageWorkflow {
             delayMountWeaponInSec: inReArm ? server.garageService.getEquipCooldownSec(uid, "weapon") : 0,
             delayMountColorInSec: inReArm ? server.garageService.getEquipCooldownSec(uid, "color") : 0,
         };
-        client.sendPacket(new GaragePackets.ShopItemsPacket(JSON.stringify(shopData)));
+        client.sendPacket(new GaragePackets.ShopItemsPacket({ jsonData: JSON.stringify(shopData) }));
 
         const turretId = client.user.equippedTurret;
         const turretMod = client.user.turrets.get(turretId) ?? 0;
@@ -267,14 +267,14 @@ export class GarageWorkflow {
         const hullMod = client.user.hulls.get(hullId) ?? 0;
         const paintId = client.user.equippedPaint;
 
-        client.sendPacket(new GaragePackets.MountItemPacket(`${hullId}_m${hullMod}`, true));
-        client.sendPacket(new GaragePackets.MountItemPacket(`${turretId}_m${turretMod}`, true));
-        client.sendPacket(new GaragePackets.MountItemPacket(`${paintId}_m0`, true));
+        client.sendPacket(new GaragePackets.MountItemPacket({ itemId: `${hullId}_m${hullMod}`, owned: true }));
+        client.sendPacket(new GaragePackets.MountItemPacket({ itemId: `${turretId}_m${turretMod}`, owned: true }));
+        client.sendPacket(new GaragePackets.MountItemPacket({ itemId: `${paintId}_m0`, owned: true }));
 
         if (client.getState() === "battle_garage") {
-            client.sendPacket(new ConfirmLayoutChange(3, 1));
+            client.sendPacket(new ConfirmLayoutChange({ fromLayout: 3, toLayout: 1 }));
         } else {
-            client.sendPacket(new ConfirmLayoutChange(1, 1));
+            client.sendPacket(new ConfirmLayoutChange({ fromLayout: 1, toLayout: 1 }));
         }
     }
 }

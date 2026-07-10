@@ -1,258 +1,77 @@
-import { BasePacket } from "@/packets/base.packet";
-import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { IEmpty } from "@/packets/packet.interfaces";
+import { packetClass } from "@/packets/packet-class";
 import { defs } from "protanki-protocol";
-import * as AuthTypes from "./auth.types";
 
-// IDs e schemas vêm da lib compartilhada `protanki-protocol` (defs.auth.*),
-// fonte única também consumida pelo protanki-bridge. As classes mantêm seus
-// construtores/campos; read/write/getId apenas referenciam a definição.
+// IDs e schemas em `protanki-protocol` (defs.auth.*).
+// Classes finas geradas a partir das defs compartilhadas (id + schema + direção).
 
-export class Language extends BasePacket implements AuthTypes.ILanguage {
-    lang: string | null;
-    constructor(lang: string | null = null) {
-        super();
-        this.lang = lang;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.Language.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.Language.schema!); }
-    static getId() { return defs.auth.Language.id; }
-}
+export const Language = packetClass(defs.auth.Language);
+export type Language = InstanceType<typeof Language>;
 
-export class CreateAccount extends BasePacket implements AuthTypes.ICreateAccount {
-    nickname: string | null = null;
-    password: string | null = null;
-    rememberMe: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, defs.auth.CreateAccount.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.CreateAccount.schema!); }
-    static getId() { return defs.auth.CreateAccount.id; }
-}
+export const CreateAccount = packetClass(defs.auth.CreateAccount);
+export type CreateAccount = InstanceType<typeof CreateAccount>;
 
-export class Login extends BasePacket implements AuthTypes.ILogin {
-    username: string | null = null;
-    password: string | null = null;
-    rememberMe: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, defs.auth.Login.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.Login.schema!); }
-    static getId() { return defs.auth.Login.id; }
-}
+export const Login = packetClass(defs.auth.Login);
+export type Login = InstanceType<typeof Login>;
 
-export class LoginByTokenRequestPacket extends BasePacket implements AuthTypes.ILoginByTokenRequest {
-    hash: string | null;
-    constructor(hash: string | null = null) {
-        super();
-        this.hash = hash;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.LoginByTokenRequest.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.LoginByTokenRequest.schema!); }
-    static getId() { return defs.auth.LoginByTokenRequest.id; }
-}
+export const LoginByTokenRequestPacket = packetClass(defs.auth.LoginByTokenRequest);
+export type LoginByTokenRequestPacket = InstanceType<typeof LoginByTokenRequestPacket>;
 
-export class LoginTokenPacket extends BasePacket implements AuthTypes.ILoginToken {
-    hash: string | null;
-    constructor(hash: string | null = null) {
-        super();
-        this.hash = hash;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.LoginToken.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.LoginToken.schema!); }
-    static getId() { return defs.auth.LoginToken.id; }
-}
+export const LoginTokenPacket = packetClass(defs.auth.LoginToken);
+export type LoginTokenPacket = InstanceType<typeof LoginTokenPacket>;
 
-export class IncorrectPassword extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.IncorrectPassword.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.IncorrectPassword.schema!); }
-    static getId() { return defs.auth.IncorrectPassword.id; }
-}
+export const IncorrectPassword = packetClass(defs.auth.IncorrectPassword);
+export type IncorrectPassword = InstanceType<typeof IncorrectPassword>;
 
-export class CheckNicknameAvailable extends BasePacket implements AuthTypes.ICheckNicknameAvailable {
-    nickname: string | null;
-    constructor(nickname: string | null) {
-        super();
-        this.nickname = nickname;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.CheckNicknameAvailable.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.CheckNicknameAvailable.schema!); }
-    static getId() { return defs.auth.CheckNicknameAvailable.id; }
-}
+export const CheckNicknameAvailable = packetClass(defs.auth.CheckNicknameAvailable);
+export type CheckNicknameAvailable = InstanceType<typeof CheckNicknameAvailable>;
 
-export class NicknameAvailable extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.NicknameAvailable.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.NicknameAvailable.schema!); }
-    static getId() { return defs.auth.NicknameAvailable.id; }
-}
+export const NicknameAvailable = packetClass(defs.auth.NicknameAvailable);
+export type NicknameAvailable = InstanceType<typeof NicknameAvailable>;
 
-export class NicknameUnavailable extends BasePacket implements AuthTypes.INicknameUnavailable {
-    suggestions: string[] | null = null;
-    constructor(suggestions?: string[] | null) {
-        super();
-        if (suggestions) {
-            this.suggestions = suggestions;
-        }
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.NicknameUnavailable.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.NicknameUnavailable.schema!); }
-    static getId() { return defs.auth.NicknameUnavailable.id; }
-}
+export const NicknameUnavailable = packetClass(defs.auth.NicknameUnavailable);
+export type NicknameUnavailable = InstanceType<typeof NicknameUnavailable>;
 
-export class InvalidNickname extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.InvalidNickname.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.InvalidNickname.schema!); }
-    static getId() { return defs.auth.InvalidNickname.id; }
-}
+export const InvalidNickname = packetClass(defs.auth.InvalidNickname);
+export type InvalidNickname = InstanceType<typeof InvalidNickname>;
 
-export class RequestCaptcha extends BasePacket implements AuthTypes.IRequestCaptcha {
-    view: number;
-    constructor(view: number = 0) {
-        super();
-        this.view = view;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RequestCaptcha.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RequestCaptcha.schema!); }
-    static getId() { return defs.auth.RequestCaptcha.id; }
-}
+export const RequestCaptcha = packetClass(defs.auth.RequestCaptcha);
+export type RequestCaptcha = InstanceType<typeof RequestCaptcha>;
 
-export class Captcha extends BasePacket implements AuthTypes.ICaptcha {
-    view: number;
-    image: Buffer;
-    constructor(view: number = 0, image: Buffer = Buffer.alloc(0)) {
-        super();
-        this.view = view;
-        this.image = image;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.Captcha.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.Captcha.schema!); }
-    static getId() { return defs.auth.Captcha.id; }
-}
+export const Captcha = packetClass(defs.auth.Captcha);
+export type Captcha = InstanceType<typeof Captcha>;
 
-export class CaptchaVerify extends BasePacket implements AuthTypes.ICaptchaVerify {
-    view: number;
-    solution: string | null;
-    constructor(view: number = 0, solution: string | null) {
-        super();
-        this.view = view;
-        this.solution = solution;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaVerify.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.CaptchaVerify.schema!); }
-    static getId() { return defs.auth.CaptchaVerify.id; }
-}
+export const CaptchaVerify = packetClass(defs.auth.CaptchaVerify);
+export type CaptchaVerify = InstanceType<typeof CaptchaVerify>;
 
-export class CaptchaIsValid extends BasePacket implements AuthTypes.ICaptchaView {
-    view: number = 0;
-    constructor(view?: number) {
-        super();
-        if (view !== undefined) this.view = view;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaIsValid.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.CaptchaIsValid.schema!); }
-    static getId() { return defs.auth.CaptchaIsValid.id; }
-}
+export const CaptchaIsValid = packetClass(defs.auth.CaptchaIsValid);
+export type CaptchaIsValid = InstanceType<typeof CaptchaIsValid>;
 
-export class CaptchaIsInvalid extends BasePacket implements AuthTypes.ICaptcha {
-    view: number = 0;
-    image: Buffer = Buffer.alloc(0);
-    constructor(view?: number, image?: Buffer) {
-        super();
-        if (view !== undefined) this.view = view;
-        if (image) this.image = image;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.CaptchaIsInvalid.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.CaptchaIsInvalid.schema!); }
-    static getId() { return defs.auth.CaptchaIsInvalid.id; }
-}
+export const CaptchaIsInvalid = packetClass(defs.auth.CaptchaIsInvalid);
+export type CaptchaIsInvalid = InstanceType<typeof CaptchaIsInvalid>;
 
-export class RecoveryAccountSendCode extends BasePacket implements AuthTypes.IRecoveryAccountSendCode {
-    email: string | null;
-    constructor(email: string | null) {
-        super();
-        this.email = email;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryAccountSendCode.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RecoveryAccountSendCode.schema!); }
-    static getId() { return defs.auth.RecoveryAccountSendCode.id; }
-}
+export const RecoveryAccountSendCode = packetClass(defs.auth.RecoveryAccountSendCode);
+export type RecoveryAccountSendCode = InstanceType<typeof RecoveryAccountSendCode>;
 
-export class RecoveryEmailSent extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailSent.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailSent.schema!); }
-    static getId() { return defs.auth.RecoveryEmailSent.id; }
-}
+export const RecoveryEmailSent = packetClass(defs.auth.RecoveryEmailSent);
+export type RecoveryEmailSent = InstanceType<typeof RecoveryEmailSent>;
 
-export class RecoveryEmailNotExists extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailNotExists.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailNotExists.schema!); }
-    static getId() { return defs.auth.RecoveryEmailNotExists.id; }
-}
+export const RecoveryEmailNotExists = packetClass(defs.auth.RecoveryEmailNotExists);
+export type RecoveryEmailNotExists = InstanceType<typeof RecoveryEmailNotExists>;
 
-export class RecoveryAccountVerifyCode extends BasePacket implements AuthTypes.IRecoveryAccountVerifyCode {
-    code: string | null;
-    constructor(code: string | null) {
-        super();
-        this.code = code;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryAccountVerifyCode.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RecoveryAccountVerifyCode.schema!); }
-    static getId() { return defs.auth.RecoveryAccountVerifyCode.id; }
-}
+export const RecoveryAccountVerifyCode = packetClass(defs.auth.RecoveryAccountVerifyCode);
+export type RecoveryAccountVerifyCode = InstanceType<typeof RecoveryAccountVerifyCode>;
 
-export class RecoveryEmailInvalidCode extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.RecoveryEmailInvalidCode.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.RecoveryEmailInvalidCode.schema!); }
-    static getId() { return defs.auth.RecoveryEmailInvalidCode.id; }
-}
+export const RecoveryEmailInvalidCode = packetClass(defs.auth.RecoveryEmailInvalidCode);
+export type RecoveryEmailInvalidCode = InstanceType<typeof RecoveryEmailInvalidCode>;
 
-export class GoToRecoveryPassword extends BasePacket implements AuthTypes.IGoToRecoveryPassword {
-    email: string | null = null;
-    constructor(email?: string | null) {
-        super();
-        if (email) this.email = email;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.auth.GoToRecoveryPassword.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.GoToRecoveryPassword.schema!); }
-    static getId() { return defs.auth.GoToRecoveryPassword.id; }
-}
+export const GoToRecoveryPassword = packetClass(defs.auth.GoToRecoveryPassword);
+export type GoToRecoveryPassword = InstanceType<typeof GoToRecoveryPassword>;
 
-export class HideLoginForm extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.auth.HideLoginForm.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.HideLoginForm.schema!); }
-    static getId(): number { return defs.auth.HideLoginForm.id; }
-}
+export const HideLoginForm = packetClass(defs.auth.HideLoginForm);
+export type HideLoginForm = InstanceType<typeof HideLoginForm>;
 
-export class Punishment extends BasePacket implements AuthTypes.IPunishment {
-    reason: string | null = null;
-    days: number = 0;
-    hours: number = 0;
-    minutes: number = 0;
+export const Punishment = packetClass(defs.auth.Punishment);
+export type Punishment = InstanceType<typeof Punishment>;
 
-    constructor(reason?: string | null, days?: number, hours?: number, minutes?: number) {
-        super();
-        if (reason) this.reason = reason;
-        if (days !== undefined) this.days = days;
-        if (hours !== undefined) this.hours = hours;
-        if (minutes !== undefined) this.minutes = minutes;
-    }
-
-    read(buffer: Buffer): void { readSchema(this, defs.auth.Punishment.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.Punishment.schema!); }
-    static getId(): number { return defs.auth.Punishment.id; }
-}
-
-export class Registration extends BasePacket implements AuthTypes.IRegistration {
-    bgResource: number;
-    enableRequiredEmail: boolean;
-    maxPasswordLength: number;
-    minPasswordLength: number;
-
-    constructor(bgResource: number = 0, enableRequiredEmail: boolean = false, maxPasswordLength: number = 0, minPasswordLength: number = 0) {
-        super();
-        this.bgResource = bgResource;
-        this.enableRequiredEmail = enableRequiredEmail;
-        this.maxPasswordLength = maxPasswordLength;
-        this.minPasswordLength = minPasswordLength;
-    }
-
-    read(buffer: Buffer): void { readSchema(this, defs.auth.Registration.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.auth.Registration.schema!); }
-    static getId(): number { return defs.auth.Registration.id; }
-}
+export const Registration = packetClass(defs.auth.Registration);
+export type Registration = InstanceType<typeof Registration>;

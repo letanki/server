@@ -78,7 +78,7 @@ export class ThunderShotNoTargetCommandHandler implements IPacketHandler<Thunder
             logger.warn("ThunderShotNoTargetCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const shotPacket = new ThunderPackets.ThunderShotNoTargetPacket(user.username);
+        const shotPacket = new ThunderPackets.ThunderShotNoTargetPacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) {

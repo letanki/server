@@ -1,83 +1,31 @@
 import { BasePacket } from "@/packets/base.packet";
-import { defs } from "protanki-protocol";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import * as FreezeTypes from "./freeze.types";
+import { packetClass } from "@/packets/packet-class";
+import { defs, decodeBody } from "protanki-protocol";
+
+// IDs e schemas em `protanki-protocol` (defs.weapons.*). Server só faz lógica; a lib lê/escreve.
 
 /**
- * C→S: a Freeze beam tick. Same shape as the Firebird hit packet (the beam cone can touch several tanks at
- * once): clientTime(i32), targets(Vector<String>), then a Vector<short> + two Vector<Vector3> we don't need.
- * Sent ~2/s while the beam touches anyone.
+ * C→S: a Freeze beam tick. Mesma forma do Firebird (o cone toca vários tanques). Só precisamos de
+ * clientTime + targets; o schema lê só esses dois e ignora o resto do fio.
  */
 export class FreezeHitCommandPacket extends BasePacket {
     public targets: string[] = [];
     public read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        try {
-            r.readInt32BE();                 // clientTime
-            this.targets = r.readStringArray();
-        } catch { this.targets = []; }
+        try { this.targets = decodeBody(defs.weapons.FreezeHitCommand, buffer).fields.targets; }
+        catch { this.targets = []; }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
     public static getId(): number { return defs.weapons.FreezeHitCommand.id; }
 }
 
-export class StartShootingFreezeCommandPacket extends BasePacket implements FreezeTypes.IStartShootingFreezeCommand {
-    public clientTime: number = 0;
-    public read(buffer: Buffer): void {
-        this.clientTime = new BufferReader(buffer).readInt32BE();
-    }
-    public write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
-    }
-    public static getId(): number {
-        return defs.weapons.StartShootingFreezeCommand.id;
-    }
-}
+export const StartShootingFreezeCommandPacket = packetClass(defs.weapons.StartShootingFreezeCommand);
+export type StartShootingFreezeCommandPacket = InstanceType<typeof StartShootingFreezeCommandPacket>;
 
-export class StartShootingFreezePacket extends BasePacket implements FreezeTypes.IStartShootingFreezePacket {
-    public nickname: string | null;
-    constructor(nickname: string | null = null) {
-        super();
-        this.nickname = nickname;
-    }
-    public read(buffer: Buffer): void {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    public write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    public static getId(): number {
-        return defs.weapons.StartShootingFreeze.id;
-    }
-}
+export const StartShootingFreezePacket = packetClass(defs.weapons.StartShootingFreeze);
+export type StartShootingFreezePacket = InstanceType<typeof StartShootingFreezePacket>;
 
-export class StopShootingFreezeCommandPacket extends BasePacket implements FreezeTypes.IStopShootingFreezeCommand {
-    public clientTime: number = 0;
-    public read(buffer: Buffer): void {
-        this.clientTime = new BufferReader(buffer).readInt32BE();
-    }
-    public write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.clientTime).getBuffer();
-    }
-    public static getId(): number {
-        return defs.weapons.StopShootingFreezeCommand.id;
-    }
-}
+export const StopShootingFreezeCommandPacket = packetClass(defs.weapons.StopShootingFreezeCommand);
+export type StopShootingFreezeCommandPacket = InstanceType<typeof StopShootingFreezeCommandPacket>;
 
-export class StopShootingFreezePacket extends BasePacket implements FreezeTypes.IStopShootingFreezePacket {
-    public nickname: string | null;
-    constructor(nickname: string | null = null) {
-        super();
-        this.nickname = nickname;
-    }
-    public read(buffer: Buffer): void {
-        this.nickname = new BufferReader(buffer).readOptionalString();
-    }
-    public write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.nickname).getBuffer();
-    }
-    public static getId(): number {
-        return defs.weapons.StopShootingFreeze.id;
-    }
-}
+export const StopShootingFreezePacket = packetClass(defs.weapons.StopShootingFreeze);
+export type StopShootingFreezePacket = InstanceType<typeof StopShootingFreezePacket>;

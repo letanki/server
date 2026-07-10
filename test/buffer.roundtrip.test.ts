@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { BufferReader, BufferWriter } from "protanki-protocol";
 
 import * as ChatPackets from "@/features/chat/chat.packets";
 import * as ProfilePackets from "@/features/profile/profile.packets";
@@ -148,7 +147,7 @@ test("ChatProperties packet round-trips (exercises int16 minWord + arrays)", () 
 });
 
 test("RankNotifierData packet round-trips (rank as uint8)", () => {
-    const original = new ProfilePackets.RankNotifierData(30, "Danlino");
+    const original = new ProfilePackets.RankNotifierData({ rank: 30, nickname: "Danlino" });
     const decoded = new ProfilePackets.RankNotifierData();
     decoded.read(original.write());
     assert.equal(decoded.rank, 30);
@@ -211,7 +210,7 @@ test("InitDomPointsPacket round-trips with point list (optVector3 + stringArray)
 
 test("Captcha round-trips with bytes image (length-prefixed buffer)", () => {
     const image = Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x10]);
-    const original = new AuthPackets.Captcha(7, image);
+    const original = new AuthPackets.Captcha({ view: 7, image });
     const decoded = new AuthPackets.Captcha();
     decoded.read(original.write());
     assert.equal(decoded.view, 7);
@@ -242,10 +241,10 @@ test("ShowQuestsWindow round-trips with nested list (quests -> prizes)", () => {
 });
 
 test("ChatHistory round-trips with optObject source/target (present + null)", () => {
-    const original = new ChatPackets.ChatHistory([
+    const original = new ChatPackets.ChatHistory({ messages: [
         { source: { moderatorLevel: 1, ip: "1.2.3.4", rank: 15, uid: "Danlino" }, isSystem: false, target: null, message: "hi", isWarning: false },
         { source: null, isSystem: true, target: { moderatorLevel: 0, ip: null, rank: 30, uid: "Dan" }, message: "sys", isWarning: true },
-    ]);
+    ] });
     const decoded = new ChatPackets.ChatHistory();
     decoded.read(original.write());
     assert.equal(decoded.messages.length, 2);
@@ -260,11 +259,11 @@ test("ChatHistory round-trips with optObject source/target (present + null)", ()
 // validating the declarative schema engine (not just read==write symmetry).
 test("schema packets match reference wire bytes exactly", () => {
     assert.equal(
-        new ProfilePackets.RankNotifierData(30, "S.E.F").write().toString("hex"),
+        new ProfilePackets.RankNotifierData({ rank: 30, nickname: "S.E.F" }).write().toString("hex"),
         "1e0000000005532e452e46"
     );
     assert.equal(
-        new ProfilePackets.OnlineNotifierData(true, 1, "S.E.F").write().toString("hex"),
+        new ProfilePackets.OnlineNotifierData({ isOnline: true, server: 1, nickname: "S.E.F" }).write().toString("hex"),
         "01000000010000000005532e452e46"
     );
     assert.equal(

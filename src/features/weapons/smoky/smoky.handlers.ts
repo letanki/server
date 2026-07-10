@@ -21,7 +21,7 @@ export class SmokyStaticShotCommandHandler implements IPacketHandler<SmokyPacket
             logger.warn("SmokyStaticShotCommandHandler received packet from client not in battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const staticShotPacket = new SmokyPackets.SmokyStaticShotPacket(user.username, packet.hitPosition);
+        const staticShotPacket = new SmokyPackets.SmokyStaticShotPacket({ nickname: user.username, hitPosition: packet.hitPosition });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) continue;

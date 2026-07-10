@@ -43,7 +43,7 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
             // The "1000_scores" supply is consumed instantly and grants experience; refresh the
             // client's score counter with the new total.
             if (result && "newExperience" in result) {
-                client.sendPacket(new ProfilePackets.UpdateScorePacket(result.newExperience));
+                client.sendPacket(new ProfilePackets.UpdateScorePacket({ score: result.newExperience }));
                 // purchaseItem only adds experience — recompute the rank here. On a rank-up, notify the
                 // client and RELOAD the garage (it's open — that's where the item was bought): its item
                 // lists are rank-dependent and don't rebuild in place (items would duplicate).
@@ -106,14 +106,14 @@ export class EquipItemRequestHandler implements IPacketHandler<GaragePackets.Equ
             // batalha não permite trocar equipamento. Batalhas XP/BP forçam reArmorEnabled=false na criação
             // (ver lobby.service.createBattle), então esta regra também cobre "XP/BP sempre travado".
             if (battle && !battle.settings.reArmorEnabled) {
-                client.sendPacket(new GaragePackets.MountItemPacket(currentMount, true));
+                client.sendPacket(new GaragePackets.MountItemPacket({ itemId: currentMount, owned: true }));
                 logger.info(`Equip of ${packet.itemId} by ${u.username} blocked: rearmamento desabilitado.`);
                 return;
             }
 
             // Rearmamento habilitado: cada categoria (armor/weapon/color) tem cooldown de 15 min.
             if (battle && key && server.garageService.getEquipCooldownSec(u.id, key) > 0) {
-                client.sendPacket(new GaragePackets.MountItemPacket(currentMount, true));
+                client.sendPacket(new GaragePackets.MountItemPacket({ itemId: currentMount, owned: true }));
                 logger.info(`Equip of ${packet.itemId} by ${u.username} blocked: ${key} on cooldown (${server.garageService.getEquipCooldownSec(u.id, key)}s left).`);
                 return;
             }
@@ -126,7 +126,7 @@ export class EquipItemRequestHandler implements IPacketHandler<GaragePackets.Equ
             if (battle) {
                 client.equipmentChangedInGarage = true;
             }
-            client.sendPacket(new GaragePackets.MountItemPacket(packet.itemId, true));
+            client.sendPacket(new GaragePackets.MountItemPacket({ itemId: packet.itemId, owned: true }));
         } catch (error: any) {
             logger.warn(`Failed to equip item ${packet.itemId} for user ${client.user.username}`, {
                 error: error.message,
@@ -157,6 +157,6 @@ export class FitItemHandler implements IPacketHandler<GaragePackets.FitItemPacke
             (user.hulls.has(base) && (user.hulls.get(base) ?? -1) >= mod) ||
             (user.turrets.has(base) && (user.turrets.get(base) ?? -1) >= mod);
 
-        client.sendPacket(new GaragePackets.MountItemPacket(itemId, owned));
+        client.sendPacket(new GaragePackets.MountItemPacket({ itemId, owned }));
     }
 }

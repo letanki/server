@@ -48,7 +48,7 @@ export default class SetRankCommand implements ICommand {
             const updated = await server.userService.updateResources(user.id, { experience: rankInfo.minScore });
             if (online?.user) {
                 online.user = updated;
-                online.sendPacket(new UpdateScorePacket(updated.experience));
+                online.sendPacket(new UpdateScorePacket({ score: updated.experience }));
                 online.sendPacket(new UpdateRankPacket({
                     rank: updated.rank,
                     score: updated.experience,

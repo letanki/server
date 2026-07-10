@@ -25,7 +25,7 @@ export default class SetCrystalsCommand implements ICommand {
         try {
             const updated = await context.server.userService.updateResources(user.id, { crystals });
             context.executor.user = updated;
-            context.executor.sendPacket(new UpdateCrystals(updated.crystals));
+            context.executor.sendPacket(new UpdateCrystals({ crystals: updated.crystals }));
             context.reply(`Cristais definidos para ${updated.crystals}.`);
         } catch (error: any) {
             context.reply(`Erro: ${error.message}`);

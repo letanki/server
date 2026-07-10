@@ -1,8 +1,6 @@
 import { BasePacket } from "@/packets/base.packet";
-import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import { defs } from "protanki-protocol";
+import { packetClass } from "@/packets/packet-class";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import * as ShopTypes from "./shop.types";
 
 // IDs e schemas em `protanki-protocol` (defs.shop.*).
@@ -17,62 +15,34 @@ export class LocalizationInfo extends BasePacket implements ShopTypes.ILocalizat
         if (defaultCountryCode) { this.defaultCountryCode = defaultCountryCode; }
         if (locationCheckEnabled !== undefined) { this.locationCheckEnabled = locationCheckEnabled; }
     }
-    // Codec manual (lista de países [code, label]).
+    // Lógica: a classe guarda países como tuplas [code, label]; o wire é uma list de { code, label }.
     read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        const count = reader.readInt32BE();
-        this.countries = [];
-        for (let i = 0; i < count; i++) {
-            const key = reader.readOptionalString() ?? "";
-            const value = reader.readOptionalString() ?? "";
-            this.countries.push([key, value]);
-        }
-        this.defaultCountryCode = reader.readOptionalString() ?? "";
-        this.locationCheckEnabled = reader.readUInt8() === 1;
+        const { fields } = decodeBody(defs.shop.LocalizationInfo, buffer);
+        this.countries = fields.countries.map((c): [string, string] => [c.code ?? "", c.label ?? ""]);
+        this.defaultCountryCode = fields.defaultCountryCode ?? "";
+        this.locationCheckEnabled = fields.locationCheckEnabled;
     }
     write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.countries.length);
-        for (const country of this.countries) {
-            writer.writeOptionalString(country[0]);
-            writer.writeOptionalString(country[1]);
-        }
-        writer.writeOptionalString(this.defaultCountryCode);
-        writer.writeUInt8(this.locationCheckEnabled ? 1 : 0);
-        return writer.getBuffer();
+        return encodeBody(defs.shop.LocalizationInfo, {
+            countries: this.countries.map(([code, label]) => ({ code, label })),
+            defaultCountryCode: this.defaultCountryCode,
+            locationCheckEnabled: this.locationCheckEnabled,
+        });
     }
     static getId(): number { return defs.shop.LocalizationInfo.id; }
 }
 
-export class RequestPaymentWindow extends BasePacket implements ShopTypes.IRequestPaymentWindow {
-    read(buffer: Buffer): void { readSchema(this, defs.shop.RequestPaymentWindow.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.shop.RequestPaymentWindow.schema!); }
-    static getId(): number { return defs.shop.RequestPaymentWindow.id; }
-}
+export const RequestPaymentWindow = packetClass(defs.shop.RequestPaymentWindow);
+export type RequestPaymentWindow = InstanceType<typeof RequestPaymentWindow>;
 
-export class RequestShopData extends BasePacket implements ShopTypes.IRequestShopData {
-    read(buffer: Buffer): void { readSchema(this, defs.shop.RequestShopData.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.shop.RequestShopData.schema!); }
-    static getId(): number { return defs.shop.RequestShopData.id; }
-}
+export const RequestShopData = packetClass(defs.shop.RequestShopData);
+export type RequestShopData = InstanceType<typeof RequestShopData>;
 
-export class SetShopCountry extends BasePacket implements ShopTypes.ISetShopCountry {
-    countryCode: string | null = null;
-    read(buffer: Buffer): void { readSchema(this, defs.shop.SetShopCountry.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.shop.SetShopCountry.schema!); }
-    static getId(): number { return defs.shop.SetShopCountry.id; }
-}
+export const SetShopCountry = packetClass(defs.shop.SetShopCountry);
+export type SetShopCountry = InstanceType<typeof SetShopCountry>;
 
-export class ShopData extends BasePacket implements ShopTypes.IShopData {
-    payload: string | null = null;
-    constructor(payload?: string | null) { super(); if (payload) { this.payload = payload; } }
-    read(buffer: Buffer): void { readSchema(this, defs.shop.ShopData.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.shop.ShopData.schema!); }
-    static getId(): number { return defs.shop.ShopData.id; }
-}
+export const ShopData = packetClass(defs.shop.ShopData);
+export type ShopData = InstanceType<typeof ShopData>;
 
-export class ShowPaymentWindow extends BasePacket implements ShopTypes.IShowPaymentWindow {
-    read(buffer: Buffer): void { readSchema(this, defs.shop.ShowPaymentWindow.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.shop.ShowPaymentWindow.schema!); }
-    static getId(): number { return defs.shop.ShowPaymentWindow.id; }
-}
+export const ShowPaymentWindow = packetClass(defs.shop.ShowPaymentWindow);
+export type ShowPaymentWindow = InstanceType<typeof ShowPaymentWindow>;

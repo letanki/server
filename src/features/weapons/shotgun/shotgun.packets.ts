@@ -1,39 +1,30 @@
 import { BasePacket } from "@/packets/base.packet";
-import { defs } from "protanki-protocol";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import { IVector3 } from "@/shared/types/geom/ivector3";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
 
 interface ShotgunTargetHit { pellets: number; worldHit: IVector3 | null; center: IVector3 | null; }
 
+// IDs e schemas em `protanki-protocol` (defs.weapons.*). Server só faz lógica; a lib lê/escreve.
+
 /**
- * C→S: a Hammer (shotgun) blast. Body = clientTime, direction(vec), count(int), then `count` pellet hit
- * records of [3 vecs, target nick, int] (58B each) — one record per pellet that LANDED on a tank (missed
- * pellets aren't reported, so the count encodes spread/accuracy). The 3 vecs per pellet are: v1 = the
- * WORLD impact point, v2 = the surface normal (unused), v3 = the target tank's WORLD centre. We keep the
- * blast direction, the per-target pellet count (for damage), and — from the first pellet on each target —
- * the world impact point + tank centre, which the handler turns into the LOCAL hit for the relay.
+ * C→S: a Hammer (shotgun) blast. Body = clientTime, direction, então uma list de registros de pellet
+ * [3 vecs, target nick, int] — um por pellet que ACERTOU. A lib lê a list; o server AGREGA por alvo
+ * (contagem de pellets + o primeiro impacto/centro).
  */
 export class ShotgunShotCommandPacket extends BasePacket {
     public direction: IVector3 | null = null;
     public hitsByTarget: Map<string, ShotgunTargetHit> = new Map();
     public read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        r.readInt32BE();                       // clientTime
-        this.direction = r.readOptionalVector3();
-        const count = r.readInt32BE();
-        for (let i = 0; i < count; i++) {
-            try {
-                const worldHit = r.readOptionalVector3(); // v1: world-space impact point
-                r.readOptionalVector3();                  // v2: surface normal (unused)
-                const center = r.readOptionalVector3();   // v3: the target tank's world centre
-                const target = r.readOptionalString();
-                r.readInt32BE();
-                if (!target) continue;
-                const entry = this.hitsByTarget.get(target);
-                if (entry) entry.pellets++;
-                else this.hitsByTarget.set(target, { pellets: 1, worldHit, center });
-            } catch { break; }
+        let fields;
+        try { fields = decodeBody(defs.weapons.ShotgunShotCommand, buffer).fields; }
+        catch { return; }
+        this.direction = fields.direction;
+        for (const h of fields.hits) {
+            const target = h.target;
+            if (!target) continue;
+            const entry = this.hitsByTarget.get(target);
+            if (entry) entry.pellets++;
+            else this.hitsByTarget.set(target, { pellets: 1, worldHit: h.worldHit, center: h.center });
         }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }
@@ -41,8 +32,8 @@ export class ShotgunShotCommandPacket extends BasePacket {
 }
 
 /**
- * S→C: relays a shotgun blast to the other players (the cone + pellet impacts). Body = nick, direction,
- * count(targets hit), then per target [direction, hit position, pelletCount(byte), target nick].
+ * S→C: relays a shotgun blast (o cone + impactos). Body = nick, direction, então por alvo
+ * [direction, hit, pelletCount(byte), nick]. Cada registro repete a direção do disparo (lógica).
  */
 export class ShotgunShotPacket extends BasePacket {
     constructor(
@@ -52,11 +43,11 @@ export class ShotgunShotPacket extends BasePacket {
     ) { super(); }
     public read(_buffer: Buffer): void {}
     public write(): Buffer {
-        const w = new BufferWriter().writeOptionalString(this.nickname).writeOptionalVector3(this.direction).writeInt32BE(this.targets.length);
-        for (const t of this.targets) {
-            w.writeOptionalVector3(this.direction).writeOptionalVector3(t.hit).writeUInt8(t.pellets & 0xff).writeOptionalString(t.nick);
-        }
-        return w.getBuffer();
+        return encodeBody(defs.weapons.ShotgunShot, {
+            nickname: this.nickname,
+            direction: this.direction,
+            targets: this.targets.map((t) => ({ direction: this.direction, hit: t.hit, pellets: t.pellets & 0xff, nick: t.nick })),
+        });
     }
     public static getId(): number { return defs.weapons.ShotgunShot.id; }
 }

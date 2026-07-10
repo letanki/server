@@ -89,7 +89,7 @@ export class RoundService {
 
         battle.broadcast(new FinishBattlePacket(rewards.map((r) => ({ nickname: r.nickname, reward: r.reward })), ROUND_FINISH_PAUSE_MS / 1000));
         // Lobby preview watchers: the running timer they see should reset.
-        this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket(battle.battleId));
+        this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket({ battleId: battle.battleId }));
 
         // Credit the earned crystals, THEN flush each player's round stats (order avoids the save/updateOne race).
         void this._awardCrystals(rewards).then(() => {
@@ -169,8 +169,8 @@ export class RoundService {
             // Update the battle-list per-team counts: each player moved to the other team's slot.
             for (let team = 0; team < 2; team++) {
                 for (const u of (team === 0 ? battle.usersRed : battle.usersBlue)) {
-                    this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket(battle.battleId, u.username));
-                    this.server.broadcastToBattleList(new LobbyPackets.OnReserveSlotTeamPacket(battle.battleId, u.username, team));
+                    this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket({ battleId: battle.battleId, nickname: u.username }));
+                    this.server.broadcastToBattleList(new LobbyPackets.OnReserveSlotTeamPacket({ battleId: battle.battleId, nickname: u.username, team }));
                 }
             }
         } else {
@@ -188,7 +188,7 @@ export class RoundService {
         // packets don't refresh the preview panel itself, so the reset timer, reset score and the new
         // team rosters only show up after re-sending BattleDetails (computed from the fresh state).
         for (const w of this._battleWatchers(battle)) {
-            w.sendPacket(new LobbyPackets.HideBattleInfoPacket(battle.battleId));
+            w.sendPacket(new LobbyPackets.HideBattleInfoPacket({ battleId: battle.battleId }));
             void LobbyWorkflow.sendBattleDetails(w, this.server, battle);
         }
 
@@ -203,7 +203,7 @@ export class RoundService {
 
         // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
         if (killer.id !== victim.id) {
-            this._sendToWatchers(battle, new LobbyPackets.UpdateUserScorePacket(battle.battleId, killer.username, killerClient.battleScore));
+            this._sendToWatchers(battle, new LobbyPackets.UpdateUserScorePacket({ battleId: battle.battleId, nickname: killer.username, score: killerClient.battleScore }));
             this._addFund(battle, FUND_PER_KILL);
         }
 
@@ -216,7 +216,7 @@ export class RoundService {
                 ? [...battle.clients].filter((c) => c.user && battle.teamOf(c.user) === team).reduce((sum, c) => sum + c.kills, 0)
                 : killerClient.kills;
             if (battle.isTeamMode()) {
-                this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, team, teamKills));
+                this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket({ battleId: battle.battleId, team, score: teamKills }));
             }
             if (limit > 0 && teamKills >= limit) this.finishRound(battle);
         }
@@ -225,7 +225,7 @@ export class RoundService {
     /** Flag-capture reactions: lobby-preview team score + the CTF score limit. */
     private _onFlagCaptured({ battle, capturingTeamId, newScore }: BattleEventMap["flagCaptured"]): void {
         // Lobby preview watchers see the team score rise.
-        this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket(battle.battleId, capturingTeamId, newScore));
+        this._sendToWatchers(battle, new LobbyPackets.UpdateTeamScorePacket({ battleId: battle.battleId, team: capturingTeamId, score: newScore }));
         this._addFund(battle, FUND_PER_FLAG);
         // Score limit reached -> end the round.
         if (battle.settings.scoreLimit > 0 && newScore >= battle.settings.scoreLimit) {
@@ -331,7 +331,7 @@ export class RoundService {
                 const newTotal = client.user.crystals + reward;
                 const updated = await this.server.userService.updateResources(client.user.id, { crystals: newTotal });
                 client.user = updated;
-                client.sendPacket(new UpdateCrystals(updated.crystals));
+                client.sendPacket(new UpdateCrystals({ crystals: updated.crystals }));
                 // Fund crystals count toward the "earn crystals" daily quest.
                 const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals: reward });
                 if (questCompleted && !client.isDestroyed) client.sendPacket(new QuestPackets.QuestCompletedNotification());

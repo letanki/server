@@ -1,18 +1,12 @@
 import { BasePacket } from "@/packets/base.packet";
-import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { IEmpty } from "@/packets/packet.interfaces";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import { defs } from "protanki-protocol";
+import { packetClass } from "@/packets/packet-class";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import * as SettingsTypes from "./settings.types";
 
 // IDs e schemas em `protanki-protocol` (defs.settings.*).
 
-export class RequestSettings extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.settings.RequestSettings.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.RequestSettings.schema!); }
-    static getId(): number { return defs.settings.RequestSettings.id; }
-}
+export const RequestSettings = packetClass(defs.settings.RequestSettings);
+export type RequestSettings = InstanceType<typeof RequestSettings>;
 
 export class UserSettingsSocial extends BasePacket implements SettingsTypes.IUserSettingsSocial {
     passwordCreated: boolean = false;
@@ -22,113 +16,54 @@ export class UserSettingsSocial extends BasePacket implements SettingsTypes.IUse
         if (passwordCreated !== undefined) this.passwordCreated = passwordCreated;
         if (socialLinks) this.socialLinks = socialLinks;
     }
-    // Codec manual (lista de social links).
+    // Lógica: normaliza os campos nullable dos links. Bytes na lib.
     read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        this.passwordCreated = reader.readUInt8() === 1;
-        const count = reader.readInt32BE();
-        this.socialLinks = [];
-        for (let i = 0; i < count; i++) {
-            this.socialLinks.push({
-                authorizationUrl: reader.readOptionalString() ?? "",
-                isLinked: reader.readUInt8() === 1,
-                snId: reader.readOptionalString() ?? "",
-            });
-        }
+        const { fields } = decodeBody(defs.settings.UserSettingsSocial, buffer);
+        this.passwordCreated = fields.passwordCreated;
+        this.socialLinks = fields.socialLinks.map((l) => ({
+            authorizationUrl: l.authorizationUrl ?? "",
+            isLinked: l.isLinked,
+            snId: l.snId ?? "",
+        }));
     }
     write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeUInt8(this.passwordCreated ? 1 : 0);
-        writer.writeInt32BE(this.socialLinks.length);
-        for (const link of this.socialLinks) {
-            writer.writeOptionalString(link.authorizationUrl);
-            writer.writeUInt8(link.isLinked ? 1 : 0);
-            writer.writeOptionalString(link.snId);
-        }
-        return writer.getBuffer();
+        return encodeBody(defs.settings.UserSettingsSocial, {
+            passwordCreated: this.passwordCreated,
+            socialLinks: this.socialLinks,
+        });
     }
     static getId(): number { return defs.settings.UserSettingsSocial.id; }
 }
 
-export class UserSettingsNotifications extends BasePacket implements SettingsTypes.IUserSettingsNotifications {
-    notificationsEnabled: boolean = false;
-    constructor(enabled?: boolean) { super(); if (enabled !== undefined) this.notificationsEnabled = enabled; }
-    read(buffer: Buffer): void { readSchema(this, defs.settings.UserSettingsNotifications.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.UserSettingsNotifications.schema!); }
-    static getId(): number { return defs.settings.UserSettingsNotifications.id; }
-}
+export const UserSettingsNotifications = packetClass(defs.settings.UserSettingsNotifications);
+export type UserSettingsNotifications = InstanceType<typeof UserSettingsNotifications>;
 
-export class SetNotifications extends BasePacket implements SettingsTypes.ISetNotifications {
-    enabled: boolean = false;
-    read(buffer: Buffer): void { readSchema(this, defs.settings.SetNotifications.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.SetNotifications.schema!); }
-    static getId(): number { return defs.settings.SetNotifications.id; }
-}
+export const SetNotifications = packetClass(defs.settings.SetNotifications);
+export type SetNotifications = InstanceType<typeof SetNotifications>;
 
-export class UpdatePassword extends BasePacket implements SettingsTypes.IUpdatePassword {
-    password: string | null = null;
-    email: string | null = null;
-    read(buffer: Buffer): void { readSchema(this, defs.settings.UpdatePassword.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.UpdatePassword.schema!); }
-    static getId() { return defs.settings.UpdatePassword.id; }
-}
+export const UpdatePassword = packetClass(defs.settings.UpdatePassword);
+export type UpdatePassword = InstanceType<typeof UpdatePassword>;
 
-export class UpdatePasswordResult extends BasePacket implements SettingsTypes.IUpdatePasswordResult {
-    isError: boolean = false;
-    message: string | null = null;
-    constructor(isError?: boolean, message?: string | null) {
-        super();
-        if (isError !== undefined) this.isError = isError;
-        if (message) this.message = message;
-    }
-    read(buffer: Buffer): void { readSchema(this, defs.settings.UpdatePasswordResult.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.UpdatePasswordResult.schema!); }
-    static getId() { return defs.settings.UpdatePasswordResult.id; }
-}
+export const UpdatePasswordResult = packetClass(defs.settings.UpdatePasswordResult);
+export type UpdatePasswordResult = InstanceType<typeof UpdatePasswordResult>;
 
-export class RequestChangePasswordForm extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.settings.RequestChangePasswordForm.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.RequestChangePasswordForm.schema!); }
-    static getId(): number { return defs.settings.RequestChangePasswordForm.id; }
-}
+export const RequestChangePasswordForm = packetClass(defs.settings.RequestChangePasswordForm);
+export type RequestChangePasswordForm = InstanceType<typeof RequestChangePasswordForm>;
 
-export class ChangePasswordForm extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.settings.ChangePasswordForm.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.ChangePasswordForm.schema!); }
-    static getId(): number { return defs.settings.ChangePasswordForm.id; }
-}
+export const ChangePasswordForm = packetClass(defs.settings.ChangePasswordForm);
+export type ChangePasswordForm = InstanceType<typeof ChangePasswordForm>;
 
-export class CreatePasswordForm extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.settings.CreatePasswordForm.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.CreatePasswordForm.schema!); }
-    static getId(): number { return defs.settings.CreatePasswordForm.id; }
-}
+export const CreatePasswordForm = packetClass(defs.settings.CreatePasswordForm);
+export type CreatePasswordForm = InstanceType<typeof CreatePasswordForm>;
 
-export class LinkEmailRequest extends BasePacket implements SettingsTypes.ILinkEmailRequest {
-    email: string | null = null;
-    read(buffer: Buffer) { readSchema(this, defs.settings.LinkEmailRequest.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.LinkEmailRequest.schema!); }
-    static getId() { return defs.settings.LinkEmailRequest.id; }
-}
+export const LinkEmailRequest = packetClass(defs.settings.LinkEmailRequest);
+export type LinkEmailRequest = InstanceType<typeof LinkEmailRequest>;
 
-export class LinkAccountResultSuccess extends BasePacket implements SettingsTypes.ILinkAccountResultSuccess {
-    identifier: string | null = null;
-    constructor(identifier?: string | null) { super(); if (identifier) this.identifier = identifier; }
-    read(buffer: Buffer) { readSchema(this, defs.settings.LinkAccountResultSuccess.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.LinkAccountResultSuccess.schema!); }
-    static getId() { return defs.settings.LinkAccountResultSuccess.id; }
-}
+export const LinkAccountResultSuccess = packetClass(defs.settings.LinkAccountResultSuccess);
+export type LinkAccountResultSuccess = InstanceType<typeof LinkAccountResultSuccess>;
 
-export class LinkAccountResultError extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.settings.LinkAccountResultError.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.LinkAccountResultError.schema!); }
-    static getId(): number { return defs.settings.LinkAccountResultError.id; }
-}
+export const LinkAccountResultError = packetClass(defs.settings.LinkAccountResultError);
+export type LinkAccountResultError = InstanceType<typeof LinkAccountResultError>;
 
-export class LinkAccountFailedAccountInUse extends BasePacket implements SettingsTypes.ILinkAccountFailedAccountInUse {
-    method: string | null = null;
-    constructor(method?: string | null) { super(); if (method) this.method = method; }
-    read(buffer: Buffer) { readSchema(this, defs.settings.LinkAccountFailedAccountInUse.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.settings.LinkAccountFailedAccountInUse.schema!); }
-    static getId() { return defs.settings.LinkAccountFailedAccountInUse.id; }
-}
+export const LinkAccountFailedAccountInUse = packetClass(defs.settings.LinkAccountFailedAccountInUse);
+export type LinkAccountFailedAccountInUse = InstanceType<typeof LinkAccountFailedAccountInUse>;

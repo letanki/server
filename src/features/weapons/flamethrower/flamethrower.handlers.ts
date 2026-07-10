@@ -125,7 +125,7 @@ export class StartShootingFlamethrowerCommandHandler implements IPacketHandler<F
             logger.warn("StartShootingFlamethrowerCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const startShootingPacket = new FlamethrowerPackets.StartShootingFlamethrowerPacket(user.username);
+        const startShootingPacket = new FlamethrowerPackets.StartShootingFlamethrowerPacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) {
@@ -147,7 +147,7 @@ export class StopShootingFlamethrowerCommandHandler implements IPacketHandler<Fl
             logger.warn("StopShootingFlamethrowerCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const stopShootingPacket = new FlamethrowerPackets.StopShootingFlamethrowerPacket(user.username);
+        const stopShootingPacket = new FlamethrowerPackets.StopShootingFlamethrowerPacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) {

@@ -31,7 +31,7 @@ export default class GiveCommand implements ICommand {
             const updated = await context.server.userService.updateResources(target.id, { crystals });
             if (online) {
                 online.user = updated;
-                online.sendPacket(new UpdateCrystals(updated.crystals));
+                online.sendPacket(new UpdateCrystals({ crystals: updated.crystals }));
             }
             context.reply(`+${amount} cristais para ${updated.username} (total: ${updated.crystals}).`);
         } catch (error: any) {

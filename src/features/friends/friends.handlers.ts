@@ -18,12 +18,12 @@ export class AcceptFriendRequestHandler implements IPacketHandler<FriendPackets.
             const updatedUser = await server.userService.findUserByUsername(currentUser.username);
             if (updatedUser) client.user = updatedUser;
 
-            client.sendPacket(new FriendPackets.FriendRequestAccepted(senderUser.username));
+            client.sendPacket(new FriendPackets.FriendRequestAccepted({ nickname: senderUser.username }));
 
             const senderClient = server.findClientByUsername(senderUser.username);
             if (senderClient) {
                 senderClient.user = senderUser;
-                senderClient.sendPacket(new FriendPackets.FriendRequestAccepted(currentUser.username));
+                senderClient.sendPacket(new FriendPackets.FriendRequestAccepted({ nickname: currentUser.username }));
                 if (!senderClient.friendsCache.includes(currentUser.username)) senderClient.friendsCache.push(currentUser.username);
             }
 
@@ -41,7 +41,7 @@ export class AcknowledgeNewFriendHandler implements IPacketHandler<FriendPackets
         if (!client.user || !packet.nickname) return;
         try {
             const friend = await server.friendsService.acknowledgeNewFriend(client.user, packet.nickname);
-            client.sendPacket(new FriendPackets.AcknowledgeNewFriend(friend.username));
+            client.sendPacket(new FriendPackets.AcknowledgeNewFriend({ nickname: friend.username }));
         } catch (error: any) {
             logger.warn(`Failed to acknowledge new friend for ${client.user.username}`, { error: error.message });
         }
@@ -55,7 +55,7 @@ export class AcknowledgeNewFriendRequestHandler implements IPacketHandler<Friend
         if (!client.user || !packet.nickname) return;
         try {
             const sender = await server.friendsService.acknowledgeNewFriendRequest(client.user, packet.nickname);
-            client.sendPacket(new FriendPackets.AcknowledgeNewFriendRequest(sender.username));
+            client.sendPacket(new FriendPackets.AcknowledgeNewFriendRequest({ nickname: sender.username }));
         } catch (error: any) {
             logger.warn(`Failed to acknowledge new friend request for ${client.user.username}`, { error: error.message });
         }
@@ -69,11 +69,11 @@ export class CancelFriendRequestHandler implements IPacketHandler<FriendPackets.
         if (!client.user || !packet.nickname) return;
         try {
             const targetUser = await server.friendsService.cancelFriendRequest(client.user, packet.nickname);
-            client.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined(targetUser.username));
+            client.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined({ nickname: targetUser.username }));
             const targetClient = server.findClientByUsername(targetUser.username);
             if (targetClient) {
                 targetClient.user = targetUser;
-                targetClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined(client.user.username));
+                targetClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined({ nickname: client.user.username }));
             }
         } catch (error: any) {
             logger.warn(`Failed to cancel friend request from ${client.user.username} to ${packet.nickname}`, { error: error.message });
@@ -102,11 +102,11 @@ export class DeclineAllFriendRequestsHandler implements IPacketHandler<FriendPac
         try {
             const declinedSenders = await server.friendsService.declineAllFriendRequests(client.user);
             for (const sender of declinedSenders) {
-                client.sendPacket(new FriendPackets.FriendRequestDeclined(sender.username));
+                client.sendPacket(new FriendPackets.FriendRequestDeclined({ nickname: sender.username }));
                 const senderClient = server.findClientByUsername(sender.username);
                 if (senderClient) {
                     senderClient.user = sender;
-                    senderClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined(client.user.username));
+                    senderClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined({ nickname: client.user.username }));
                 }
             }
         } catch (error: any) {
@@ -122,11 +122,11 @@ export class DeclineFriendRequestHandler implements IPacketHandler<FriendPackets
         if (!client.user || !packet.nickname) return;
         try {
             const senderUser = await server.friendsService.declineFriendRequest(client.user, packet.nickname);
-            client.sendPacket(new FriendPackets.FriendRequestDeclined(senderUser.username));
+            client.sendPacket(new FriendPackets.FriendRequestDeclined({ nickname: senderUser.username }));
             const senderClient = server.findClientByUsername(senderUser.username);
             if (senderClient) {
                 senderClient.user = senderUser;
-                senderClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined(client.user.username));
+                senderClient.sendPacket(new FriendPackets.FriendRequestCanceledOrDeclined({ nickname: client.user.username }));
             }
         } catch (error: any) {
             logger.warn(`Failed to decline friend request for ${client.user.username} from ${packet.nickname}`, { error: error.message });
@@ -156,13 +156,13 @@ export class RemoveFriendHandler implements IPacketHandler<FriendPackets.RemoveF
             const updatedUser = await server.userService.findUserByUsername(currentUser.username);
             if (updatedUser) client.user = updatedUser;
 
-            client.sendPacket(new FriendPackets.FriendRemoved(removedFriend.username));
+            client.sendPacket(new FriendPackets.FriendRemoved({ nickname: removedFriend.username }));
             client.friendsCache = client.friendsCache.filter((friend) => friend !== removedFriend.username);
 
             const removedFriendClient = server.findClientByUsername(removedFriend.username);
             if (removedFriendClient) {
                 removedFriendClient.user = removedFriend;
-                removedFriendClient.sendPacket(new FriendPackets.FriendRemoved(currentUser.username));
+                removedFriendClient.sendPacket(new FriendPackets.FriendRemoved({ nickname: currentUser.username }));
                 removedFriendClient.friendsCache = removedFriendClient.friendsCache.filter((friend) => friend !== currentUser.username);
             }
         } catch (error: any) {
@@ -178,24 +178,24 @@ export class SendFriendRequestHandler implements IPacketHandler<FriendPackets.Se
         if (!client.user || !packet.nickname) return;
         try {
             const targetUser = await server.friendsService.sendFriendRequest(client.user, packet.nickname);
-            client.sendPacket(new FriendPackets.FriendRequestSent(targetUser.username));
+            client.sendPacket(new FriendPackets.FriendRequestSent({ nickname: targetUser.username }));
             const targetClient = server.findClientByUsername(targetUser.username);
             if (targetClient) {
                 targetClient.user = targetUser;
-                targetClient.sendPacket(new FriendPackets.NewFriendRequest(client.user.username));
+                targetClient.sendPacket(new FriendPackets.NewFriendRequest({ nickname: client.user.username }));
             }
         } catch (error: any) {
             const targetUser = await server.userService.findUserByUsername(packet.nickname);
             const canonicalNickname = targetUser ? targetUser.username : packet.nickname;
             switch (error.message) {
                 case "ALREADY_FRIENDS":
-                    client.sendPacket(new FriendPackets.AlreadyFriends(canonicalNickname));
+                    client.sendPacket(new FriendPackets.AlreadyFriends({ nickname: canonicalNickname }));
                     break;
                 case "REQUEST_ALREADY_SENT":
-                    client.sendPacket(new FriendPackets.FriendRequestAlreadySent(canonicalNickname));
+                    client.sendPacket(new FriendPackets.FriendRequestAlreadySent({ nickname: canonicalNickname }));
                     break;
                 case "INCOMING_REQUEST_EXISTS":
-                    client.sendPacket(new FriendPackets.IncomingFriendRequestExists(canonicalNickname));
+                    client.sendPacket(new FriendPackets.IncomingFriendRequestExists({ nickname: canonicalNickname }));
                     break;
                 default:
                     logger.warn(`Failed to send friend request from ${client.user.username} to ${packet.nickname}`, { error: error.message });

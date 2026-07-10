@@ -23,17 +23,17 @@ export class GetUserInfoHandler implements IPacketHandler<ProfilePackets.GetUser
         client.subscriptions.add(user.username.toLowerCase());
         logger.info(`Client ${client.user?.username} subscribed to updates for ${user.username}`);
 
-        client.sendPacket(new ProfilePackets.OnlineNotifierData(isOnline, 1, user.username));
-        client.sendPacket(new ProfilePackets.RankNotifierData(user.rank, user.username));
+        client.sendPacket(new ProfilePackets.OnlineNotifierData({ isOnline, server: 1, nickname: user.username }));
+        client.sendPacket(new ProfilePackets.RankNotifierData({ rank: user.rank, nickname: user.username }));
 
         let premiumSecondsLeft = 0;
         if (user.premiumExpiresAt && user.premiumExpiresAt > new Date()) {
             premiumSecondsLeft = Math.round((user.premiumExpiresAt.getTime() - Date.now()) / 1000);
         }
-        client.sendPacket(new ProfilePackets.PremiumNotifierData(premiumSecondsLeft, user.username));
+        client.sendPacket(new ProfilePackets.PremiumNotifierData({ premiumTimeLeftInSeconds: premiumSecondsLeft, nickname: user.username }));
 
         if (!isInBattle) {
-            client.sendPacket(new UserNotInBattlePacket(user.username));
+            client.sendPacket(new UserNotInBattlePacket({ nickname: user.username }));
         }
 
         // Per-user clan tag shown next to the nickname (null = no clan).

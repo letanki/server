@@ -33,7 +33,7 @@ export class CollectQuestRewardHandler implements IPacketHandler<QuestPackets.Co
         const result = await server.questService.collectReward(client.user, packet.questId);
         if (!result) return; // not collectable (not complete, or already claimed)
         client.sendPacket(new QuestPackets.QuestRewardCollected(packet.questId));
-        if (result.crystalsGranted > 0) client.sendPacket(new UpdateCrystals(client.user.crystals));
+        if (result.crystalsGranted > 0) client.sendPacket(new UpdateCrystals({ crystals: client.user.crystals }));
     }
 }
 
@@ -49,7 +49,7 @@ export class SkipQuestFreeHandler implements IPacketHandler<QuestPackets.SkipQue
         try {
             const result = await server.questService.rerollQuest(currentUser, packet.missionId, false);
             const newQuestPacketData = server.questService.buildQuestView(currentUser, result.newQuest);
-            client.sendPacket(new QuestPackets.ReplaceQuest(result.oldQuestId, newQuestPacketData));
+            client.sendPacket(new QuestPackets.ReplaceQuest({ missionToReplaceId: result.oldQuestId, newQuest: newQuestPacketData }));
         } catch (error: any) {
             logger.warn(`Failed to skip quest for free for user ${currentUser.username}`, { error: error.message });
         }
@@ -68,8 +68,8 @@ export class SkipQuestPaidHandler implements IPacketHandler<QuestPackets.SkipQue
         try {
             const result = await server.questService.rerollQuest(currentUser, packet.missionId, true);
             const newQuestPacketData = server.questService.buildQuestView(currentUser, result.newQuest);
-            client.sendPacket(new QuestPackets.ReplaceQuest(result.oldQuestId, newQuestPacketData));
-            client.sendPacket(new UpdateCrystals(currentUser.crystals));
+            client.sendPacket(new QuestPackets.ReplaceQuest({ missionToReplaceId: result.oldQuestId, newQuest: newQuestPacketData }));
+            client.sendPacket(new UpdateCrystals({ crystals: currentUser.crystals }));
         } catch (error: any) {
             logger.warn(`Failed to skip quest with payment for user ${currentUser.username}`, { error: error.message });
         }

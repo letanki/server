@@ -27,9 +27,9 @@ export default class MsgCommand implements ICommand {
         const tagged = `[STAFF] ${message}`;
         if (target.currentBattle) {
             // Battle chat's system-message channel (606668848, confirmed in-game).
-            target.sendPacket(new BattleSystemMessagePacket(tagged));
+            target.sendPacket(new BattleSystemMessagePacket({ message: tagged }));
         } else {
-            target.sendPacket(new ChatHistory([{ message: tagged, isSystem: true, isWarning: true, source: null, target: null }]));
+            target.sendPacket(new ChatHistory({ messages: [{ message: tagged, isSystem: true, isWarning: true, source: null, target: null }] }));
         }
         context.reply(`Mensagem enviada para ${target.user.username}.`);
     }

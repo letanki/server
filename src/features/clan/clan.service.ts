@@ -693,7 +693,7 @@ export class ClanService {
             for (const p of template.prizes) {
                 if (p.item === "crystals") {
                     client.user.crystals += p.count;
-                    client.sendPacket(new UpdateCrystals(client.user.crystals));
+                    client.sendPacket(new UpdateCrystals({ crystals: client.user.crystals }));
                 } else {
                     client.user.supplies.set(p.item, (client.user.supplies.get(p.item) ?? 0) + p.count);
                 }

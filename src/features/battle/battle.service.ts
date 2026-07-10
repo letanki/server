@@ -278,7 +278,7 @@ export class BattleService {
     public broadcastSpectatorListUpdate(battle: Battle, excludeClient?: GameClient): void {
         const spectatorNames = battle.spectators.map((s) => s.username);
         const spectatorListString = spectatorNames.join("\n");
-        const packet = new UpdateSpectatorListPacket(spectatorListString);
+        const packet = new UpdateSpectatorListPacket({ spectatorList: spectatorListString });
 
         for (const spectator of battle.spectators) {
             if (excludeClient && spectator.id === excludeClient.user?.id) {
@@ -301,9 +301,9 @@ export class BattleService {
         // then remove their tank object. Team modes (TDM/CTF/CP) use a different "left"
         // packet id than DM. The official server sends the "left" notice before the removal.
         const disconnectPacket: IPacket = battle.isTeamMode()
-            ? new UserDisconnectTeamPacket(user.username)
-            : new UserDisconnectedDmPacket(user.username);
-        const removeTankPacket = new RemoveTankPacket(user.username);
+            ? new UserDisconnectTeamPacket({ nickname: user.username })
+            : new UserDisconnectedDmPacket({ nickname: user.username });
+        const removeTankPacket = new RemoveTankPacket({ nickname: user.username });
 
         // Established clients only: a still-loading client never received this tank, and its
         // entry snapshot already excludes the departed player.
@@ -324,7 +324,7 @@ export class BattleService {
             if (battle.settings.battleMode === BattleMode.DM) {
                 this.server.broadcastToBattleList(new LobbyPackets.ReleasePlayerSlotDmPacket({ battleId: battle.battleId, nickname: user.username }));
             } else {
-                this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket(battle.battleId, user.username));
+                this.server.broadcastToBattleList(new LobbyPackets.OnReleaseSlotTeamPacket({ battleId: battle.battleId, nickname: user.username }));
             }
         }
 
@@ -335,7 +335,7 @@ export class BattleService {
         }
 
         if (friends.length > 0) {
-            const userNotInBattlePacket = new LobbyPackets.UserNotInBattlePacket(user.username);
+            const userNotInBattlePacket = new LobbyPackets.UserNotInBattlePacket({ nickname: user.username });
             for (const friendUsername of friends) {
                 const friendClient = this.server.findClientByUsername(friendUsername);
                 if (friendClient) {
@@ -449,8 +449,8 @@ export class BattleService {
         battle.timers.clearAll(); // no dangling timers once the battle is gone
         // Remove it from everyone's battle list, and close the detail panel for anyone previewing it
         // (else they'd try to join a battle that no longer exists).
-        this.server.broadcastToBattleList(new LobbyPackets.RemoveBattleFromListPacket(battle.battleId));
-        const hidePacket = new LobbyPackets.HideBattleInfoPacket(battle.battleId);
+        this.server.broadcastToBattleList(new LobbyPackets.RemoveBattleFromListPacket({ battleId: battle.battleId }));
+        const hidePacket = new LobbyPackets.HideBattleInfoPacket({ battleId: battle.battleId });
         for (const c of this.server.getClients()) {
             if ((c.getState() === "chat_lobby" || c.getState() === "battle_lobby") && c.lastViewedBattleId === battle.battleId) {
                 c.sendPacket(hidePacket);

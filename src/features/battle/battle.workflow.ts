@@ -35,7 +35,7 @@ export class BattleWorkflow {
         client.setState("battle");
         logger.info(`User ${client.user.username} is entering battle ${battle.battleId}`);
 
-        client.sendPacket(new SetLayout(3));
+        client.sendPacket(new SetLayout({ layoutId: 3 }));
         // Lobby-teardown packets: only valid when entering FROM the lobby. On reconnect the player is
         // still in the battle (never went to the lobby), and UnloadLobbyChat (id -920985123, the
         // client's UnloadBattleEntity) null-derefs on a client with no lobby loaded (#1009).
@@ -45,8 +45,8 @@ export class BattleWorkflow {
         }
         client.isChatLoaded = false;
         client.startTimeChecker();
-        client.sendPacket(new BattlePackets.WeaponPhysicsPacket(JSON.stringify(weaponPhysicsData)));
-        client.sendPacket(new BattlePackets.BonusDataPacket(JSON.stringify(getBonusData(battle.settings.esportDropTiming))));
+        client.sendPacket(new BattlePackets.WeaponPhysicsPacket({ jsonData: JSON.stringify(weaponPhysicsData) }));
+        client.sendPacket(new BattlePackets.BonusDataPacket({ jsonData: JSON.stringify(getBonusData(battle.settings.esportDropTiming)) }));
 
         const dependencies = { resources: battle.mapLibraryDependencies };
         client.sendPacket(new LoadDependencies(dependencies, CALLBACK.BATTLE_MAP_LIBS_LOADED));
@@ -272,12 +272,12 @@ export class BattleWorkflow {
             if (client.pendingEquipmentRespawn) {
                 client.pendingEquipmentRespawn = false;
 
-                broadcastToBattle(new BattlePackets.RemoveTankPacket(user.username));
+                broadcastToBattle(new BattlePackets.RemoveTankPacket({ nickname: user.username }));
 
                 const tankModelJson = this.getTankModelDataJson(client, battle);
-                broadcastToBattle(new BattlePackets.TankModelDataPacket(tankModelJson));
+                broadcastToBattle(new BattlePackets.TankModelDataPacket({ jsonData: tankModelJson }));
 
-                broadcastToBattle(new BattlePackets.EquipmentChangedPacket(user.username));
+                broadcastToBattle(new BattlePackets.EquipmentChangedPacket({ nickname: user.username }));
             }
 
             client.battleState = "newcome";
@@ -344,7 +344,7 @@ export class BattleWorkflow {
 
             for (const existingPlayer of establishedPlayers) {
                 const existingTankJson = this.getTankModelDataJson(existingPlayer, battle);
-                client.sendPacket(new BattlePackets.TankModelDataPacket(existingTankJson));
+                client.sendPacket(new BattlePackets.TankModelDataPacket({ jsonData: existingTankJson }));
             }
 
             // Now that this client has the existing tanks, (re)attach any carried flag to its carrier —
@@ -355,7 +355,7 @@ export class BattleWorkflow {
             if (establishedClients.length === 0) {
                 logger.info(`Battle has no established players. Spawning ${user.username} immediately.`);
                 const joiningUserTankJson = this.getTankModelDataJson(client, battle);
-                client.sendPacket(new BattlePackets.TankModelDataPacket(joiningUserTankJson));
+                client.sendPacket(new BattlePackets.TankModelDataPacket({ jsonData: joiningUserTankJson }));
             } else {
                 this._handleConcurrentJoin(client, server, battle, establishedClients);
             }
@@ -375,14 +375,14 @@ export class BattleWorkflow {
 
             const spectatorNames = battle.spectators.map((s: UserDocument) => s.username);
             const spectatorListString = spectatorNames.join("\n");
-            client.sendPacket(new BattlePackets.UpdateSpectatorListPacket(spectatorListString));
+            client.sendPacket(new BattlePackets.UpdateSpectatorListPacket({ spectatorList: spectatorListString }));
 
             const allActivePlayers = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
             for (const player of allActivePlayers) {
                 const playerClient = server.findClientByUsername(player.username);
                 if (playerClient) {
                     const playerTankJson = this.getTankModelDataJson(playerClient, battle);
-                    client.sendPacket(new BattlePackets.TankModelDataPacket(playerTankJson));
+                    client.sendPacket(new BattlePackets.TankModelDataPacket({ jsonData: playerTankJson }));
                 }
             }
             this._sendCarriedFlagAttachments(client, battle);
@@ -475,7 +475,7 @@ export class BattleWorkflow {
             mapInitData.bonusColorAdjust = themeConfig.bonusColorAdjust;
         }
 
-        client.sendPacket(new BattlePackets.InitMapPacket(JSON.stringify(mapInitData)));
+        client.sendPacket(new BattlePackets.InitMapPacket({ jsonData: JSON.stringify(mapInitData) }));
 
         let timeLeftInSec = battle.settings.timeLimitInSec;
         if (battle.roundStarted && battle.roundStartTime) {
@@ -508,7 +508,7 @@ export class BattleWorkflow {
         const allMines = [...battle.activeMines.values()];
         client.sendPacket(new BattlePackets.BattleMinesPropertiesPacket(this._buildMineProps(allMines)));
         for (const mine of allMines) {
-            if (mine.armed) client.sendPacket(new BattlePackets.ActivateMinePacket(mine.id));
+            if (mine.armed) client.sendPacket(new BattlePackets.ActivateMinePacket({ id: mine.id }));
         }
 
         if (battle.settings.battleMode === BattleMode.CTF) {
@@ -614,7 +614,7 @@ export class BattleWorkflow {
             // Broadcast only to established clients: a client still loading hasn't registered this
             // player in its stats model yet, and InitTank does statsModel.get(tankId).nickname →
             // #1009 on null. Such clients pick this tank up in their own entry snapshot instead.
-            battle.broadcast(new BattlePackets.TankModelDataPacket(joiningUserTankJson));
+            battle.broadcast(new BattlePackets.TankModelDataPacket({ jsonData: joiningUserTankJson }));
         };
 
         const spawnTimeout = setTimeout(() => triggerSpawn(true), 10000);
@@ -711,7 +711,7 @@ export class BattleWorkflow {
         if (battle.settings.withoutMines) availableSupplies = availableSupplies.filter((s) => s.id !== "mine");
         if (battle.settings.withoutMedkit) availableSupplies = availableSupplies.filter((s) => s.id !== "health");
         const consumableItems = availableSupplies.map((si) => ({ id: si.id, count: user.supplies.get(si.id) || 0, slotId: si.slotId, itemEffectTime: si.itemEffectTime, itemRestSec: si.itemRestSec }));
-        client.sendPacket(new BattlePackets.BattleConsumablesPacket(JSON.stringify({ items: consumableItems })));
+        client.sendPacket(new BattlePackets.BattleConsumablesPacket({ jsonData: JSON.stringify({ items: consumableItems }) }));
     }
 
     private static _sendFinalBattlePackets(client: GameClient, battle: Battle): void {
@@ -743,7 +743,7 @@ export class BattleWorkflow {
                 effects.push({ userID: other.user.username, itemIndex: e.itemIndex, durationTime: e.durationTime, activeAfterDeath: false, effectLevel: 0 });
             }
         }
-        client.sendPacket(new BattlePackets.BattleUserEffectsPacket(JSON.stringify({ effects })));
+        client.sendPacket(new BattlePackets.BattleUserEffectsPacket({ jsonData: JSON.stringify({ effects }) }));
         const bonusMarkerResource = ResourceManager.getIdlowById("effects/bonus/drop_location_marker");
         const bonusRegionsPacket = new BattlePackets.BonusRegionsPacket({
             bonusRegionResources: [
@@ -756,8 +756,8 @@ export class BattleWorkflow {
         });
         client.sendPacket(bonusRegionsPacket);
         const activeBonuses = [...battle.activeBonuses.values()].map((b) => ({ id: b.id, position: b.position, timeFromAppearing: Date.now() - b.spawnedAt }));
-        client.sendPacket(new BattlePackets.InitBonusesPacket(JSON.stringify(activeBonuses)));
-        client.sendPacket(new ConfirmLayoutChange(3, 3));
+        client.sendPacket(new BattlePackets.InitBonusesPacket({ jsonData: JSON.stringify(activeBonuses) }));
+        client.sendPacket(new ConfirmLayoutChange({ fromLayout: 3, toLayout: 3 }));
         client.isJoiningBattle = false;
     }
 }

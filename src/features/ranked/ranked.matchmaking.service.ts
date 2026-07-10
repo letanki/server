@@ -216,9 +216,9 @@ export class RankedMatchmakingService implements RankedObserver {
     public notifyChat(client: GameClient, message: string): void {
         const tagged = `[RANQUEADA] ${message}`;
         if (client.currentBattle) {
-            client.sendPacket(new BattleSystemMessagePacket(tagged));
+            client.sendPacket(new BattleSystemMessagePacket({ message: tagged }));
         } else {
-            client.sendPacket(new ChatHistory([{ message: tagged, isSystem: true, isWarning: true, source: null, target: null }]));
+            client.sendPacket(new ChatHistory({ messages: [{ message: tagged, isSystem: true, isWarning: true, source: null, target: null }] }));
         }
     }
 

@@ -421,7 +421,7 @@ export class BonusService {
                 const updated = await this.server.userService.updateResources(user.id, { crystals: user.crystals + crystals });
                 client.user = updated;
                 client.roundStats.crystalsEarned += crystals; // metrics: crystals earned from field drops
-                client.sendPacket(new UpdateCrystals(updated.crystals));
+                client.sendPacket(new UpdateCrystals({ crystals: updated.crystals }));
                 // Crystal drops count toward the "earn crystals" quest; a gold box ALSO counts toward the
                 // "catch a gold box" quest — both applied in ONE call so neither dailyQuests $set clobbers the other.
                 const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals, goldBox: type === "gold" ? 1 : 0 });

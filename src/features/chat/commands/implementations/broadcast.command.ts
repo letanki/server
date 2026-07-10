@@ -20,11 +20,11 @@ export default class BroadcastCommand implements ICommand {
         }
 
         context.server.broadcastToLobbyChat(
-            new ChatHistory([{ message, isSystem: true, isWarning: true, source: null, target: null }])
+            new ChatHistory({ messages: [{ message, isSystem: true, isWarning: true, source: null, target: null }] })
         );
         for (const client of context.server.getClients()) {
             if (client.user && client.currentBattle) {
-                client.sendPacket(new BattleSystemMessagePacket(message));
+                client.sendPacket(new BattleSystemMessagePacket({ message: message }));
             }
         }
         context.reply("Mensagem enviada a todos.");

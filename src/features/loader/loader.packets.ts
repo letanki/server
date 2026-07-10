@@ -1,44 +1,18 @@
 import { BasePacket } from "@/packets/base.packet";
-import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { IEmpty } from "@/packets/packet.interfaces";
+import { packetClass } from "@/packets/packet-class";
 import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import * as LoaderTypes from "./loader.types";
 
 // IDs e schemas em `protanki-protocol` (defs.loader.*).
 
-export class RequestNextTipPacket extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.loader.RequestNextTip.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.loader.RequestNextTip.schema!); }
-    static getId(): number { return defs.loader.RequestNextTip.id; }
-}
+export const RequestNextTipPacket = packetClass(defs.loader.RequestNextTip);
+export type RequestNextTipPacket = InstanceType<typeof RequestNextTipPacket>;
 
-export class SetLoadingScreenImagePacket extends BasePacket implements LoaderTypes.ISetLoadingScreenImage {
-    resourceImageIdLow: number = 0;
+export const SetLoadingScreenImagePacket = packetClass(defs.loader.SetLoadingScreenImage);
+export type SetLoadingScreenImagePacket = InstanceType<typeof SetLoadingScreenImagePacket>;
 
-    constructor(resourceImageIdLow?: number) {
-        super();
-        if (resourceImageIdLow !== undefined) {
-            this.resourceImageIdLow = resourceImageIdLow;
-        }
-    }
-
-    read(buffer: Buffer): void { readSchema(this, defs.loader.SetLoadingScreenImage.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.loader.SetLoadingScreenImage.schema!); }
-    static getId(): number { return defs.loader.SetLoadingScreenImage.id; }
-}
-
-export class ResourceCallback extends BasePacket implements LoaderTypes.IResourceCallback {
-    callbackId: number;
-
-    constructor(callbackId: number = 0) {
-        super();
-        this.callbackId = callbackId;
-    }
-
-    read(buffer: Buffer): void { readSchema(this, defs.loader.ResourceCallback.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.loader.ResourceCallback.schema!); }
-    static getId(): number { return defs.loader.ResourceCallback.id; }
-}
+export const ResourceCallback = packetClass(defs.loader.ResourceCallback);
+export type ResourceCallback = InstanceType<typeof ResourceCallback>;
 
 // A LÓGICA (o cliente faz JSON.parse(str) as Array, então o corpo é um array bare de descritores)
 // fica aqui; os BYTES vão pela lib. Wire = defs.loader.LoadDependencies { dependenciesJson, callbackId }.
@@ -68,8 +42,5 @@ export class LoadDependencies extends BasePacket implements LoaderTypes.ILoadDep
     static getId(): number { return defs.loader.LoadDependencies.id; }
 }
 
-export class HideLoader extends BasePacket implements IEmpty {
-    read(buffer: Buffer): void { readSchema(this, defs.loader.HideLoader.schema!, buffer); }
-    write(): Buffer { return writeSchema(this, defs.loader.HideLoader.schema!); }
-    static getId(): number { return defs.loader.HideLoader.id; }
-}
+export const HideLoader = packetClass(defs.loader.HideLoader);
+export type HideLoader = InstanceType<typeof HideLoader>;

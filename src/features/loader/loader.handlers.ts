@@ -19,9 +19,9 @@ export class RequestNextTipHandler implements IPacketHandler<LoaderPackets.Reque
 
         try {
             const resourceIdLow = ResourceManager.getIdlowById(randomTipId);
-            client.sendPacket(new LoaderPackets.SetLoadingScreenImagePacket(resourceIdLow));
+            client.sendPacket(new LoaderPackets.SetLoadingScreenImagePacket({ resourceImageIdLow: resourceIdLow }));
         } catch (error) {
-            client.sendPacket(new LoaderPackets.SetLoadingScreenImagePacket(ResourceManager.getIdlowById("ui/login_background")));
+            client.sendPacket(new LoaderPackets.SetLoadingScreenImagePacket({ resourceImageIdLow: ResourceManager.getIdlowById("ui/login_background") }));
         }
     }
 }

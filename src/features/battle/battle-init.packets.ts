@@ -1,19 +1,13 @@
 import { BasePacket } from "@/packets/base.packet";
 import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { packetClass } from "@/packets/packet-class";
 import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
 
 // IDs e schemas em `protanki-protocol` (defs.battle.*).
 
-export class BattleConsumablesPacket extends BasePacket implements BattleTypes.IBattleConsumables {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.BattleConsumables.id; }
-}
+export const BattleConsumablesPacket = packetClass(defs.battle.BattleConsumables);
+export type BattleConsumablesPacket = InstanceType<typeof BattleConsumablesPacket>;
 
 export class BattleMinesPropertiesPacket extends BasePacket implements BattleTypes.IBattleMinesProperties {
     activateSound: number = 0; activateTimeMsec: number = 0; battleMines: BattleTypes.IBattleMine[] = []; blueMineTexture: number = 0; deactivateSound: number = 0; enemyMineTexture: number = 0; explosionMarkTexture: number = 0; explosionSound: number = 0; farVisibilityRadius: number = 0; friendlyMineTexture: number = 0; idleExplosionTexture: number = 0; impactForce: number = 0; mainExplosionTexture: number = 0; minDistanceFromBase: number = 0; model3ds: number = 0; nearVisibilityRadius: number = 0; radius: number = 0; redMineTexture: number = 0;
@@ -33,29 +27,14 @@ export class BattleStatsPacket extends BasePacket implements BattleTypes.IBattle
     static getId(): number { return defs.battle.BattleStats.id; }
 }
 
-export class BattleUserEffectsPacket extends BasePacket implements BattleTypes.IBattleUserEffects {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.BattleUserEffects.id; }
-}
+export const BattleUserEffectsPacket = packetClass(defs.battle.BattleUserEffects);
+export type BattleUserEffectsPacket = InstanceType<typeof BattleUserEffectsPacket>;
 
-export class BonusDataPacket extends BasePacket implements BattleTypes.IBonusData {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.BonusData.id; }
-}
+export const BonusDataPacket = packetClass(defs.battle.BonusData);
+export type BonusDataPacket = InstanceType<typeof BonusDataPacket>;
 
-export class InitBonusesPacket extends BasePacket {
-    jsonData: string | null;
-    constructor(jsonData: string | null = "[]") { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.InitBonuses.id; }
-}
+export const InitBonusesPacket = packetClass(defs.battle.InitBonuses);
+export type InitBonusesPacket = InstanceType<typeof InitBonusesPacket>;
 
 export class BonusRegionsPacket extends BasePacket implements BattleTypes.IBonusRegions {
     static readonly schema = defs.battle.BonusRegions.schema!;
@@ -66,17 +45,11 @@ export class BonusRegionsPacket extends BasePacket implements BattleTypes.IBonus
     static getId(): number { return defs.battle.BonusRegions.id; }
 }
 
-export class InitBattleDMPacket extends BasePacket implements BattleTypes.IInitBattleDM {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.InitBattleDM.id; }
-}
+export const InitBattleDMPacket = packetClass(defs.battle.InitBattleDM);
+export type InitBattleDMPacket = InstanceType<typeof InitBattleDMPacket>;
 
-export class InitBattleTeamPacket extends BasePacket implements BattleTypes.IInitBattleTeam {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.InitBattleTeam.id; }
-}
+export const InitBattleTeamPacket = packetClass(defs.battle.InitBattleTeam);
+export type InitBattleTeamPacket = InstanceType<typeof InitBattleTeamPacket>;
 
 export class InitBattleUsersDMPacket extends BasePacket implements BattleTypes.IInitBattleUsersDM {
     static readonly schema = defs.battle.InitBattleUsersDM.schema!;
@@ -114,54 +87,25 @@ export class InitDomPointsPacket extends BasePacket implements BattleTypes.IInit
     static getId(): number { return defs.battle.InitDomPoints.id; }
 }
 
-export class InitializeBattleStatisticsPacket extends BasePacket implements BattleTypes.IInitializeBattleStatistics {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.InitializeBattleStatistics.id; }
-}
+export const InitializeBattleStatisticsPacket = packetClass(defs.battle.InitializeBattleStatistics);
+export type InitializeBattleStatisticsPacket = InstanceType<typeof InitializeBattleStatisticsPacket>;
 
-export class InitMapPacket extends BasePacket implements BattleTypes.IInitMap {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.InitMap.id; }
-}
+export const InitMapPacket = packetClass(defs.battle.InitMap);
+export type InitMapPacket = InstanceType<typeof InitMapPacket>;
 
-export class LoadBattleChatPacket extends BasePacket implements BattleTypes.ILoadBattleChat {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.LoadBattleChat.id; }
-}
+export const LoadBattleChatPacket = packetClass(defs.battle.LoadBattleChat);
+export type LoadBattleChatPacket = InstanceType<typeof LoadBattleChatPacket>;
 
-export class TankModelDataPacket extends BasePacket implements BattleTypes.ITankModelData {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.TankModelData.id; }
-}
+export const TankModelDataPacket = packetClass(defs.battle.TankModelData);
+export type TankModelDataPacket = InstanceType<typeof TankModelDataPacket>;
 
-export class TankSpecificationPacket extends BasePacket implements BattleTypes.ITankSpecification {
-    // The trailing int16 is a per-tank spec SEQUENCE (1, 2, 3...), not isPro: the client applies
-    // specs in order so a later (e.g. nitro-boosted) spec supersedes the spawn one.
-    nickname: string | null = null; speed: number = 0; maxTurnSpeed: number = 0; turretTurnSpeed: number = 0; acceleration: number = 0; sequence: number = 0;
-    constructor(data?: BattleTypes.ITankSpecificationData) { super(); if (data) Object.assign(this, data); }
-    read(buffer: Buffer): void { const r = new BufferReader(buffer); this.nickname = r.readOptionalString(); this.speed = r.readFloatBE(); this.maxTurnSpeed = r.readFloatBE(); this.turretTurnSpeed = r.readFloatBE(); this.acceleration = r.readFloatBE(); this.sequence = r.readInt16BE(); }
-    write(): Buffer { const w = new BufferWriter(); w.writeOptionalString(this.nickname); w.writeFloatBE(this.speed); w.writeFloatBE(this.maxTurnSpeed); w.writeFloatBE(this.turretTurnSpeed); w.writeFloatBE(this.acceleration); w.writeInt16BE(this.sequence); return w.getBuffer(); }
-    static getId(): number { return defs.battle.TankSpecification.id; }
-}
+// The trailing int16 is a per-tank spec SEQUENCE (1, 2, 3...), not isPro: the client applies
+// specs in order so a later (e.g. nitro-boosted) spec supersedes the spawn one.
+export const TankSpecificationPacket = packetClass(defs.battle.TankSpecification);
+export type TankSpecificationPacket = InstanceType<typeof TankSpecificationPacket>;
 
-export class UnloadSpaceBattlePacket extends BasePacket implements BattleTypes.IUnloadSpaceBattle {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.UnloadSpaceBattle.id; }
-}
+export const UnloadSpaceBattlePacket = packetClass(defs.battle.UnloadSpaceBattle);
+export type UnloadSpaceBattlePacket = InstanceType<typeof UnloadSpaceBattlePacket>;
 
-export class WeaponPhysicsPacket extends BasePacket implements BattleTypes.IWeaponPhysics {
-    jsonData: string | null;
-    constructor(jsonData: string | null = null) { super(); this.jsonData = jsonData; }
-    read(buffer: Buffer): void { this.jsonData = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.jsonData).getBuffer(); }
-    static getId(): number { return defs.battle.WeaponPhysics.id; }
-}
+export const WeaponPhysicsPacket = packetClass(defs.battle.WeaponPhysics);
+export type WeaponPhysicsPacket = InstanceType<typeof WeaponPhysicsPacket>;

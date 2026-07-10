@@ -12,7 +12,7 @@ export class RequestShopDataHandler implements IPacketHandler<ShopPackets.Reques
             return;
         }
         const shopDataPayload = server.shopService.getShopData(client.user, client.shopCountryCode);
-        client.sendPacket(new ShopPackets.ShopData(shopDataPayload));
+        client.sendPacket(new ShopPackets.ShopData({ payload: shopDataPayload }));
     }
 }
 

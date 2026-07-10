@@ -42,7 +42,7 @@ export default class AddCrystalsCommand implements ICommand {
 
             context.executor.user = updatedUser;
 
-            context.executor.sendPacket(new UpdateCrystals(updatedUser.crystals));
+            context.executor.sendPacket(new UpdateCrystals({ crystals: updatedUser.crystals }));
             context.reply(`Cristais atualizados para: ${updatedUser.crystals}.`);
         } catch (error: any) {
             context.reply(`Erro ao atualizar os cristais: ${error.message}`);

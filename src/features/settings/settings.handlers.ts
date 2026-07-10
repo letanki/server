@@ -24,7 +24,7 @@ export class RequestSettingsHandler implements IPacketHandler<SettingsPackets.Re
         const passwordCreated = !!client.user.password;
 
         client.sendPacket(new SettingsPackets.UserSettingsSocial(passwordCreated, socialLinks));
-        client.sendPacket(new SettingsPackets.UserSettingsNotifications(client.user.notificationsEnabled));
+        client.sendPacket(new SettingsPackets.UserSettingsNotifications({ notificationsEnabled: client.user.notificationsEnabled }));
     }
 }
 
@@ -45,19 +45,19 @@ export class UpdatePasswordHandler implements IPacketHandler<SettingsPackets.Upd
     public async execute(client: GameClient, server: GameServer, packet: SettingsPackets.UpdatePassword): Promise<void> {
         const originalEmail = client.recoveryEmail;
         if (!originalEmail || !packet.password || !packet.email) {
-            client.sendPacket(new SettingsPackets.UpdatePasswordResult(true, "Dados inválidos."));
+            client.sendPacket(new SettingsPackets.UpdatePasswordResult({ isError: true, message: "Dados inválidos." }));
             return;
         }
         try {
             await server.settingsService.updatePasswordByEmail(originalEmail, packet.password, packet.email);
             logger.info(`Password updated for user with original email ${originalEmail}`, { client: client.getRemoteAddress(), newEmail: packet.email });
-            client.sendPacket(new SettingsPackets.UpdatePasswordResult(false, "Sua senha foi alterada com sucesso."));
+            client.sendPacket(new SettingsPackets.UpdatePasswordResult({ isError: false, message: "Sua senha foi alterada com sucesso." }));
         } catch (error: any) {
             logger.error(`Failed to update password for ${originalEmail}`, { error: error.message });
             if (error.message.includes("is already in use")) {
-                client.sendPacket(new SettingsPackets.UpdatePasswordResult(true, "O e-mail fornecido já está em uso por outra conta."));
+                client.sendPacket(new SettingsPackets.UpdatePasswordResult({ isError: true, message: "O e-mail fornecido já está em uso por outra conta." }));
             } else {
-                client.sendPacket(new SettingsPackets.UpdatePasswordResult(true, "Ocorreu um erro ao atualizar sua senha."));
+                client.sendPacket(new SettingsPackets.UpdatePasswordResult({ isError: true, message: "Ocorreu um erro ao atualizar sua senha." }));
             }
         }
     }
@@ -87,10 +87,10 @@ export class LinkEmailRequestHandler implements IPacketHandler<SettingsPackets.L
         try {
             const updatedUser = await server.settingsService.linkEmailToAccount(currentUser, packet.email);
             client.user = updatedUser;
-            client.sendPacket(new SettingsPackets.LinkAccountResultSuccess(updatedUser.email ?? null));
+            client.sendPacket(new SettingsPackets.LinkAccountResultSuccess({ identifier: updatedUser.email ?? null }));
         } catch (error: any) {
             if (error.message === "EMAIL_IN_USE") {
-                client.sendPacket(new SettingsPackets.LinkAccountFailedAccountInUse("email"));
+                client.sendPacket(new SettingsPackets.LinkAccountFailedAccountInUse({ method: "email" }));
             } else {
                 logger.error(`Failed to link email for user ${currentUser.username}`, { error: error.message, client: client.getRemoteAddress() });
                 client.sendPacket(new SettingsPackets.LinkAccountResultError());

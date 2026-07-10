@@ -253,7 +253,7 @@ export class GameServer {
     this.clientManager.getClients().forEach((client) => {
       if (client.subscriptions.has(lowerCaseUsername)) {
         logger.info(`Notifying ${client.user?.username} about status change for ${username}`);
-        client.sendPacket(new OnlineNotifierData(isOnline, serverNumber, username));
+        client.sendPacket(new OnlineNotifierData({ isOnline, server: serverNumber, nickname: username }));
       }
     });
   }

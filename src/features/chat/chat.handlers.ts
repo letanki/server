@@ -24,7 +24,7 @@ export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
         }
 
         const sendFlowReply = (message: string) => {
-            client.sendPacket(new ChatHistory([{ message, isSystem: true, isWarning: false, source: null, target: null }]));
+            client.sendPacket(new ChatHistory({ messages: [{ message, isSystem: true, isWarning: false, source: null, target: null }] }));
         };
 
         if (client.isInFlowMode && !packet.message.startsWith("/")) {
@@ -76,7 +76,7 @@ export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
                     source: null,
                     target: null,
                 };
-                const replyPacket = new ChatHistory([replyData]);
+                const replyPacket = new ChatHistory({ messages: [replyData] });
                 client.sendPacket(replyPacket);
             };
 
@@ -92,7 +92,7 @@ export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
         // Staff mute: silenced users can't post chat messages (commands above still work).
         if (client.user.mutedUntil && client.user.mutedUntil > new Date()) {
             const minutesLeft = Math.ceil((client.user.mutedUntil.getTime() - Date.now()) / 60000);
-            client.sendPacket(new ChatHistory([{ message: `Você está silenciado por mais ${minutesLeft} minuto(s).`, isSystem: true, isWarning: true, source: null, target: null }]));
+            client.sendPacket(new ChatHistory({ messages: [{ message: `Você está silenciado por mais ${minutesLeft} minuto(s).`, isSystem: true, isWarning: true, source: null, target: null }] }));
             return;
         }
 
@@ -133,7 +133,7 @@ export class SendChatMessageHandler implements IPacketHandler<SendChatMessage> {
                 : null,
         };
 
-        const packetToSend = new ChatHistory([messageData]);
+        const packetToSend = new ChatHistory({ messages: [messageData] });
         server.broadcastToLobbyChat(packetToSend);
     }
 }

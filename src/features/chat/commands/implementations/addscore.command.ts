@@ -44,7 +44,7 @@ export default class AddScoreCommand implements ICommand {
 
             context.executor.user = updatedUser;
 
-            context.executor.sendPacket(new UpdateScorePacket(updatedUser.experience));
+            context.executor.sendPacket(new UpdateScorePacket({ score: updatedUser.experience }));
             context.reply(`Pontuação atualizada para: ${updatedUser.experience}.`);
 
             if (updatedUser.rank !== originalRank) {

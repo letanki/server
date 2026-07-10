@@ -34,7 +34,7 @@ export default class ResetRankCommand implements ICommand {
             user.experience = initial.score;
             user.rank = initial.rank;
             user.nextRankScore = initial.nextRankScore;
-            client.sendPacket(new UpdateScorePacket(initial.score));
+            client.sendPacket(new UpdateScorePacket({ score: initial.score }));
             client.sendPacket(new UpdateRankPacket({
                 rank: initial.rank,
                 score: initial.score,

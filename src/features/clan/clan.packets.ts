@@ -1,634 +1,10 @@
 import { BasePacket } from "@/packets/base.packet";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { packetClass } from "@/packets/packet-class";
 import { ResourceManager } from "@/utils/resource.manager";
-import { defs } from "protanki-protocol";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 
-// ---- C->S (incoming) ----
-
-/** Leader kicks a member out of the clan. Body = optionalString(username). */
-export class KickClanMemberPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.KickClanMember.id; }
-}
-
-/** Owner/officer changes a member's clan position ("cargo"). Body = optionalString(nick) + int32(position 0-6). */
-export class SetClanMemberPositionPacket extends BasePacket {
-    username: string | null = null;
-    position: number = 6;
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.username = r.readOptionalString();
-        this.position = r.readInt32BE();
-    }
-    write(): Buffer {
-        return new BufferWriter().writeOptionalString(this.username).writeInt32BE(this.position).getBuffer();
-    }
-    static getId(): number { return defs.clan.SetClanMemberPosition.id; }
-}
-
-/** Uploads a new clan logo image (part of "edit clan settings"). Body = int32(byteLength) + raw image bytes
- *  (JPEG/PNG, ~81×100 px). The int32 prefix is a serialized Vector.<int> length. */
-export class SetClanLogoPacket extends BasePacket {
-    image: Buffer = Buffer.alloc(0);
-    read(buffer: Buffer): void {
-        const len = new BufferReader(buffer).readInt32BE();
-        this.image = buffer.subarray(4, 4 + len);
-    }
-    write(): Buffer {
-        return new BufferWriter().writeInt32BE(this.image.length).writeBuffer(this.image).getBuffer();
-    }
-    static getId(): number { return defs.clan.SetClanLogo.id; }
-}
-
-/** Member leaves the clan. Empty body. */
-export class LeaveClanPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.LeaveClan.id; }
-}
-
-/** The recipient's own clan permission flags (drives the client's clan UI). Sent on clan open and whenever
- *  the recipient's position changes. Body = int32 count + count×int32 permissionFlagValue. */
-export class ClanPermissionsPacket extends BasePacket {
-    constructor(private readonly flags: number[]) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const w = new BufferWriter().writeInt32BE(this.flags.length);
-        for (const f of this.flags) w.writeInt32BE(f);
-        return w.getBuffer();
-    }
-    static getId(): number { return defs.clan.ClanPermissions.id; }
-}
-
-/** Post-leave cooldown shown in the not-in-clan modal. Body = int(seconds remaining, e.g. 86400 = 24h). */
-export class ClanCooldownPacket extends BasePacket {
-    constructor(private readonly seconds: number) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeInt32BE(this.seconds).getBuffer(); }
-    static getId(): number { return defs.clan.ClanCooldown.id; }
-}
-
-/** Real-time removal of a member from the owner's clan window. Body = optionalString(username). */
-export class RemoveClanMemberPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.RemoveClanMember.id; }
-}
-
-/** Generic member status notify (clears the "new" badge): sent on member add/leave and as the reply to
- *  MarkMemberSeen. Body = optionalString(username). */
-export class MemberStatusNotifyPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.MemberStatusNotify.id; }
-}
-
-/** Owner viewed a member/notification → clear its "new" badge. Body = optionalString(username). Server
- *  replies MemberStatusNotify(username). */
-export class MarkMemberSeenPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.MarkMemberSeen.id; }
-}
-
-/** A clan MEMBER/owner opens their clan window → server replies MyClanWindow (-8296541). Empty body. */
-export class OpenMyClanWindowPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.OpenMyClanWindow.id; }
-}
-
-/** Real-time notify to the online owner: a new join request arrived. Body = optionalString(username). */
-export class NotifyJoinRequestPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.NotifyJoinRequest.id; }
-}
-
-/** Real-time notify to the online owner: add the request card to the list. Body = optionalString(username). */
-export class AddJoinRequestPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.AddJoinRequest.id; }
-}
-
-/** Owner ACCEPTS a pending join request → the requester becomes a member. Body = optionalString(username). */
-export class AcceptJoinRequestPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.AcceptJoinRequest.id; }
-}
-
-/** Owner selected/opened a pending request (sent before accept AND decline). Body = optionalString(username).
- *  No state change — handled as a no-op so it doesn't log as an unknown packet. */
-export class SelectJoinRequestPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.SelectJoinRequest.id; }
-}
-
-/** Owner DECLINES ALL pending join requests for the clan. Empty body. */
-export class DeclineAllJoinRequestsPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.DeclineAllJoinRequests.id; }
-}
-
-/** Owner DECLINES a pending join request. Body = optionalString(requester username). */
-export class DeclineJoinRequestPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.DeclineJoinRequest.id; }
-}
-
-/** Reply to a decline: drop the request card for `username`. Body = optionalString(username). */
-export class JoinRequestDeclinedPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.JoinRequestDeclined.id; }
-}
-
-/** Reply to a decline: remove `username` from the requests list. Body = optionalString(username). */
-export class RemoveJoinRequestPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.RemoveJoinRequest.id; }
-}
-
-/** Client opened the clan view while NOT in a clan → server replies ShowNotInClanWindow. Empty body. */
-export class ShowNotInClanPanelPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ShowNotInClanPanel.id; }
-}
-
-/** Close the clan window. Empty body — sent C->S, and the server echoes the SAME packet back to
- *  confirm so the client actually closes the view. */
-export class CloseClanWindowPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CloseClanWindow.id; }
-}
-
-/** Client closed the not-in-clan panel. Empty body. */
-export class HideNotInClanPanelPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.HideNotInClanPanel.id; }
-}
-
-/** Client requests a page of the clan leaderboard. Body = int(startIndex) + int(count) — paginates as
- *  the user scrolls, e.g. (0,40) then (40,10), (50,10)... */
-export class GetClanRatingsDataPacket extends BasePacket {
-    startIndex: number = 0;
-    count: number = 0;
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.startIndex = r.readInt32BE();
-        this.count = r.readInt32BE();
-    }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.GetClanRatingsData.id; }
-}
-
-/** Clan leaderboard page. Body = int(startIndex) + Vector<light clan model> (sorted by rating, desc). */
-export class SetClanRatingsDataPacket extends BasePacket {
-    constructor(private readonly startIndex: number, private readonly clans: ClanView[]) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const w = new BufferWriter();
-        w.writeInt32BE(this.startIndex);
-        w.writeInt32BE(this.clans.length);
-        for (const c of this.clans) writeLightClanModel(w, c);
-        return w.getBuffer();
-    }
-    static getId(): number { return defs.clan.SetClanRatingsData.id; }
-}
-
-/** Client wants to view another clan by its tag. Body = optionalString(tag). */
-export class ShowForeignClanPacket extends BasePacket {
-    clanTag: string | null = null;
-    read(buffer: Buffer): void { this.clanTag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ShowForeignClan.id; }
-}
-
-/**
- * Client submits the create-clan form. Body = optionalString(name) + optionalString(tag).
- * Confirmed in-game (log 2026-06-26: name="ALFA", tag="A").
- */
-export class CreateClanPacket extends BasePacket {
-    name: string | null = null;
-    tag: string | null = null;
-    read(buffer: Buffer): void {
-        const r = new BufferReader(buffer);
-        this.name = r.readOptionalString();
-        this.tag = r.readOptionalString();
-    }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CreateClan.id; }
-}
-
-/** Live availability check as the user types the clan TAG in the create form. Body = optionalString(tag). */
-export class CheckClanTagPacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CheckClanTag.id; }
-}
-
-/** Live availability check for the clan NAME. Body = optionalString(name). */
-export class CheckClanNamePacket extends BasePacket {
-    name: string | null = null;
-    read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CheckClanName.id; }
-}
-
-/** Live check (as the leader types) of whether a username can be invited — toggles the invite button.
- *  Body = optionalString(username). Server replies InviteUserValid or InviteUserInvalid (both empty). */
-export class CheckInviteUserPacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CheckInviteUser.id; }
-}
-
-/** Reply to CheckInviteUser: the username CAN be invited (exists, not in a clan) → enables the button. */
-export class InviteUserValidPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.InviteUserValid.id; }
-}
-
-/** Reply to CheckInviteUser: the username CANNOT be invited (no account / already in a clan) → keeps button disabled. */
-export class InviteUserInvalidPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.InviteUserInvalid.id; }
-}
-
-/** Owner edits the clan DESCRIPTION. Body = optionalString(description). Server echoes it back. */
-export class SetClanDescriptionPacket extends BasePacket {
-    description: string | null = null;
-    constructor(description: string | null = null) { super(); this.description = description; }
-    read(buffer: Buffer): void { this.description = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.description).getBuffer(); }
-    static getId(): number { return defs.clan.SetClanDescription.id; }
-}
-
-/** Owner edits the MINIMUM RANK to request to join. Body = 1 signed byte (rank 1-30, or -1 = no minimum).
- *  The client uses -1 as the "no restriction" sentinel, so this must be signed (readInt8/writeInt8). */
-export class SetClanMinRankPacket extends BasePacket {
-    minRank: number = -1;
-    read(buffer: Buffer): void { this.minRank = new BufferReader(buffer).readInt8(); }
-    write(): Buffer { return new BufferWriter().writeInt8(this.minRank).getBuffer(); }
-    static getId(): number { return defs.clan.SetClanMinRank.id; }
-}
-
-/** Owner toggles RECRUITING (open/closed). Body = 1 byte bool (1=open/recruiting, 0=closed). */
-export class SetClanRecruitingPacket extends BasePacket {
-    recruiting: boolean = true;
-    read(buffer: Buffer): void { this.recruiting = new BufferReader(buffer).readUInt8() !== 0; }
-    write(): Buffer { return new BufferWriter().writeUInt8(this.recruiting ? 1 : 0).getBuffer(); }
-    static getId(): number { return defs.clan.SetClanRecruiting.id; }
-}
-
-/** Owner SENDS a clan invite to a user. Body = optionalString(username). */
-export class SendClanInvitePacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.SendClanInvite.id; }
-}
-
-/** Ack to the owner that the invite was sent. Body = optionalString(username). */
-export class ClanInviteSentAckPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.ClanInviteSentAck.id; }
-}
-
-/** Owner CANCELS a pending clan invite. Body = optionalString(username). */
-export class CancelClanInvitePacket extends BasePacket {
-    username: string | null = null;
-    read(buffer: Buffer): void { this.username = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CancelClanInvite.id; }
-}
-
-/** Ack to the owner that the invite was cancelled. Body = optionalString(username). */
-export class ClanInviteCancelledAckPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.ClanInviteCancelledAck.id; }
-}
-
-/** Invited user opens the clan attached to an invite. Body = optionalString(tag) → server echoes tag. */
-export class ViewInviteClanPacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ViewInviteClan.id; }
-}
-
-/** Response to ViewInviteClan. Body = optionalString(tag). */
-export class ViewInviteClanResponsePacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.ViewInviteClanResponse.id; }
-}
-
-/** Invited user ACCEPTS the invite. Body = optionalString(clan tag). */
-export class AcceptClanInvitePacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.AcceptClanInvite.id; }
-}
-
-/** Invited user DECLINES the invite. Body = optionalString(clan tag). */
-export class DeclineClanInvitePacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.DeclineClanInvite.id; }
-}
-
-/** Notifies the invited user: "you've been invited to clan <tag>". Body = optionalString(tag). */
-export class ClanInviteNotifyPacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.ClanInviteNotify.id; }
-}
-
-/** Ack to an invite accept/decline. Body = optionalString(tag). */
-export class ClanInviteAckPacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.ClanInviteAck.id; }
-}
-
-/** Client asks to JOIN a clan (the "request to join" button). Body = optionalString(tag). */
-export class JoinClanRequestPacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.JoinClanRequest.id; }
-}
-
-/** Search/list panel: live check that a clan with the typed NAME exists. Body = optionalString(name).
- *  Server replies ClanSearchFound (empty) when a clan matches → enables the "request to join" button. */
-export class SearchClanByNamePacket extends BasePacket {
-    name: string | null = null;
-    read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.SearchClanByName.id; }
-}
-
-/** Reply to SearchClanByName: a clan with that name exists AND accepts requests (empty body) → enable button. */
-export class ClanSearchFoundPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanSearchFound.id; }
-}
-
-/** Reply to SearchClanByName: no joinable clan with that name (doesn't exist OR isn't recruiting) → keep disabled. */
-export class ClanSearchUnavailablePacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanSearchUnavailable.id; }
-}
-
-/** Client asks to JOIN a clan from the search/list panel, by NAME. Body = optionalString(name). */
-export class JoinClanByNamePacket extends BasePacket {
-    name: string | null = null;
-    read(buffer: Buffer): void { this.name = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.JoinClanByName.id; }
-}
-
-/** Client CANCELS a pending join request from the foreign-clan window. Body = optionalString(tag). */
-export class CancelJoinClanRequestPacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CancelJoinClanRequest.id; }
-}
-
-/** Client CANCELS a pending join request from the "sent requests" modal. Body = optionalString(tag). */
-export class CancelJoinRequestFromModalPacket extends BasePacket {
-    tag: string | null = null;
-    read(buffer: Buffer): void { this.tag = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.CancelJoinRequestFromModal.id; }
-}
-
-// ---- S->C (outgoing) ----
-
-/**
- * The "my clan" / owner management window (sent after creating a clan and when a member opens the clan
- * view). Aggregate of 6 fields, decoded from the client codec and round-trip validated byte-for-byte
- * against the official capture (LeTanki[LGC], 199 bytes):
- *   0) light clan model (leader/name/tag/recruiting + member nicks)
- *   1) Vector<Member> (full member objects)   2) Vector<perm-ordinal> = [0..7]
- *   3,4,5) three Vector<String> (role/permission member lists; only #3 = [leader] for a fresh clan)
- * Vector presence bytes: light-model nicks + lists 3/4/5 HAVE a presence byte; members + perms do NOT.
- * f6/f7/f8 (3000/16/8) are the values the official sent for a brand-new clan; kept as-is.
- */
-/**
- * The "§static catch catch§" LIGHT clan model, shared by the my-clan window (field 0), the join-request
- * card, and the clan ratings list. Field order decoded from the client codec, validated byte-perfect:
- * f1 bool, Long id, leader, description, f5=recruiting, f6 int(3000), f7 int(16), f8 byte=minRank, name,
- * s10(null), f11(1), tag, Vector<String> member nicks (presence byte), logo, rating.
- */
-export function writeLightClanModel(w: BufferWriter, v: ClanView): void {
-    const long = (b: Buffer) => w.writeInt32BE(b.readInt32BE(0)).writeInt32BE(b.readInt32BE(4));
-    w.writeUInt8(0); long(v.clanId); w.writeOptionalString(v.leader); w.writeOptionalString(v.description);
-    w.writeUInt8(v.recruiting ? 1 : 0); w.writeInt32BE(3000); w.writeInt32BE(16); w.writeInt8(v.minRank);
-    w.writeOptionalString(v.name); w.writeOptionalString(null); w.writeUInt8(1); w.writeOptionalString(v.tag);
-    w.writeUInt8(0); w.writeInt32BE(v.members.length); v.members.forEach((m) => w.writeOptionalString(m.nick));
-    w.writeOptionalString(v.logo ?? ""); w.writeInt32BE(v.rating);
-}
-
-/** The 10-field clan MemberModel — shared by the my-clan window member vector and the add-member packet. */
-export function writeMemberModel(w: BufferWriter, m: ClanMemberView): void {
-    const long = (b: Buffer) => w.writeInt32BE(b.readInt32BE(0)).writeInt32BE(b.readInt32BE(4));
-    w.writeInt32BE(m.secondsInClan).writeInt32BE(m.deaths).writeInt32BE(m.kills);
-    long(m.lastOnlineDate);
-    w.writeInt32BE(m.permission).writeInt32BE(m.score);
-    w.writeOptionalString(m.nick);
-    w.writeInt32BE(m.minesUsed).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
-}
-
-export class MyClanWindowPacket extends BasePacket {
-    constructor(private readonly v: ClanView) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const w = new BufferWriter();
-        const presVec = <T>(arr: T[], el: (x: T) => void) => { w.writeUInt8(0); w.writeInt32BE(arr.length); arr.forEach(el); };
-        const vec = <T>(arr: T[], el: (x: T) => void) => { w.writeInt32BE(arr.length); arr.forEach(el); };
-        const v = this.v;
-        // 0) light clan model
-        writeLightClanModel(w, v);
-        // 1) Vector<Member> (no presence)
-        vec(v.members, (m) => writeMemberModel(w, m));
-        // 2) Vector<perm ordinal> (no presence)
-        vec([0, 1, 2, 3, 4, 5, 6, 7], (x) => w.writeInt32BE(x));
-        // 3,4,5) #3 = ALL members (the rendered member list), #4 = received join requests, #5 = SENT
-        // invites (the client labels list5 "Convites enviados"; putting members there showed them as invites).
-        presVec(v.members.map((m) => m.nick), (s) => w.writeOptionalString(s));
-        presVec(v.joinRequests, (s) => w.writeOptionalString(s));
-        presVec(v.sentInvites, (s) => w.writeOptionalString(s));
-        return w.getBuffer();
-    }
-    static getId(): number { return defs.clan.MyClanWindow.id; }
-}
-
-/** Sent with the my-clan window: the clan tag (8-byte body, optionalString). */
-export class ClanTagNotifyPacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.ClanTagNotify.id; }
-}
-
-/** Sent when joining a clan: the clan display name (sets the clan name in the UI). Body = optString(name). */
-export class ClanNameNotifyPacket extends BasePacket {
-    constructor(private readonly name: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.name).getBuffer(); }
-    static getId(): number { return defs.clan.ClanNameNotify.id; }
-}
-
-/** Real-time add of a new member to the owner's open clan window. Body = the 10-field MemberModel. */
-export class AddClanMemberPacket extends BasePacket {
-    constructor(private readonly member: ClanMemberView) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { const w = new BufferWriter(); writeMemberModel(w, this.member); return w.getBuffer(); }
-    static getId(): number { return defs.clan.AddClanMember.id; }
-}
-
-/** Aux notify sent with a member add (officially follows AddClanMember). Body = optString(username). */
-export class MemberAddedNotifyPacket extends BasePacket {
-    constructor(private readonly username: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.username).getBuffer(); }
-    static getId(): number { return defs.clan.MemberAddedNotify.id; }
-}
-
-/** Sent with the my-clan window: the leader/owner nick. */
-export class ClanLeaderNotifyPacket extends BasePacket {
-    constructor(private readonly nick: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.nick).getBuffer(); }
-    static getId(): number { return defs.clan.ClanLeaderNotify.id; }
-}
-
-/**
- * Sent right after a join request (and to repopulate the "sent requests" modal): the pending request
- * card. Body = optionalString(tag) + a LIGHT clan model. Round-trip validated byte-for-byte against the
- * official capture (LeTanki[LGC], 88 bytes). f6/f7/f8/f9 (1/3000/16/8) are the official's brand-new-clan
- * constants; f11/f12 bools = 1; nicks vector has a presence byte, logo = "".
- */
-export class JoinRequestModelPacket extends BasePacket {
-    constructor(private readonly v: ClanView) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const w = new BufferWriter();
-        const long = (b: Buffer) => w.writeInt32BE(b.readInt32BE(0)).writeInt32BE(b.readInt32BE(4));
-        const v = this.v;
-        w.writeOptionalString(v.tag);                 // outer tag
-        w.writeUInt8(0);                              // f1 bool
-        long(v.clanId);                               // clan id (Long)
-        w.writeOptionalString(v.leader);              // leader nick
-        w.writeUInt8(v.recruiting ? 1 : 0);           // f5 bool: recruiting
-        w.writeUInt8(1);                              // f6 bool
-        w.writeInt32BE(3000);                         // f7 int
-        w.writeInt32BE(16);                           // f8 int
-        w.writeInt8(v.minRank);                       // f9 byte = minimum rank
-        w.writeOptionalString(v.name);
-        w.writeUInt8(1);                              // f11 bool
-        w.writeUInt8(1);                              // f12 bool
-        w.writeOptionalString(v.tag);
-        w.writeUInt8(0); w.writeInt32BE(v.members.length); // nicks vector (presence byte)
-        v.members.forEach((m) => w.writeOptionalString(m.nick));
-        w.writeOptionalString("");                    // logo
-        w.writeInt32BE(v.rating);
-        return w.getBuffer();
-    }
-    static getId(): number { return defs.clan.JoinRequestModel.id; }
-}
-
-/** Ack: a join request for `tag` is now pending. Body = optionalString(tag). */
-export class JoinRequestSentPacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.JoinRequestSent.id; }
-}
-
-/** Ack: the pending join request for `tag` was withdrawn. Body = optionalString(tag). */
-export class JoinRequestCancelledPacket extends BasePacket {
-    constructor(private readonly tag: string) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.tag).getBuffer(); }
-    static getId(): number { return defs.clan.JoinRequestCancelled.id; }
-}
-
-// Availability results are EMPTY packets — the client distinguishes available vs taken by the id.
-export class ClanTagAvailablePacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanTagAvailable.id; }
-}
-export class ClanTagTakenPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanTagTaken.id; }
-}
-export class ClanNameAvailablePacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanNameAvailable.id; }
-}
-export class ClanNameTakenPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.ClanNameTaken.id; }
-}
-
-/**
- * The "you're not in a clan" window (create for CLAN_CREATION_COST / join). Body = 2 resources: the
- * clan-system intro illustration and the clan card (own dedicated images, matching the official).
- */
-export class ShowNotInClanWindowPacket extends BasePacket {
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const intro = ResourceManager.getIdlowById("clan/intro");
-        const card = ResourceManager.getIdlowById("clan/card");
-        return new BufferWriter().writeResource(intro).writeResource(card).getBuffer();
-    }
-    static getId(): number { return defs.clan.ShowNotInClanWindow.id; }
-}
+// IDs e schemas em `protanki-protocol` (defs.clan.*). A ESTRUTURA do fio (incl. o Long de 8 bytes =
+// i64, os models e os vetores) fica na lib; o server só mapeia ClanView/MemberModel → campos.
 
 export interface ClanMemberView {
     lastOnlineDate: Buffer; // 8-byte Long — member's last-online time in ms (client shows "last seen")
@@ -654,47 +30,6 @@ export interface ClanView {
     members: ClanMemberView[];
 }
 
-/**
- * Full clan-details window (also used as the read-only view of any clan). Wraps ONE "ClanModel"
- * serialized in the EXACT order decoded from the client codec and round-trip validated byte-for-byte
- * against the official FaZe capture (2036 bytes). Field meanings that are unknown are sent as the
- * FaZe-observed defaults (0/empty) — harmless for a read-only view.
- */
-export class ShowForeignClanWindowPacket extends BasePacket {
-    constructor(private readonly clan: ClanView) { super(); }
-    read(_buffer: Buffer): void {}
-    write(): Buffer {
-        const w = new BufferWriter();
-        const long = (b: Buffer) => w.writeInt32BE(b.readInt32BE(0)).writeInt32BE(b.readInt32BE(4));
-        const c = this.clan;
-        w.writeUInt8(0);                 // f1 bool
-        long(c.clanId);                  // clanId (Long)
-        w.writeOptionalString(c.leader); // leader nick
-        w.writeOptionalString(c.description);
-        w.writeUInt8(c.recruiting ? 1 : 0); // f5 bool: "accepts join requests" (FaZe=0 closed, MRAK=1 open)
-        w.writeInt32BE(0);               // f6 int (unknown; FaZe=15/MRAK=16, near member count)
-        w.writeUInt8(0);                 // f7 bool
-        w.writeUInt8(0);                 // f8 byte (unknown; FaZe=23)
-        w.writeOptionalString(c.name);
-        w.writeOptionalString(null);     // f10 (unknown string)
-        w.writeUInt8(0);                 // f11 bool
-        w.writeUInt8(0);                 // f12 bool
-        w.writeOptionalString(c.tag);
-        w.writeInt32BE(c.members.length);
-        for (const m of c.members) {
-            w.writeInt32BE(m.secondsInClan).writeInt32BE(m.deaths).writeInt32BE(m.kills);
-            long(m.lastOnlineDate);
-            w.writeInt32BE(m.permission).writeInt32BE(m.score);
-            w.writeOptionalString(m.nick);
-            w.writeInt32BE(m.minesUsed).writeInt32BE(m.clanScore).writeInt32BE(m.weeklyClanScore);
-        }
-        w.writeOptionalString(c.logo);
-        w.writeInt32BE(c.rating);
-        return w.getBuffer();
-    }
-    static getId(): number { return defs.clan.ShowForeignClanWindow.id; }
-}
-
 export interface ClanMissionView {
     id: number;
     icon: number; // icon resource idLow (sent as an 8-byte Resource)
@@ -703,32 +38,360 @@ export interface ClanMissionView {
     criteria: number; // clan-wide target
     progress: number; // clan-wide progress (clamped to criteria on the wire)
     secondsToReset: number; // countdown until the mission set resets
-    completed: boolean; // drives the client's GET PRIZE vs PRIZE_CLAIMED (we auto-claim, so completed == claimed)
+    completed: boolean; // GET PRIZE vs PRIZE_CLAIMED (we auto-claim, so completed == claimed)
 }
 
-/** C->S: open the clan missions ("DAILY_QUEST_MISSIONS") tab. Empty body. */
-export class OpenClanMissionsPacket extends BasePacket {
+// ClanView/MemberView → objeto de campos do schema (o Long de 8 bytes vira bigint = i64).
+const memberModel = (m: ClanMemberView) => ({
+    secondsInClan: m.secondsInClan, deaths: m.deaths, kills: m.kills, lastOnlineDate: m.lastOnlineDate.readBigInt64BE(0),
+    permission: m.permission, score: m.score, nick: m.nick, minesUsed: m.minesUsed, clanScore: m.clanScore, weeklyClanScore: m.weeklyClanScore,
+});
+const lightClanModel = (v: ClanView) => ({
+    f1: 0, clanId: v.clanId.readBigInt64BE(0), leader: v.leader, description: v.description, recruiting: v.recruiting,
+    f6: 3000, f7: 16, minRank: v.minRank, name: v.name, s10: null, f11: 1, tag: v.tag,
+    memberNicks: v.members.map((m) => m.nick), logo: v.logo ?? "", rating: v.rating,
+});
+
+// ---- C->S (incoming): read pela lib; write é stub (o server só lê estes) ----
+
+/** Leader kicks a member out of the clan. Body = optionalString(username). */
+export const KickClanMemberPacket = packetClass(defs.clan.KickClanMember);
+export type KickClanMemberPacket = InstanceType<typeof KickClanMemberPacket>;
+
+/** Owner/officer changes a member's clan position. Body = optionalString(nick) + int32(position 0-6). */
+export const SetClanMemberPositionPacket = packetClass(defs.clan.SetClanMemberPosition);
+export type SetClanMemberPositionPacket = InstanceType<typeof SetClanMemberPositionPacket>;
+
+/** Uploads a new clan logo image. Body = int32(byteLength) + raw image bytes (tipo `bytes`). */
+export const SetClanLogoPacket = packetClass(defs.clan.SetClanLogo);
+export type SetClanLogoPacket = InstanceType<typeof SetClanLogoPacket>;
+
+/** Member leaves the clan. Empty body. */
+export const LeaveClanPacket = packetClass(defs.clan.LeaveClan);
+export type LeaveClanPacket = InstanceType<typeof LeaveClanPacket>;
+
+/** The recipient's own clan permission flags. Body = int32 count + count×int32 permissionFlagValue. */
+export class ClanPermissionsPacket extends BasePacket {
+    constructor(private readonly flags: number[]) { super(); }
     read(_buffer: Buffer): void {}
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.clan.OpenClanMissions.id; }
+    write(): Buffer { return encodeBody(defs.clan.ClanPermissions, { flags: this.flags.map((flag) => ({ flag })) }); }
+    static getId(): number { return defs.clan.ClanPermissions.id; }
 }
 
-/** S->C: the clan mission list (also pushed on progress change). Body = int32 count + count × mission
- *  (int32 id, Resource icon, optString description, int32 prizeCount + prizes{int32 count, optString name},
- *  int32 criteria, int32 progress, int32 secondsToReset, bool completed). */
+/** Post-leave cooldown shown in the not-in-clan modal. Body = int(seconds remaining). */
+export const ClanCooldownPacket = packetClass(defs.clan.ClanCooldown);
+export type ClanCooldownPacket = InstanceType<typeof ClanCooldownPacket>;
+
+/** Real-time removal of a member from the owner's clan window. Body = optionalString(username). */
+export const RemoveClanMemberPacket = packetClass(defs.clan.RemoveClanMember);
+export type RemoveClanMemberPacket = InstanceType<typeof RemoveClanMemberPacket>;
+
+/** Generic member status notify (clears the "new" badge). Body = optionalString(username). */
+export const MemberStatusNotifyPacket = packetClass(defs.clan.MemberStatusNotify);
+export type MemberStatusNotifyPacket = InstanceType<typeof MemberStatusNotifyPacket>;
+
+/** Owner viewed a member/notification → clear its "new" badge. Body = optionalString(username). */
+export const MarkMemberSeenPacket = packetClass(defs.clan.MarkMemberSeen);
+export type MarkMemberSeenPacket = InstanceType<typeof MarkMemberSeenPacket>;
+
+/** A clan member/owner opens their clan window → server replies MyClanWindow. Empty body. */
+export const OpenMyClanWindowPacket = packetClass(defs.clan.OpenMyClanWindow);
+export type OpenMyClanWindowPacket = InstanceType<typeof OpenMyClanWindowPacket>;
+
+/** Real-time notify to the online owner: a new join request arrived. Body = optionalString(username). */
+export const NotifyJoinRequestPacket = packetClass(defs.clan.NotifyJoinRequest);
+export type NotifyJoinRequestPacket = InstanceType<typeof NotifyJoinRequestPacket>;
+
+/** Real-time notify to the online owner: add the request card to the list. Body = optionalString(username). */
+export const AddJoinRequestPacket = packetClass(defs.clan.AddJoinRequest);
+export type AddJoinRequestPacket = InstanceType<typeof AddJoinRequestPacket>;
+
+/** Owner ACCEPTS a pending join request. Body = optionalString(username). */
+export const AcceptJoinRequestPacket = packetClass(defs.clan.AcceptJoinRequest);
+export type AcceptJoinRequestPacket = InstanceType<typeof AcceptJoinRequestPacket>;
+
+/** Owner selected/opened a pending request (sent before accept AND decline). Body = optionalString(username). */
+export const SelectJoinRequestPacket = packetClass(defs.clan.SelectJoinRequest);
+export type SelectJoinRequestPacket = InstanceType<typeof SelectJoinRequestPacket>;
+
+/** Owner DECLINES ALL pending join requests. Empty body. */
+export const DeclineAllJoinRequestsPacket = packetClass(defs.clan.DeclineAllJoinRequests);
+export type DeclineAllJoinRequestsPacket = InstanceType<typeof DeclineAllJoinRequestsPacket>;
+
+/** Owner DECLINES a pending join request. Body = optionalString(requester username). */
+export const DeclineJoinRequestPacket = packetClass(defs.clan.DeclineJoinRequest);
+export type DeclineJoinRequestPacket = InstanceType<typeof DeclineJoinRequestPacket>;
+
+/** Reply to a decline: drop the request card for `username`. Body = optionalString(username). */
+export const JoinRequestDeclinedPacket = packetClass(defs.clan.JoinRequestDeclined);
+export type JoinRequestDeclinedPacket = InstanceType<typeof JoinRequestDeclinedPacket>;
+
+/** Reply to a decline: remove `username` from the requests list. Body = optionalString(username). */
+export const RemoveJoinRequestPacket = packetClass(defs.clan.RemoveJoinRequest);
+export type RemoveJoinRequestPacket = InstanceType<typeof RemoveJoinRequestPacket>;
+
+/** Client opened the clan view while NOT in a clan → server replies ShowNotInClanWindow. Empty body. */
+export const ShowNotInClanPanelPacket = packetClass(defs.clan.ShowNotInClanPanel);
+export type ShowNotInClanPanelPacket = InstanceType<typeof ShowNotInClanPanelPacket>;
+
+/** Close the clan window (empty body — C->S, and the server echoes the SAME packet back). */
+export const CloseClanWindowPacket = packetClass(defs.clan.CloseClanWindow);
+export type CloseClanWindowPacket = InstanceType<typeof CloseClanWindowPacket>;
+
+/** Client closed the not-in-clan panel. Empty body. */
+export const HideNotInClanPanelPacket = packetClass(defs.clan.HideNotInClanPanel);
+export type HideNotInClanPanelPacket = InstanceType<typeof HideNotInClanPanelPacket>;
+
+/** Client requests a page of the clan leaderboard. Body = int(startIndex) + int(count). */
+export const GetClanRatingsDataPacket = packetClass(defs.clan.GetClanRatingsData);
+export type GetClanRatingsDataPacket = InstanceType<typeof GetClanRatingsDataPacket>;
+
+/** Clan leaderboard page. Body = int(startIndex) + Vector<light clan model>. */
+export class SetClanRatingsDataPacket extends BasePacket {
+    constructor(private readonly startIndex: number, private readonly clans: ClanView[]) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        return encodeBody(defs.clan.SetClanRatingsData, { startIndex: this.startIndex, clans: this.clans.map(lightClanModel) });
+    }
+    static getId(): number { return defs.clan.SetClanRatingsData.id; }
+}
+
+/** Client wants to view another clan by its tag. Body = optionalString(tag). */
+export class ShowForeignClanPacket extends BasePacket {
+    clanTag: string | null = null;
+    // O schema usa `tag`; a classe expõe `clanTag` — mapeia pela lib.
+    read(buffer: Buffer): void { this.clanTag = decodeBody(defs.clan.ShowForeignClan, buffer).fields.tag; }
+    write(): Buffer { return encodeBody(defs.clan.ShowForeignClan, { tag: this.clanTag }); }
+    static getId(): number { return defs.clan.ShowForeignClan.id; }
+}
+
+/** Client submits the create-clan form. Body = optionalString(name) + optionalString(tag). */
+export const CreateClanPacket = packetClass(defs.clan.CreateClan);
+export type CreateClanPacket = InstanceType<typeof CreateClanPacket>;
+
+/** Live availability check for the clan TAG. Body = optionalString(tag). */
+export const CheckClanTagPacket = packetClass(defs.clan.CheckClanTag);
+export type CheckClanTagPacket = InstanceType<typeof CheckClanTagPacket>;
+
+/** Live availability check for the clan NAME. Body = optionalString(name). */
+export const CheckClanNamePacket = packetClass(defs.clan.CheckClanName);
+export type CheckClanNamePacket = InstanceType<typeof CheckClanNamePacket>;
+
+/** Live check whether a username can be invited. Body = optionalString(username). */
+export const CheckInviteUserPacket = packetClass(defs.clan.CheckInviteUser);
+export type CheckInviteUserPacket = InstanceType<typeof CheckInviteUserPacket>;
+
+/** Reply to CheckInviteUser: username CAN be invited. Empty. */
+export const InviteUserValidPacket = packetClass(defs.clan.InviteUserValid);
+export type InviteUserValidPacket = InstanceType<typeof InviteUserValidPacket>;
+
+/** Reply to CheckInviteUser: username CANNOT be invited. Empty. */
+export const InviteUserInvalidPacket = packetClass(defs.clan.InviteUserInvalid);
+export type InviteUserInvalidPacket = InstanceType<typeof InviteUserInvalidPacket>;
+
+/** Owner edits the clan DESCRIPTION. Body = optionalString(description). Server echoes it back. */
+export const SetClanDescriptionPacket = packetClass(defs.clan.SetClanDescription);
+export type SetClanDescriptionPacket = InstanceType<typeof SetClanDescriptionPacket>;
+
+/** Owner edits the MINIMUM RANK. Body = 1 signed byte (rank 1-30, or -1 = no minimum). */
+export const SetClanMinRankPacket = packetClass(defs.clan.SetClanMinRank);
+export type SetClanMinRankPacket = InstanceType<typeof SetClanMinRankPacket>;
+
+/** Owner toggles RECRUITING. Body = 1 byte bool. */
+export const SetClanRecruitingPacket = packetClass(defs.clan.SetClanRecruiting);
+export type SetClanRecruitingPacket = InstanceType<typeof SetClanRecruitingPacket>;
+
+/** Owner SENDS a clan invite. Body = optionalString(username). */
+export const SendClanInvitePacket = packetClass(defs.clan.SendClanInvite);
+export type SendClanInvitePacket = InstanceType<typeof SendClanInvitePacket>;
+
+/** Ack to the owner that the invite was sent. Body = optionalString(username). */
+export const ClanInviteSentAckPacket = packetClass(defs.clan.ClanInviteSentAck);
+export type ClanInviteSentAckPacket = InstanceType<typeof ClanInviteSentAckPacket>;
+
+/** Owner CANCELS a pending clan invite. Body = optionalString(username). */
+export const CancelClanInvitePacket = packetClass(defs.clan.CancelClanInvite);
+export type CancelClanInvitePacket = InstanceType<typeof CancelClanInvitePacket>;
+
+/** Ack to the owner that the invite was cancelled. Body = optionalString(username). */
+export const ClanInviteCancelledAckPacket = packetClass(defs.clan.ClanInviteCancelledAck);
+export type ClanInviteCancelledAckPacket = InstanceType<typeof ClanInviteCancelledAckPacket>;
+
+/** Invited user opens the clan attached to an invite. Body = optionalString(tag). */
+export const ViewInviteClanPacket = packetClass(defs.clan.ViewInviteClan);
+export type ViewInviteClanPacket = InstanceType<typeof ViewInviteClanPacket>;
+
+/** Response to ViewInviteClan. Body = optionalString(tag). */
+export const ViewInviteClanResponsePacket = packetClass(defs.clan.ViewInviteClanResponse);
+export type ViewInviteClanResponsePacket = InstanceType<typeof ViewInviteClanResponsePacket>;
+
+/** Invited user ACCEPTS the invite. Body = optionalString(clan tag). */
+export const AcceptClanInvitePacket = packetClass(defs.clan.AcceptClanInvite);
+export type AcceptClanInvitePacket = InstanceType<typeof AcceptClanInvitePacket>;
+
+/** Invited user DECLINES the invite. Body = optionalString(clan tag). */
+export const DeclineClanInvitePacket = packetClass(defs.clan.DeclineClanInvite);
+export type DeclineClanInvitePacket = InstanceType<typeof DeclineClanInvitePacket>;
+
+/** Notifies the invited user of a clan invite. Body = optionalString(tag). */
+export const ClanInviteNotifyPacket = packetClass(defs.clan.ClanInviteNotify);
+export type ClanInviteNotifyPacket = InstanceType<typeof ClanInviteNotifyPacket>;
+
+/** Ack to an invite accept/decline. Body = optionalString(tag). */
+export const ClanInviteAckPacket = packetClass(defs.clan.ClanInviteAck);
+export type ClanInviteAckPacket = InstanceType<typeof ClanInviteAckPacket>;
+
+/** Client asks to JOIN a clan. Body = optionalString(tag). */
+export const JoinClanRequestPacket = packetClass(defs.clan.JoinClanRequest);
+export type JoinClanRequestPacket = InstanceType<typeof JoinClanRequestPacket>;
+
+/** Search/list panel: live check that a clan with the typed NAME exists. Body = optionalString(name). */
+export const SearchClanByNamePacket = packetClass(defs.clan.SearchClanByName);
+export type SearchClanByNamePacket = InstanceType<typeof SearchClanByNamePacket>;
+
+/** Reply to SearchClanByName: a clan matches → enable button. Empty. */
+export const ClanSearchFoundPacket = packetClass(defs.clan.ClanSearchFound);
+export type ClanSearchFoundPacket = InstanceType<typeof ClanSearchFoundPacket>;
+
+/** Reply to SearchClanByName: no joinable clan → keep disabled. Empty. */
+export const ClanSearchUnavailablePacket = packetClass(defs.clan.ClanSearchUnavailable);
+export type ClanSearchUnavailablePacket = InstanceType<typeof ClanSearchUnavailablePacket>;
+
+/** Client asks to JOIN a clan by NAME. Body = optionalString(name). */
+export const JoinClanByNamePacket = packetClass(defs.clan.JoinClanByName);
+export type JoinClanByNamePacket = InstanceType<typeof JoinClanByNamePacket>;
+
+/** Client CANCELS a pending join request from the foreign-clan window. Body = optionalString(tag). */
+export const CancelJoinClanRequestPacket = packetClass(defs.clan.CancelJoinClanRequest);
+export type CancelJoinClanRequestPacket = InstanceType<typeof CancelJoinClanRequestPacket>;
+
+/** Client CANCELS a pending join request from the "sent requests" modal. Body = optionalString(tag). */
+export const CancelJoinRequestFromModalPacket = packetClass(defs.clan.CancelJoinRequestFromModal);
+export type CancelJoinRequestFromModalPacket = InstanceType<typeof CancelJoinRequestFromModalPacket>;
+
+// ---- S->C (outgoing) ----
+
+/** The "my clan" / owner management window. Aggregate: light model + members + perms + 3 string lists. */
+export class MyClanWindowPacket extends BasePacket {
+    constructor(private readonly v: ClanView) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const v = this.v;
+        return encodeBody(defs.clan.MyClanWindow, {
+            clanModel: lightClanModel(v),
+            members: v.members.map(memberModel),
+            perms: [0, 1, 2, 3, 4, 5, 6, 7].map((ordinal) => ({ ordinal })),
+            memberNicks: v.members.map((m) => m.nick),
+            joinRequests: v.joinRequests,
+            sentInvites: v.sentInvites,
+        });
+    }
+    static getId(): number { return defs.clan.MyClanWindow.id; }
+}
+
+/** Sent with the my-clan window: the clan tag. Body = optString(tag). */
+export const ClanTagNotifyPacket = packetClass(defs.clan.ClanTagNotify);
+export type ClanTagNotifyPacket = InstanceType<typeof ClanTagNotifyPacket>;
+
+/** Sent when joining a clan: the clan display name. Body = optString(name). */
+export const ClanNameNotifyPacket = packetClass(defs.clan.ClanNameNotify);
+export type ClanNameNotifyPacket = InstanceType<typeof ClanNameNotifyPacket>;
+
+/** Real-time add of a new member to the owner's open clan window. Body = the 10-field MemberModel. */
+export class AddClanMemberPacket extends BasePacket {
+    constructor(private readonly member: ClanMemberView) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer { return encodeBody(defs.clan.AddClanMember, memberModel(this.member)); }
+    static getId(): number { return defs.clan.AddClanMember.id; }
+}
+
+/** Aux notify sent with a member add. Body = optString(username). */
+export const MemberAddedNotifyPacket = packetClass(defs.clan.MemberAddedNotify);
+export type MemberAddedNotifyPacket = InstanceType<typeof MemberAddedNotifyPacket>;
+
+/** Sent with the my-clan window: the leader/owner nick. Body = optString(nick). */
+export const ClanLeaderNotifyPacket = packetClass(defs.clan.ClanLeaderNotify);
+export type ClanLeaderNotifyPacket = InstanceType<typeof ClanLeaderNotifyPacket>;
+
+/** The pending join-request card. Body = optString(tag) + a LIGHT clan model (layout próprio). */
+export class JoinRequestModelPacket extends BasePacket {
+    constructor(private readonly v: ClanView) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const v = this.v;
+        return encodeBody(defs.clan.JoinRequestModel, {
+            outerTag: v.tag, f1: 0, clanId: v.clanId.readBigInt64BE(0), leader: v.leader, recruiting: v.recruiting,
+            f6: 1, f7: 3000, f8: 16, minRank: v.minRank, name: v.name, f11: 1, f12: 1, tag: v.tag,
+            memberNicks: v.members.map((m) => m.nick), logo: "", rating: v.rating,
+        });
+    }
+    static getId(): number { return defs.clan.JoinRequestModel.id; }
+}
+
+/** Ack: a join request for `tag` is now pending. Body = optString(tag). */
+export const JoinRequestSentPacket = packetClass(defs.clan.JoinRequestSent);
+export type JoinRequestSentPacket = InstanceType<typeof JoinRequestSentPacket>;
+
+/** Ack: the pending join request for `tag` was withdrawn. Body = optString(tag). */
+export const JoinRequestCancelledPacket = packetClass(defs.clan.JoinRequestCancelled);
+export type JoinRequestCancelledPacket = InstanceType<typeof JoinRequestCancelledPacket>;
+
+// Availability results are EMPTY packets — the client distinguishes available vs taken by the id.
+export const ClanTagAvailablePacket = packetClass(defs.clan.ClanTagAvailable);
+export type ClanTagAvailablePacket = InstanceType<typeof ClanTagAvailablePacket>;
+export const ClanTagTakenPacket = packetClass(defs.clan.ClanTagTaken);
+export type ClanTagTakenPacket = InstanceType<typeof ClanTagTakenPacket>;
+export const ClanNameAvailablePacket = packetClass(defs.clan.ClanNameAvailable);
+export type ClanNameAvailablePacket = InstanceType<typeof ClanNameAvailablePacket>;
+export const ClanNameTakenPacket = packetClass(defs.clan.ClanNameTaken);
+export type ClanNameTakenPacket = InstanceType<typeof ClanNameTakenPacket>;
+
+/**
+ * The "you're not in a clan" window. Body = 2 resources: the clan-system intro illustration and the clan
+ * card. Os recursos são resolvidos em runtime (lógica); a lib escreve os bytes.
+ */
+export class ShowNotInClanWindowPacket extends BasePacket {
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        return encodeBody(defs.clan.ShowNotInClanWindow, {
+            intro: ResourceManager.getIdlowById("clan/intro"),
+            card: ResourceManager.getIdlowById("clan/card"),
+        });
+    }
+    static getId(): number { return defs.clan.ShowNotInClanWindow.id; }
+}
+
+/** Full clan-details window (read-only view of any clan). Wraps ONE ClanModel (layout próprio). */
+export class ShowForeignClanWindowPacket extends BasePacket {
+    constructor(private readonly clan: ClanView) { super(); }
+    read(_buffer: Buffer): void {}
+    write(): Buffer {
+        const c = this.clan;
+        return encodeBody(defs.clan.ShowForeignClanWindow, {
+            f1: 0, clanId: c.clanId.readBigInt64BE(0), leader: c.leader, description: c.description, recruiting: c.recruiting,
+            f6: 0, f7: 0, f8: 0, name: c.name, f10: null, f11: 0, f12: 0, tag: c.tag,
+            members: c.members.map(memberModel), logo: c.logo, rating: c.rating,
+        });
+    }
+    static getId(): number { return defs.clan.ShowForeignClanWindow.id; }
+}
+
+/** C->S: open the clan missions tab. Empty body. */
+export const OpenClanMissionsPacket = packetClass(defs.clan.OpenClanMissions);
+export type OpenClanMissionsPacket = InstanceType<typeof OpenClanMissionsPacket>;
+
+/** S->C: the clan mission list (also pushed on progress change). */
 export class ShowClanMissionsPacket extends BasePacket {
     constructor(private readonly missions: ClanMissionView[]) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer {
-        const w = new BufferWriter().writeInt32BE(this.missions.length);
-        for (const m of this.missions) {
-            w.writeInt32BE(m.id).writeResource(m.icon).writeOptionalString(m.description);
-            w.writeInt32BE(m.prizes.length);
-            for (const p of m.prizes) w.writeInt32BE(p.count).writeOptionalString(p.name);
-            w.writeInt32BE(m.criteria).writeInt32BE(m.progress).writeInt32BE(m.secondsToReset);
-            w.writeUInt8(m.completed ? 1 : 0);
-        }
-        return w.getBuffer();
+        return encodeBody(defs.clan.ShowClanMissions, {
+            missions: this.missions.map((m) => ({
+                id: m.id, icon: m.icon, description: m.description,
+                prizes: m.prizes.map((p) => ({ count: p.count, name: p.name })),
+                criteria: m.criteria, progress: m.progress, secondsToReset: m.secondsToReset, completed: m.completed,
+            })),
+        });
     }
     static getId(): number { return defs.clan.ShowClanMissions.id; }
 }

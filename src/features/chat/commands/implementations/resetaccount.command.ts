@@ -57,8 +57,8 @@ export default class ResetAccountCommand implements ICommand {
         // Live refresh for an online target.
         if (online) {
             const rankInfo = server.rankService.getRankById(user.rank);
-            online.sendPacket(new UpdateCrystals(user.crystals));
-            online.sendPacket(new UpdateScorePacket(user.experience));
+            online.sendPacket(new UpdateCrystals({ crystals: user.crystals }));
+            online.sendPacket(new UpdateScorePacket({ score: user.experience }));
             online.sendPacket(new UpdateRankPacket({
                 rank: user.rank,
                 score: user.experience,

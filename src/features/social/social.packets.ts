@@ -1,10 +1,8 @@
 import { BasePacket } from "@/packets/base.packet";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
-import { defs } from "protanki-protocol";
+import { defs, encodeBody, decodeBody } from "protanki-protocol";
 import * as SocialTypes from "./social.types";
 
-// ID em `protanki-protocol` (defs.social.*). Codec manual (lista de botões).
+// ID e schema em `protanki-protocol` (defs.social.*). A lib escreve os bytes (list de botões).
 
 export class SocialNetwork extends BasePacket implements SocialTypes.ISocialNetwork {
     socialNetworkParams: Array<Array<String>>;
@@ -14,29 +12,16 @@ export class SocialNetwork extends BasePacket implements SocialTypes.ISocialNetw
         this.socialNetworkParams = socialNetworkParams;
     }
 
+    // Lógica: cada botão é um par [url, label]; o wire é uma list de { url, label }.
     read(buffer: Buffer): void {
-        const reader = new BufferReader(buffer);
-        const socialNetworkParams: Array<Array<String>> = [];
-        const socialNetworkParamsLength = reader.readInt32BE();
-
-        for (let i = 0; i < socialNetworkParamsLength; i++) {
-            const button: Array<String> = [];
-            button.push(reader.readOptionalString() ?? "unknow");
-            button.push(reader.readOptionalString() ?? "unknow");
-            socialNetworkParams.push(button);
-        }
-        this.socialNetworkParams = socialNetworkParams;
+        const { fields } = decodeBody(defs.social.SocialNetwork, buffer);
+        this.socialNetworkParams = fields.socialNetworkParams.map((b) => [b.url ?? "unknow", b.label ?? "unknow"]);
     }
 
     write(): Buffer {
-        const writer = new BufferWriter();
-        writer.writeInt32BE(this.socialNetworkParams.length);
-        for (const button of this.socialNetworkParams) {
-            for (const val of button) {
-                writer.writeOptionalString(val as string);
-            }
-        }
-        return writer.getBuffer();
+        return encodeBody(defs.social.SocialNetwork, {
+            socialNetworkParams: this.socialNetworkParams.map((b) => ({ url: String(b[0]), label: String(b[1]) })),
+        });
     }
 
     static getId(): number { return defs.social.SocialNetwork.id; }

@@ -401,10 +401,10 @@ export class AuthWorkflow {
     }
 
     public static initializeLoginForm(client: GameClient, server: GameServer): void {
-        client.sendPacket(new InviteEnabled(server.getNeedInviteCode()));
+        client.sendPacket(new InviteEnabled({ requireInviteCode: server.getNeedInviteCode() }));
 
         const loginForm = server.getLoginForm();
-        client.sendPacket(new AuthPackets.Registration(loginForm.bgResource, loginForm.enableRequiredEmail, loginForm.maxPasswordLength, loginForm.minPasswordLength));
+        client.sendPacket(new AuthPackets.Registration({ bgResource: loginForm.bgResource, enableRequiredEmail: loginForm.enableRequiredEmail, maxPasswordLength: loginForm.maxPasswordLength, minPasswordLength: loginForm.minPasswordLength }));
 
         client.sendPacket(new HideLoader());
     }
@@ -414,6 +414,6 @@ export class AuthWorkflow {
         client.captchaSolution = captcha.text;
 
         client.sendPacket(new AuthPackets.RecoveryEmailInvalidCode());
-        client.sendPacket(new AuthPackets.Captcha(3, captcha.image));
+        client.sendPacket(new AuthPackets.Captcha({ view: 3, image: captcha.image }));
     }
 }

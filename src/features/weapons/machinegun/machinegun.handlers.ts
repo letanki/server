@@ -95,7 +95,7 @@ export class StartShootingMachinegunCommandHandler implements IPacketHandler<Mac
         client.machinegunHeatTime = 0;
         client.lastMachinegunShot = Date.now();
 
-        const startShootingPacket = new MachinegunPackets.StartShootingMachinegunPacket(user.username);
+        const startShootingPacket = new MachinegunPackets.StartShootingMachinegunPacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) continue;
@@ -177,7 +177,7 @@ export class StopShootingMachinegunCommandHandler implements IPacketHandler<Mach
             logger.warn("StopShootingMachinegunCommandHandler received packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const stopShootingPacket = new MachinegunPackets.StopShootingMachinegunPacket(user.username);
+        const stopShootingPacket = new MachinegunPackets.StopShootingMachinegunPacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) continue;

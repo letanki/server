@@ -74,7 +74,7 @@ export class LobbyWorkflow {
             const hours = Math.floor((timeLeftMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
 
-            client.sendPacket(new Punishment(user.punishmentReason, days, hours, minutes));
+            client.sendPacket(new Punishment({ reason: user.punishmentReason, days, hours, minutes }));
             logger.info(`Punished user ${user.username} attempted to login`, { client: client.getRemoteAddress() });
             return false;
         }
@@ -148,7 +148,7 @@ export class LobbyWorkflow {
         }
 
         client.setState("chat_lobby");
-        client.sendPacket(new SetLayout(0));
+        client.sendPacket(new SetLayout({ layoutId: 0 }));
 
         const resourceIds: ResourceId[] = [];
         const dependencies = { resources: ResourceManager.getBulkResources(resourceIds) };
@@ -166,9 +166,9 @@ export class LobbyWorkflow {
 
     public static enterBattleLobbyView(client: GameClient, server: GameServer): void {
         client.setState("battle_lobby");
-        client.sendPacket(new SetLayout(0));
+        client.sendPacket(new SetLayout({ layoutId: 0 }));
         client.sendPacket(new LoadDependencies({ resources: [] }, CALLBACK.LOBBY_DATA));
-        client.sendPacket(new ConfirmLayoutChange(3, 0));
+        client.sendPacket(new ConfirmLayoutChange({ fromLayout: 3, toLayout: 0 }));
     }
 
     public static transitionFromGarageToLobby(client: GameClient, server: GameServer): void {
@@ -178,9 +178,9 @@ export class LobbyWorkflow {
 
     public static returnToBattleView(client: GameClient, server: GameServer): void {
         client.setState("battle");
-        client.sendPacket(new SetLayout(3));
+        client.sendPacket(new SetLayout({ layoutId: 3 }));
         client.sendPacket(new UnloadBattleListPacket());
-        client.sendPacket(new ConfirmLayoutChange(3, 3));
+        client.sendPacket(new ConfirmLayoutChange({ fromLayout: 3, toLayout: 3 }));
     }
 
     public static async initializeLobby(client: GameClient, server: GameServer): Promise<void> {
@@ -202,7 +202,7 @@ export class LobbyWorkflow {
             await this.sendBattleDetails(client, server, targetBattle);
         }
 
-        client.sendPacket(new ConfirmLayoutChange(0, 0));
+        client.sendPacket(new ConfirmLayoutChange({ fromLayout: 0, toLayout: 0 }));
     }
 
     private static sendPlayerVitals(user: UserDocument, client: GameClient, server: GameServer): void {
@@ -210,7 +210,7 @@ export class LobbyWorkflow {
         if (user.premiumExpiresAt && user.premiumExpiresAt > new Date()) {
             premiumSecondsLeft = Math.round((user.premiumExpiresAt.getTime() - Date.now()) / 1000);
         }
-        client.sendPacket(new PremiumInfo(premiumSecondsLeft));
+        client.sendPacket(new PremiumInfo({ lifeTimeInSeconds: premiumSecondsLeft }));
 
         let crystalAbonementSecondsLeft = 0;
         if (user.crystalAbonementExpiresAt && user.crystalAbonementExpiresAt > new Date()) {
@@ -238,9 +238,9 @@ export class LobbyWorkflow {
         );
 
         const maskedEmail = user.email ? FormatUtils.maskEmail(user.email) : null;
-        client.sendPacket(new EmailInfo(maskedEmail, user.emailConfirmed));
+        client.sendPacket(new EmailInfo({ email: maskedEmail, emailConfirmed: user.emailConfirmed }));
 
-        client.sendPacket(new ReferralInfo(user.referralHash, "s.pro-tanki.com"));
+        client.sendPacket(new ReferralInfo({ hash: user.referralHash, host: "s.pro-tanki.com" }));
     }
 
     private static sendInitialSettings(client: GameClient, server: GameServer): void {
@@ -249,7 +249,7 @@ export class LobbyWorkflow {
         client.sendPacket(new LocalizationInfo(countries, "BR", locationSwitchingEnabled));
 
         const battleInviteSoundId = ResourceManager.getIdlowById("sounds/notifications/battle_invite");
-        client.sendPacket(new LobbyPackets.SetBattleInviteSound(battleInviteSoundId));
+        client.sendPacket(new LobbyPackets.SetBattleInviteSound({ soundIdLow: battleInviteSoundId }));
     }
 
     private static sendAchievementTips(user: UserDocument, client: GameClient): void {
@@ -282,7 +282,7 @@ export class LobbyWorkflow {
             })
         );
 
-        client.sendPacket(new ChatPackets.AntifloodSettings(configService.getChatCharDelayFactor(), configService.getChatMessageBaseDelay()));
+        client.sendPacket(new ChatPackets.AntifloodSettings({ charDelayFactor: configService.getChatCharDelayFactor(), messageBaseDelay: configService.getChatMessageBaseDelay() }));
 
         const historyLimit = configService.getChatHistoryLimit();
         const messages = await server.chatService.getChatHistory(historyLimit);
@@ -307,7 +307,7 @@ export class LobbyWorkflow {
                 }
                 : null,
         }));
-        client.sendPacket(new ChatPackets.ChatHistory(messageData));
+        client.sendPacket(new ChatPackets.ChatHistory({ messages: messageData }));
 
         client.isChatLoaded = true;
     }
@@ -328,7 +328,7 @@ export class LobbyWorkflow {
         });
 
         const jsonData = JSON.stringify(battleData);
-        client.sendPacket(new LobbyPackets.BattleInfo(jsonData));
+        client.sendPacket(new LobbyPackets.BattleInfo({ jsonData }));
     }
 
     /** Builds a single battle's entry for the battle LIST (uses plain username strings — the battle
@@ -374,7 +374,7 @@ export class LobbyWorkflow {
         const battleListPayload = battles.map((battle) => this.buildBattleListEntry(battle));
 
         const jsonData = JSON.stringify({ battles: battleListPayload });
-        client.sendPacket(new LobbyPackets.BattleList(jsonData));
+        client.sendPacket(new LobbyPackets.BattleList({ jsonData }));
     }
 
     public static getMapPreviewResourceId(battle: Battle): number {
@@ -457,6 +457,6 @@ export class LobbyWorkflow {
         }
 
         const jsonData = JSON.stringify(finalPayload);
-        client.sendPacket(new LobbyPackets.BattleDetails(jsonData));
+        client.sendPacket(new LobbyPackets.BattleDetails({ jsonData }));
     }
 }

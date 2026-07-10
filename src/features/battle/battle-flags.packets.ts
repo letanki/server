@@ -1,6 +1,5 @@
 import { BasePacket } from "@/packets/base.packet";
 import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
 import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
 
@@ -18,7 +17,7 @@ export class TakeFlagPacket extends BasePacket implements BattleTypes.ITakeFlag 
 
 export class DropFlagRequestPacket extends BasePacket implements BattleTypes.IDropFlagRequest {
     read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
+    write(): Buffer { return writeSchema(this, defs.battle.DropFlagRequest.schema!); }
     static getId(): number { return defs.battle.DropFlagRequest.id; }
 }
 

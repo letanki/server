@@ -62,7 +62,7 @@ export class MineService {
             owners.add(mine.owner);
         }
         battle.activeMines.clear();
-        for (const owner of owners) battle.broadcast(new RemoveMinesPacket(owner));
+        for (const owner of owners) battle.broadcast(new RemoveMinesPacket({ owner }));
     }
 
     /** Drops a mine at the caller's current position (Mine supply activation). Placements arriving
@@ -90,7 +90,7 @@ export class MineService {
         const id = `${++battle.mineCounter}`;
         const pos = this._snapToGround(client, battle, position);
         battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: pos, armed: false });
-        battle.broadcast(new PutMinePacket(id, pos, user.username));
+        battle.broadcast(new PutMinePacket({ id, position: pos, owner: user.username }));
         // A placed mine always arms after the same short delay — parkour included. Parkour's ONLY mine
         // difference is the reactivation cooldown (0 in parkour, so you can drop another immediately); it
         // does NOT arm instantly. Arming instantly let a freshly-dropped mine trigger before it settled.
@@ -122,7 +122,7 @@ export class MineService {
         const mine = battle.activeMines.get(id);
         if (!mine) return;
         mine.armed = true;
-        battle.broadcast(new ActivateMinePacket(id));
+        battle.broadcast(new ActivateMinePacket({ id }));
     }
 
     /** Per-position check: if an enemy tank is on top of a mine, detonate it. */
@@ -203,7 +203,7 @@ export class MineService {
                 removed = true;
             }
         }
-        if (removed) battle.broadcast(new RemoveMinesPacket(ownerNickname));
+        if (removed) battle.broadcast(new RemoveMinesPacket({ owner: ownerNickname }));
     }
 
     private _detonate(battle: Battle, id: string, victimClient: GameClient): void {
@@ -214,7 +214,7 @@ export class MineService {
         // Explosion: the client plays it and removes the mine. Only the tank that stepped on it takes
         // damage (no area damage), credited to the mine owner so a kill scores for them (falls back to
         // the victim as shooter if the owner is gone, so the death still registers).
-        battle.broadcast(new DetonateMinePacket(id, victimClient.user.username));
+        battle.broadcast(new DetonateMinePacket({ id, victim: victimClient.user.username }));
         const shooter = this.server.findClientByUsername(mine.owner) ?? victimClient;
         // Flat random real-HP roll (wiki 120-240) — applyDamage normalises it per the victim's hull and
         // halves it under Double Armour.

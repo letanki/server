@@ -1,6 +1,15 @@
 import { WEBPANEL } from "@/config/constants";
 import { BasePacket } from "@/packets/base.packet";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { PacketSchema, writeSchema } from "@/packets/packet-schema";
+
+// Wire local (pacote só-do-server; reusa o id/handler do ReferralInfoDetails no cliente):
+// int32 count(0) + optString(config JSON) + 2 slots vazios. A lib escreve os bytes.
+const WEBPANEL_WIRE: PacketSchema = [
+  { name: "count", type: "i32" },
+  { name: "config", type: "string" },
+  { name: "slot1", type: "string" },
+  { name: "slot2", type: "string" },
+];
 
 export interface IWebPanelConfig {
   /** Page to load in the embedded browser (must be reachable by the client). */
@@ -79,12 +88,7 @@ export class OpenWebPanel extends BasePacket {
       pct: this.pct,
       close: this.close,
     });
-    const writer = new BufferWriter();
-    writer.writeInt32BE(0); // referredUsers count (unused)
-    writer.writeOptionalString(config); // JSON config in the first string slot
-    writer.writeOptionalString(""); // unused slot
-    writer.writeOptionalString(""); // unused slot
-    return writer.getBuffer();
+    return writeSchema({ count: 0, config, slot1: "", slot2: "" }, WEBPANEL_WIRE);
   }
 
   static getId(): number {

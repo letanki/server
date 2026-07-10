@@ -14,7 +14,7 @@ export class CreateAccountHandler implements IPacketHandler<AuthPackets.CreateAc
     public readonly packetId = AuthPackets.CreateAccount.getId();
     public async execute(client: GameClient, server: GameServer, packet: AuthPackets.CreateAccount): Promise<void> {
         if (!packet.nickname || !packet.password || packet.nickname.length < 3 || packet.password.length < 3) {
-            client.sendPacket(new SystemMessage("Apelido ou senha inválidos."));
+            client.sendPacket(new SystemMessage({ text: "Apelido ou senha inválidos." }));
             return;
         }
         if (ValidationUtils.isNicknameInappropriate(packet.nickname)) {
@@ -31,15 +31,15 @@ export class CreateAccountHandler implements IPacketHandler<AuthPackets.CreateAc
             const flowHandled = await LobbyWorkflow.postAuthenticationFlow(client, server);
             if (flowHandled && packet.rememberMe) {
                 const token = await server.authService.generateAndSetLoginToken(user);
-                client.sendPacket(new AuthPackets.LoginTokenPacket(token));
+                client.sendPacket(new AuthPackets.LoginTokenPacket({ hash: token }));
             }
         } catch (error: any) {
             logger.warn(`Failed to create account for ${packet.nickname}`, { error: error.message, client: client.getRemoteAddress() });
             if (error.message.includes("already exists")) {
                 const suggestions = await server.userService.generateUsernameSuggestions(packet.nickname);
-                client.sendPacket(new AuthPackets.NicknameUnavailable(suggestions));
+                client.sendPacket(new AuthPackets.NicknameUnavailable({ suggestions }));
             } else {
-                client.sendPacket(new SystemMessage("Ocorreu um erro ao criar a conta.\nTente novamente."));
+                client.sendPacket(new SystemMessage({ text: "Ocorreu um erro ao criar a conta.\nTente novamente." }));
             }
         }
     }
@@ -59,7 +59,7 @@ export class LoginHandler implements IPacketHandler<AuthPackets.Login> {
             const flowHandled = await LobbyWorkflow.postAuthenticationFlow(client, server);
             if (flowHandled && packet.rememberMe) {
                 const token = await server.authService.generateAndSetLoginToken(user);
-                client.sendPacket(new AuthPackets.LoginTokenPacket(token));
+                client.sendPacket(new AuthPackets.LoginTokenPacket({ hash: token }));
             }
         } catch (error: any) {
             logger.warn(`Failed login attempt for username ${packet.username}`, { error: error.message, client: client.getRemoteAddress() });
@@ -72,7 +72,7 @@ export class LoginByTokenHandler implements IPacketHandler<AuthPackets.LoginByTo
     public readonly packetId = AuthPackets.LoginByTokenRequestPacket.getId();
     public async execute(client: GameClient, server: GameServer, packet: AuthPackets.LoginByTokenRequestPacket): Promise<void> {
         if (!packet.hash) {
-            client.sendPacket(new SystemMessage("Token de login inválido."));
+            client.sendPacket(new SystemMessage({ text: "Token de login inválido." }));
             return;
         }
         try {
@@ -103,7 +103,7 @@ export class CheckNicknameAvailableHandler implements IPacketHandler<AuthPackets
             client.sendPacket(new AuthPackets.NicknameAvailable());
         } else {
             const suggestions = await server.userService.generateUsernameSuggestions(packet.nickname);
-            client.sendPacket(new AuthPackets.NicknameUnavailable(suggestions));
+            client.sendPacket(new AuthPackets.NicknameUnavailable({ suggestions }));
         }
     }
 }
@@ -113,7 +113,7 @@ export class RequestCaptchaHandler implements IPacketHandler<AuthPackets.Request
     public execute(client: GameClient, server: GameServer, packet: AuthPackets.RequestCaptcha): void {
         const captcha = generateCaptcha();
         client.captchaSolution = captcha.text;
-        client.sendPacket(new AuthPackets.Captcha(packet.view, captcha.image));
+        client.sendPacket(new AuthPackets.Captcha({ view: packet.view, image: captcha.image }));
     }
 }
 
@@ -121,12 +121,12 @@ export class CaptchaVerifyHandler implements IPacketHandler<AuthPackets.CaptchaV
     public readonly packetId = AuthPackets.CaptchaVerify.getId();
     public execute(client: GameClient, server: GameServer, packet: AuthPackets.CaptchaVerify): void {
         if (packet.solution && client.captchaSolution === packet.solution.toLowerCase()) {
-            client.sendPacket(new AuthPackets.CaptchaIsValid(packet.view));
+            client.sendPacket(new AuthPackets.CaptchaIsValid({ view: packet.view }));
             return;
         }
         const captcha = generateCaptcha();
         client.captchaSolution = captcha.text;
-        client.sendPacket(new AuthPackets.CaptchaIsInvalid(packet.view, captcha.image));
+        client.sendPacket(new AuthPackets.CaptchaIsInvalid({ view: packet.view, image: captcha.image }));
     }
 }
 
@@ -161,7 +161,7 @@ export class RecoveryAccountVerifyCodeHandler implements IPacketHandler<AuthPack
     public readonly packetId = AuthPackets.RecoveryAccountVerifyCode.getId();
     public execute(client: GameClient, server: GameServer, packet: AuthPackets.RecoveryAccountVerifyCode): void {
         if (client.recoveryCode && client.recoveryCode === packet.code) {
-            client.sendPacket(new AuthPackets.GoToRecoveryPassword(client.recoveryEmail));
+            client.sendPacket(new AuthPackets.GoToRecoveryPassword({ email: client.recoveryEmail }));
         } else {
             AuthWorkflow.handleInvalidRecoveryCode(client);
         }

@@ -1,4 +1,4 @@
-import { BattleMode, EquipmentConstraintsMode } from "@/features/battle/battle.model";
+import { BattleMode, EquipmentConstraintsMode, IBattleCreationSettings } from "@/features/battle/battle.model";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -22,7 +22,7 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
         }
 
         try {
-            const battle = server.lobbyService.createBattle(packet, client.user);
+            const battle = server.lobbyService.createBattle(packet as unknown as IBattleCreationSettings, client.user);
 
             // Expire the battle if nobody ever joins it (cancelled on the first join).
             server.battleService.scheduleEmptyRemoval(battle);
@@ -64,7 +64,7 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
                 };
             }
 
-            const responsePacket = new LobbyPackets.CreateBattleResponse(JSON.stringify(finalPayload));
+            const responsePacket = new LobbyPackets.CreateBattleResponse({ jsonData: JSON.stringify(finalPayload) });
             // Private battles must NOT appear in everyone's list — only recipients who are allowed to
             // see it get the card (creator + staff now); invited players / chat-preview clickers get it
             // granted on demand (see Battle.grantViewer / canBeSeenBy).
@@ -122,7 +122,7 @@ export class RequestBattleByLinkHandler implements IPacketHandler<LobbyPackets.R
         // Opening a private battle's preview from a chat link grants list visibility (and pushes the
         // card so it shows up in this player's battle list).
         if (battle.settings.privateBattle && battle.grantViewer(client.user)) {
-            client.sendPacket(new LobbyPackets.CreateBattleResponse(JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle))));
+            client.sendPacket(new LobbyPackets.CreateBattleResponse({ jsonData: JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle)) }));
         }
 
         if (client.getState() === "chat_garage") {
@@ -142,7 +142,7 @@ export class ValidateBattleNameHandler implements IPacketHandler<LobbyPackets.Va
         }
 
         const sanitizedName = server.lobbyService.validateName(packet.name);
-        client.sendPacket(new LobbyPackets.ValidateBattleNameResponse(sanitizedName));
+        client.sendPacket(new LobbyPackets.ValidateBattleNameResponse({ name: sanitizedName }));
     }
 }
 

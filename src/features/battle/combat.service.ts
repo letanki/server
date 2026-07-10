@@ -193,7 +193,7 @@ export class CombatService {
             // newly-finished mission pushes the completion notification.
             const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: KILL_SCORE }).completed;
             await killer.save();
-            killerClient.sendPacket(new ProfilePackets.UpdateScorePacket(killer.experience));
+            killerClient.sendPacket(new ProfilePackets.UpdateScorePacket({ score: killer.experience }));
             if (questCompleted) killerClient.sendPacket(new QuestCompletedNotification());
         }
         this._broadcastUserStat(battle, killerClient, killer);

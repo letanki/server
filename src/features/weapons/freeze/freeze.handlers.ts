@@ -131,7 +131,7 @@ export class StartShootingFreezeCommandHandler implements IPacketHandler<FreezeP
             logger.warn("StartShootingFreezeCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const startShootingPacket = new FreezePackets.StartShootingFreezePacket(user.username);
+        const startShootingPacket = new FreezePackets.StartShootingFreezePacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) {
@@ -153,7 +153,7 @@ export class StopShootingFreezeCommandHandler implements IPacketHandler<FreezePa
             logger.warn("StopShootingFreezeCommandHandler received a packet from a client not in a battle.", { client: client.getRemoteAddress() });
             return;
         }
-        const stopShootingPacket = new FreezePackets.StopShootingFreezePacket(user.username);
+        const stopShootingPacket = new FreezePackets.StopShootingFreezePacket({ nickname: user.username });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {
             if (participant.id === user.id) {

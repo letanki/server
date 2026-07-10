@@ -1,7 +1,6 @@
 import { BasePacket } from "@/packets/base.packet";
 import { readSchema, writeSchema } from "@/packets/packet-schema";
-import { BufferReader } from "@/utils/buffer/buffer.reader";
-import { BufferWriter } from "@/utils/buffer/buffer.writer";
+import { packetClass } from "@/packets/packet-class";
 import { defs } from "protanki-protocol";
 import * as BattleTypes from "./battle.types";
 
@@ -30,12 +29,8 @@ export class BattleChatTeamMessagePacket extends BasePacket implements BattleTyp
     static getId(): number { return defs.battle.BattleChatTeamMessage.id; }
 }
 
-export class EnterBattlePacket extends BasePacket implements BattleTypes.IEnterBattle {
-    battleTeam: number = 0;
-    read(buffer: Buffer): void { this.battleTeam = new BufferReader(buffer).readInt32BE(); }
-    write(): Buffer { return new BufferWriter().writeInt32BE(this.battleTeam).getBuffer(); }
-    static getId(): number { return defs.battle.EnterBattle.id; }
-}
+export const EnterBattlePacket = packetClass(defs.battle.EnterBattle);
+export type EnterBattlePacket = InstanceType<typeof EnterBattlePacket>;
 
 /**
  * Server→client: refuses a battle join because the player's equipment doesn't satisfy the battle's
@@ -43,24 +38,16 @@ export class EnterBattlePacket extends BasePacket implements BattleTypes.IEnterB
  * the battle the player tried to enter; the client keeps the player in the lobby and shows the
  * "equipment not allowed" message. Captured from the official server (id -10847382).
  */
-export class EquipmentNotAllowedPacket extends BasePacket {
-    constructor(private readonly battleId: string | null = null) { super(); }
-    read(): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return defs.battle.EquipmentNotAllowed.id; }
-}
+export const EquipmentNotAllowedPacket = packetClass(defs.battle.EquipmentNotAllowed);
+export type EquipmentNotAllowedPacket = InstanceType<typeof EquipmentNotAllowedPacket>;
 
 /**
  * Server→client: SYSTEM message line in the battle chat (id 606668848, body = optionalString(message)).
  * Confirmed IN-GAME (2026-07-06): renders as a system notice — the right channel for command replies,
  * /broadcast, /msg and any server→player notice while in a battle.
  */
-export class BattleSystemMessagePacket extends BasePacket {
-    constructor(private readonly message: string | null = null) { super(); }
-    read(): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.message).getBuffer(); }
-    static getId(): number { return defs.battle.BattleSystemMessage.id; }
-}
+export const BattleSystemMessagePacket = packetClass(defs.battle.BattleSystemMessage);
+export type BattleSystemMessagePacket = InstanceType<typeof BattleSystemMessagePacket>;
 
 /**
  * Server→client: a SPECTATOR chat line (id 1532749363, body = optionalString(uid) + optionalString
@@ -69,33 +56,17 @@ export class BattleSystemMessagePacket extends BasePacket {
  * system channel (a first read mistook it for one; staff text should use the nickname-null
  * BattleChatMessagePacket instead). Kept for a future spectator-chat rework (see spectator-chat memory).
  */
-export class BattleSpectatorMessagePacket extends BasePacket {
-    constructor(private readonly message: string | null = null, private readonly uid: string | null = "") { super(); }
-    read(): void {}
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.uid).writeOptionalString(this.message).getBuffer(); }
-    static getId(): number { return defs.battle.BattleSpectatorMessage.id; }
-}
+export const BattleSpectatorMessagePacket = packetClass(defs.battle.BattleSpectatorMessage);
+export type BattleSpectatorMessagePacket = InstanceType<typeof BattleSpectatorMessagePacket>;
 
-export class EnterBattleAsSpectatorPacket extends BasePacket implements BattleTypes.IEnterBattleAsSpectator {
-    read(buffer: Buffer): void { }
-    write(): Buffer { return new BufferWriter().getBuffer(); }
-    static getId(): number { return defs.battle.EnterBattleAsSpectator.id; }
-}
+export const EnterBattleAsSpectatorPacket = packetClass(defs.battle.EnterBattleAsSpectator);
+export type EnterBattleAsSpectatorPacket = InstanceType<typeof EnterBattleAsSpectatorPacket>;
 
-export class EquipmentChangedPacket extends BasePacket implements BattleTypes.IEquipmentChanged {
-    nickname: string | null;
-    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
-    read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return defs.battle.EquipmentChanged.id; }
-}
+export const EquipmentChangedPacket = packetClass(defs.battle.EquipmentChanged);
+export type EquipmentChangedPacket = InstanceType<typeof EquipmentChangedPacket>;
 
-export class ExitFromBattlePacket extends BasePacket implements BattleTypes.IExitFromBattle {
-    layout: number = 0;
-    read(buffer: Buffer): void { this.layout = new BufferReader(buffer).readInt32BE(); }
-    write(): Buffer { return new BufferWriter().writeInt32BE(this.layout).getBuffer(); }
-    static getId(): number { return defs.battle.ExitFromBattle.id; }
-}
+export const ExitFromBattlePacket = packetClass(defs.battle.ExitFromBattle);
+export type ExitFromBattlePacket = InstanceType<typeof ExitFromBattlePacket>;
 
 export class SendBattleChatMessagePacket extends BasePacket implements BattleTypes.ISendBattleChatMessage {
     static readonly schema = defs.battle.SendBattleChatMessage.schema!;
@@ -142,13 +113,8 @@ export class UpdateBattleUserTeamPacket extends BasePacket implements BattleType
     static getId(): number { return defs.battle.UpdateBattleUserTeam.id; }
 }
 
-export class UpdateSpectatorListPacket extends BasePacket implements BattleTypes.IUpdateSpectatorList {
-    spectatorList: string | null;
-    constructor(spectatorList: string | null = null) { super(); this.spectatorList = spectatorList; }
-    read(buffer: Buffer): void { this.spectatorList = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.spectatorList).getBuffer(); }
-    static getId(): number { return defs.battle.UpdateSpectatorList.id; }
-}
+export const UpdateSpectatorListPacket = packetClass(defs.battle.UpdateSpectatorList);
+export type UpdateSpectatorListPacket = InstanceType<typeof UpdateSpectatorListPacket>;
 
 export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUserConnectDM {
     static readonly schema = defs.battle.UserConnectDM.schema!;
@@ -175,13 +141,8 @@ export class UserConnectTeamPacket extends BasePacket {
     static getId(): number { return defs.battle.UserConnectTeam.id; }
 }
 
-export class UserDisconnectedDmPacket extends BasePacket implements BattleTypes.IUserDisconnectedDm {
-    nickname: string | null;
-    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
-    read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return defs.battle.UserDisconnectedDm.id; }
-}
+export const UserDisconnectedDmPacket = packetClass(defs.battle.UserDisconnectedDm);
+export type UserDisconnectedDmPacket = InstanceType<typeof UserDisconnectedDmPacket>;
 
 // ===== Battle invite system =====
 
@@ -211,62 +172,30 @@ export class ShowBattleInvitePacket extends BasePacket {
 }
 
 // C->S: invited player declines.
-export class DeclineBattleInvitePacket extends BasePacket {
-    inviterNickname: string | null = null;
-    read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
-    static getId(): number { return defs.battle.DeclineBattleInvite.id; }
-}
+export const DeclineBattleInvitePacket = packetClass(defs.battle.DeclineBattleInvite);
+export type DeclineBattleInvitePacket = InstanceType<typeof DeclineBattleInvitePacket>;
 
 // S->C: tells the inviter their invite was declined (by `targetNickname`).
-export class BattleInviteDeclinedPacket extends BasePacket {
-    targetNickname: string | null;
-    constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
-    read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
-    static getId(): number { return defs.battle.BattleInviteDeclined.id; }
-}
+export const BattleInviteDeclinedPacket = packetClass(defs.battle.BattleInviteDeclined);
+export type BattleInviteDeclinedPacket = InstanceType<typeof BattleInviteDeclinedPacket>;
 
 // C->S: invited player accepts.
-export class AcceptBattleInvitePacket extends BasePacket {
-    inviterNickname: string | null = null;
-    read(buffer: Buffer): void { this.inviterNickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.inviterNickname).getBuffer(); }
-    static getId(): number { return defs.battle.AcceptBattleInvite.id; }
-}
+export const AcceptBattleInvitePacket = packetClass(defs.battle.AcceptBattleInvite);
+export type AcceptBattleInvitePacket = InstanceType<typeof AcceptBattleInvitePacket>;
 
 // S->C: tells the inviter their invite was accepted (by `targetNickname`).
-export class BattleInviteAcceptedPacket extends BasePacket {
-    targetNickname: string | null;
-    constructor(targetNickname: string | null = null) { super(); this.targetNickname = targetNickname; }
-    read(buffer: Buffer): void { this.targetNickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.targetNickname).getBuffer(); }
-    static getId(): number { return defs.battle.BattleInviteAccepted.id; }
-}
+export const BattleInviteAcceptedPacket = packetClass(defs.battle.BattleInviteAccepted);
+export type BattleInviteAcceptedPacket = InstanceType<typeof BattleInviteAcceptedPacket>;
 
 // C->S: invited player asks to enter the battle (handshake before RequestBattleByLink).
-export class RequestBattleEntrancePacket extends BasePacket {
-    battleId: string | null = null;
-    read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return defs.battle.RequestBattleEntrance.id; }
-}
+export const RequestBattleEntrancePacket = packetClass(defs.battle.RequestBattleEntrance);
+export type RequestBattleEntrancePacket = InstanceType<typeof RequestBattleEntrancePacket>;
 
 // S->C: acks the entrance request so the client proceeds to open the battle.
-export class BattleEntranceAckPacket extends BasePacket {
-    battleId: string | null;
-    constructor(battleId: string | null = null) { super(); this.battleId = battleId; }
-    read(buffer: Buffer): void { this.battleId = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.battleId).getBuffer(); }
-    static getId(): number { return defs.battle.BattleEntranceAck.id; }
-}
+export const BattleEntranceAckPacket = packetClass(defs.battle.BattleEntranceAck);
+export type BattleEntranceAckPacket = InstanceType<typeof BattleEntranceAckPacket>;
 
 // Team-battle variant of the "user left battle" notification (removes the player from
 // the existing players' team statistics list / shows "X left"). DM uses -1689876764.
-export class UserDisconnectTeamPacket extends BasePacket {
-    nickname: string | null;
-    constructor(nickname: string | null = null) { super(); this.nickname = nickname; }
-    read(buffer: Buffer): void { this.nickname = new BufferReader(buffer).readOptionalString(); }
-    write(): Buffer { return new BufferWriter().writeOptionalString(this.nickname).getBuffer(); }
-    static getId(): number { return defs.battle.UserDisconnectTeam.id; }
-}
+export const UserDisconnectTeamPacket = packetClass(defs.battle.UserDisconnectTeam);
+export type UserDisconnectTeamPacket = InstanceType<typeof UserDisconnectTeamPacket>;
