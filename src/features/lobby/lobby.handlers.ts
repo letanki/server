@@ -1,4 +1,4 @@
-import { BattleMode, EquipmentConstraintsMode, IBattleCreationSettings } from "@/features/battle/battle.model";
+import { BattleMode, EquipmentConstraintsMode, IBattleCreationSettings, MapTheme } from "@/features/battle/battle.model";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -22,7 +22,42 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
         }
 
         try {
-            const battle = server.lobbyService.createBattle(packet as unknown as IBattleCreationSettings, client.user);
+            // Mapeamento explícito pacote → settings. Os campos do schema chegam como number/string
+            // crus, então coagimos os enums (o wire manda o .value numérico) e a string anulável do
+            // nome/mapa. As opções não enviadas por este pacote do client ficam desligadas (mesmo
+            // comportamento do cast anterior, onde ficavam undefined/falsy) — mas agora type-checado.
+            const settings: IBattleCreationSettings = {
+                name: packet.name ?? "",
+                privateBattle: packet.privateBattle,
+                proBattle: packet.proBattle,
+                battleMode: packet.battleMode as BattleMode,
+                mapId: packet.mapId ?? "",
+                maxPeopleCount: packet.maxPeopleCount,
+                minRank: packet.minRank,
+                maxRank: packet.maxRank,
+                timeLimitInSec: packet.timeLimitInSec,
+                scoreLimit: packet.scoreLimit,
+                autoBalance: packet.autoBalance,
+                friendlyFire: packet.friendlyFire,
+                parkourMode: packet.parkourMode,
+                equipmentConstraintsMode: packet.equipmentConstraintsMode as EquipmentConstraintsMode,
+                reArmorEnabled: packet.reArmorEnabled,
+                mapTheme: packet.mapTheme as MapTheme,
+                withoutBonuses: false,
+                withoutCrystals: false,
+                withoutSupplies: false,
+                withoutUpgrades: false,
+                reducedResistances: false,
+                esportDropTiming: false,
+                withoutGoldBoxes: false,
+                withoutGoldSiren: false,
+                withoutGoldZone: false,
+                withoutMedkit: false,
+                withoutMines: false,
+                randomGold: false,
+                dependentCooldownEnabled: false,
+            };
+            const battle = server.lobbyService.createBattle(settings, client.user);
 
             // Expire the battle if nobody ever joins it (cancelled on the first join).
             server.battleService.scheduleEmptyRemoval(battle);
