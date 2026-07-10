@@ -165,11 +165,11 @@ test("UpdateBattleUserDMPacket round-trips (deaths/kills int16, score int32)", (
 });
 
 test("UserConnectDMPacket round-trips with nested user list", () => {
-    const original = new BattlePackets.UserConnectDMPacket("Danlino", [
+    const original = new BattlePackets.UserConnectDMPacket({ nickname: "Danlino", usersInfo: [
         { ChatModeratorLevel: 0, deaths: 2, kills: 5, rank: 15, score: 300, nickname: "Danlino" },
         { ChatModeratorLevel: 1, deaths: 0, kills: 0, rank: 30, score: 0, nickname: "Dan" },
-    ]);
-    const decoded = new BattlePackets.UserConnectDMPacket(null, []);
+    ] });
+    const decoded = new BattlePackets.UserConnectDMPacket({ nickname: null, usersInfo: [] });
     decoded.read(original.write());
     assert.equal(decoded.nickname, "Danlino");
     assert.equal(decoded.usersInfo.length, 2);
@@ -281,7 +281,7 @@ test("InitBattleUsersDMPacket round-trips (deaths/kills int32, rank uint8)", () 
         { chatModeratorLevel: 0, deaths: 1, kills: 2, rank: 15, score: 100, uid: "Danlino" },
         { chatModeratorLevel: 0, deaths: 0, kills: 0, rank: 30, score: 0, uid: "Dan" },
     ];
-    const original = new BattlePackets.InitBattleUsersDMPacket(users);
+    const original = new BattlePackets.InitBattleUsersDMPacket({ users });
     const decoded = new BattlePackets.InitBattleUsersDMPacket();
     decoded.read(original.write());
     assert.equal(decoded.users.length, 2);

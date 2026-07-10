@@ -29,8 +29,8 @@ export default class SetScoreCommand implements ICommand {
 
         battle.scoreRed = red;
         battle.scoreBlue = blue;
-        battle.broadcast(new SetCtfScorePacket(0, red));
-        battle.broadcast(new SetCtfScorePacket(1, blue));
+        battle.broadcast(new SetCtfScorePacket({ team: 0, score: red }));
+        battle.broadcast(new SetCtfScorePacket({ team: 1, score: blue }));
         context.reply(`Placar definido: vermelho ${red} × ${blue} azul.`);
     }
 }

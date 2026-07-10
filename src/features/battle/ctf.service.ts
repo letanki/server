@@ -115,7 +115,7 @@ export class CtfService {
 
         logger.info(`User ${user.username} took the ${flagTeam} flag in battle ${battle.battleId}`);
 
-        const takeFlagPacket = new TakeFlagPacket(user.username, teamId);
+        const takeFlagPacket = new TakeFlagPacket({ nickname: user.username, team: teamId });
         battle.broadcast(takeFlagPacket);
     }
 
@@ -153,7 +153,7 @@ export class CtfService {
         }
 
         logger.info(`User ${user.username} dropped the ${teamName} flag in battle ${battle.battleId} at ${JSON.stringify(groundPos)}`);
-        battle.broadcast(new DropFlagPacket(groundPos, droppedTeamId));
+        battle.broadcast(new DropFlagPacket({ position: groundPos, team: droppedTeamId }));
 
         battle.timers.set(`flagReturn:${teamName}`, FLAG_RETURN_DELAY_MS, () => this.returnFlagToBase(battle, teamName));
     }
@@ -207,7 +207,7 @@ export class CtfService {
             battle.scoreBlue++;
         }
         const newScore = capturingTeamName === "RED" ? battle.scoreRed : battle.scoreBlue;
-        battle.broadcast(new SetCtfScorePacket(capturingTeamId, newScore));
+        battle.broadcast(new SetCtfScorePacket({ team: capturingTeamId, score: newScore }));
 
         this._resetFlagState(battle, capturedFlagTeam);
 

@@ -69,7 +69,7 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
                     (result.supplyId === "health" && battle?.settings.withoutMedkit);
                 if (battle && !client.isSpectator && !battle.settings.withoutSupplies && !filtered) {
                     if (result.hadSuppliesBefore) {
-                        client.sendPacket(new BattlePackets.UpdateConsumableCountPacket(result.supplyId, result.newCount));
+                        client.sendPacket(new BattlePackets.UpdateConsumableCountPacket({ itemId: result.supplyId, count: result.newCount }));
                     } else {
                         BattleWorkflow.sendConsumables(client, battle);
                     }

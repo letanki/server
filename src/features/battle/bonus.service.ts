@@ -176,7 +176,7 @@ export class BonusService {
     /** Broadcasts the "gold box coming" siren (unless disabled) and schedules the drop 30-50s later. */
     private _goldBoxAnnounce(battle: Battle): void {
         if (!battle.settings.withoutGoldSiren) {
-            battle.broadcast(new GoldBoxComingNotificationPacket(GOLD_BOX_COMING_MESSAGE, ResourceManager.getIdlowById(GOLD_BOX_SIREN_RESOURCE)));
+            battle.broadcast(new GoldBoxComingNotificationPacket({ message: GOLD_BOX_COMING_MESSAGE, sound: ResourceManager.getIdlowById(GOLD_BOX_SIREN_RESOURCE) }));
         }
         const delay = GOLD_BOX_DROP_MIN_MS + Math.floor(Math.random() * (GOLD_BOX_DROP_MAX_MS - GOLD_BOX_DROP_MIN_MS));
         battle.timers.set("goldBoxDrop", delay, () => this._goldBoxDrop(battle));
@@ -359,7 +359,7 @@ export class BonusService {
     public removeBonus(battle: Battle, id: string): void {
         if (!battle.activeBonuses.delete(id)) return;
         battle.timers.clear(`bonus:${id}`);
-        battle.broadcast(new RemoveBonusPacket(id));
+        battle.broadcast(new RemoveBonusPacket({ id }));
     }
 
     /** Client-driven pickup: the client touched a bonus and asked to take it (TakeBonusCommand). We
@@ -379,14 +379,14 @@ export class BonusService {
             }
         }
 
-        battle.broadcast(new TakeBonusPacket(id)); // pickup animation/sound for everyone
+        battle.broadcast(new TakeBonusPacket({ id })); // pickup animation/sound for everyone
         this.removeBonus(battle, id);
         // A collected BUFF region re-drops (fixed 100s in esport, random in default). Crystal/gold don't.
         if (bonus.regionIndex !== undefined && BUFF_DROP_TYPES.has(bonus.type)) {
             this._scheduleBuffRespawn(battle, bonus.regionIndex);
         }
         // Gold box: announce the pickup to the whole battle ("<nick> picked up the gold box").
-        if (bonus.type === "gold") battle.broadcast(new GoldBoxTakenNotificationPacket(client.user.username));
+        if (bonus.type === "gold") battle.broadcast(new GoldBoxTakenNotificationPacket({ nickname: client.user.username }));
         // Metrics: a field drop was picked up (all types — supplies, crystal/gold/special boxes, medkit).
         client.roundStats.suppliesPicked++;
         client.roundStats.suppliesPickedByType[bonus.type] = (client.roundStats.suppliesPickedByType[bonus.type] ?? 0) + 1;

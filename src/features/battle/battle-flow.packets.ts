@@ -68,32 +68,14 @@ export type EquipmentChangedPacket = InstanceType<typeof EquipmentChangedPacket>
 export const ExitFromBattlePacket = packetClass(defs.battle.ExitFromBattle);
 export type ExitFromBattlePacket = InstanceType<typeof ExitFromBattlePacket>;
 
-export class SendBattleChatMessagePacket extends BasePacket implements BattleTypes.ISendBattleChatMessage {
-    static readonly schema = defs.battle.SendBattleChatMessage.schema!;
-    message: string | null; team: boolean;
-    constructor(message: string | null = null, team: boolean = false) { super(); this.message = message; this.team = team; }
-    read(buffer: Buffer): void { readSchema(this, SendBattleChatMessagePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, SendBattleChatMessagePacket.schema); }
-    static getId(): number { return defs.battle.SendBattleChatMessage.id; }
-}
+export const SendBattleChatMessagePacket = packetClass(defs.battle.SendBattleChatMessage);
+export type SendBattleChatMessagePacket = InstanceType<typeof SendBattleChatMessagePacket>;
 
-export class TimeCheckerPacket extends BasePacket implements BattleTypes.ITimeChecker {
-    static readonly schema = defs.battle.TimeChecker.schema!;
-    value1: number; value2: number;
-    constructor(value1: number = 0, value2: number = 0) { super(); this.value1 = value1; this.value2 = value2; }
-    read(buffer: Buffer): void { readSchema(this, TimeCheckerPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, TimeCheckerPacket.schema); }
-    static getId(): number { return defs.battle.TimeChecker.id; }
-}
+export const TimeCheckerPacket = packetClass(defs.battle.TimeChecker);
+export type TimeCheckerPacket = InstanceType<typeof TimeCheckerPacket>;
 
-export class TimeCheckerResponsePacket extends BasePacket implements BattleTypes.ITimeCheckerResponse {
-    static readonly schema = defs.battle.TimeCheckerResponse.schema!;
-    clientTime: number; serverTime: number;
-    constructor(clientTime: number = 0, serverTime: number = 0) { super(); this.clientTime = clientTime; this.serverTime = serverTime; }
-    read(buffer: Buffer): void { readSchema(this, TimeCheckerResponsePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, TimeCheckerResponsePacket.schema); }
-    static getId(): number { return defs.battle.TimeCheckerResponse.id; }
-}
+export const TimeCheckerResponsePacket = packetClass(defs.battle.TimeCheckerResponse);
+export type TimeCheckerResponsePacket = InstanceType<typeof TimeCheckerResponsePacket>;
 
 export class UpdateBattleUserDMPacket extends BasePacket implements BattleTypes.IUpdateBattleUserDM {
     static readonly schema = defs.battle.UpdateBattleUserDM.schema!;
@@ -116,14 +98,8 @@ export class UpdateBattleUserTeamPacket extends BasePacket implements BattleType
 export const UpdateSpectatorListPacket = packetClass(defs.battle.UpdateSpectatorList);
 export type UpdateSpectatorListPacket = InstanceType<typeof UpdateSpectatorListPacket>;
 
-export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUserConnectDM {
-    static readonly schema = defs.battle.UserConnectDM.schema!;
-    nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[];
-    constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[]) { super(); this.nickname = nickname; this.usersInfo = usersInfo; }
-    read(buffer: Buffer): void { readSchema(this, UserConnectDMPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, UserConnectDMPacket.schema); }
-    static getId(): number { return defs.battle.UserConnectDM.id; }
-}
+export const UserConnectDMPacket = packetClass(defs.battle.UserConnectDM);
+export type UserConnectDMPacket = InstanceType<typeof UserConnectDMPacket>;
 
 // Team-battle variant of UserConnectDM: registers a joining player (and the user list)
 // in the existing players' team statistics model. Identical to the DM packet plus a
@@ -132,14 +108,8 @@ export class UserConnectDMPacket extends BasePacket implements BattleTypes.IUser
 // team). `usersInfo` is the joiner's whole team column (entries have NO per-entry team); the client
 // rebuilds that team's column from it. (A per-entry team only coincides for a 1-entry list and
 // corrupts 2+ entries → the same-team join bug.)
-export class UserConnectTeamPacket extends BasePacket {
-    static readonly schema = defs.battle.UserConnectTeam.schema!;
-    nickname: string | null; usersInfo: BattleTypes.IBattleUserInfo[]; team: number;
-    constructor(nickname: string | null, usersInfo: BattleTypes.IBattleUserInfo[], team: number = 0) { super(); this.nickname = nickname; this.usersInfo = usersInfo; this.team = team; }
-    read(buffer: Buffer): void { readSchema(this, UserConnectTeamPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, UserConnectTeamPacket.schema); }
-    static getId(): number { return defs.battle.UserConnectTeam.id; }
-}
+export const UserConnectTeamPacket = packetClass(defs.battle.UserConnectTeam);
+export type UserConnectTeamPacket = InstanceType<typeof UserConnectTeamPacket>;
 
 export const UserDisconnectedDmPacket = packetClass(defs.battle.UserDisconnectedDm);
 export type UserDisconnectedDmPacket = InstanceType<typeof UserDisconnectedDmPacket>;
@@ -147,29 +117,12 @@ export type UserDisconnectedDmPacket = InstanceType<typeof UserDisconnectedDmPac
 // ===== Battle invite system =====
 
 // C->S: a player invites another to their battle.
-export class SendBattleInvitePacket extends BasePacket {
-    static readonly schema = defs.battle.SendBattleInvite.schema!;
-    targetNickname: string | null = null;
-    battleId: string | null = null;
-    read(buffer: Buffer): void { readSchema(this, SendBattleInvitePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, SendBattleInvitePacket.schema); }
-    static getId(): number { return defs.battle.SendBattleInvite.id; }
-}
+export const SendBattleInvitePacket = packetClass(defs.battle.SendBattleInvite);
+export type SendBattleInvitePacket = InstanceType<typeof SendBattleInvitePacket>;
 
 // S->C: the invite popup shown to the invited player.
-export class ShowBattleInvitePacket extends BasePacket {
-    static readonly schema = defs.battle.ShowBattleInvite.schema!;
-    inviterNickname: string | null = null;
-    flag1 = false; flag2 = false;
-    battleId: string | null = null;
-    battleName: string | null = null;
-    battleMode = 0;
-    flag3 = false; flag4 = false;
-    constructor(data?: Partial<ShowBattleInvitePacket>) { super(); if (data) Object.assign(this, data); }
-    read(buffer: Buffer): void { readSchema(this, ShowBattleInvitePacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ShowBattleInvitePacket.schema); }
-    static getId(): number { return defs.battle.ShowBattleInvite.id; }
-}
+export const ShowBattleInvitePacket = packetClass(defs.battle.ShowBattleInvite);
+export type ShowBattleInvitePacket = InstanceType<typeof ShowBattleInvitePacket>;
 
 // C->S: invited player declines.
 export const DeclineBattleInvitePacket = packetClass(defs.battle.DeclineBattleInvite);

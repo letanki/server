@@ -462,7 +462,7 @@ export class GameClient {
 
     // Report the most recent round-trip directly — no smoothing/min-of-history — so the
     // displayed ping reflects the real current latency, including event-loop backlog.
-    this.sendPacket(new TimeCheckerPacket(serverTime, this.lastTimeCheckPing));
+    this.sendPacket(new TimeCheckerPacket({ value1: serverTime, value2: this.lastTimeCheckPing }));
   }
 
   public handleTimeCheckerResponse(clientTime: number, serverTime: number): void {

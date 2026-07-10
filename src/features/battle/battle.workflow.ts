@@ -399,8 +399,8 @@ export class BattleWorkflow {
      *  the client leaves it lying detached on the ground. RED = team 0, BLUE = team 1 (as in CtfService). */
     private static _sendCarriedFlagAttachments(client: GameClient, battle: Battle): void {
         if (battle.settings.battleMode !== BattleMode.CTF) return;
-        if (battle.flagCarrierRed) client.sendPacket(new BattlePackets.TakeFlagPacket(battle.flagCarrierRed.username, 0));
-        if (battle.flagCarrierBlue) client.sendPacket(new BattlePackets.TakeFlagPacket(battle.flagCarrierBlue.username, 1));
+        if (battle.flagCarrierRed) client.sendPacket(new BattlePackets.TakeFlagPacket({ nickname: battle.flagCarrierRed.username, team: 0 }));
+        if (battle.flagCarrierBlue) client.sendPacket(new BattlePackets.TakeFlagPacket({ nickname: battle.flagCarrierBlue.username, team: 1 }));
     }
 
     private static _sendCommonBattleData(client: GameClient, server: GameServer, battle: Battle): void {
@@ -583,12 +583,12 @@ export class BattleWorkflow {
             const onlineUsersRed = battle.usersRed.filter((u: UserDocument) => server.findClientByUsername(u.username));
             const usersBlue = onlineUsersBlue.map(this.mapUserToBattleUser);
             const usersRed = onlineUsersRed.map(this.mapUserToBattleUser);
-            client.sendPacket(new BattlePackets.InitBattleUsersTeamPacket(battle.scoreBlue, battle.scoreRed, usersBlue, usersRed));
+            client.sendPacket(new BattlePackets.InitBattleUsersTeamPacket({ scoreBlue: battle.scoreBlue, scoreRed: battle.scoreRed, usersBlue, usersRed }));
         } else {
             client.sendPacket(new BattlePackets.InitBattleDMPacket());
             const onlineUsers = battle.users.filter((u: UserDocument) => server.findClientByUsername(u.username));
             const users = onlineUsers.map(this.mapUserToBattleUser);
-            client.sendPacket(new BattlePackets.InitBattleUsersDMPacket(users));
+            client.sendPacket(new BattlePackets.InitBattleUsersDMPacket({ users }));
         }
 
         client.sendPacket(new BattlePackets.InitializeBattleStatisticsPacket());
@@ -659,13 +659,13 @@ export class BattleWorkflow {
             const usersInfoForPacket: IBattleUserInfo[] = teamMembers.map((p) => ({
                 ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
             }));
-            userConnectPacket = new BattlePackets.UserConnectTeamPacket(user.username, usersInfoForPacket, team);
+            userConnectPacket = new BattlePackets.UserConnectTeamPacket({ nickname: user.username, usersInfo: usersInfoForPacket, team });
         } else {
             // DM: the client rebuilds its whole array, so include every known player.
             const usersInfoForPacket: IBattleUserInfo[] = [...battle.users, ...battle.usersBlue, ...battle.usersRed].filter(known).map((p) => ({
                 ChatModeratorLevel: p.chatModeratorLevel, deaths: 0, kills: 0, rank: p.rank, score: 0, nickname: p.username,
             }));
-            userConnectPacket = new BattlePackets.UserConnectDMPacket(user.username, usersInfoForPacket);
+            userConnectPacket = new BattlePackets.UserConnectDMPacket({ nickname: user.username, usersInfo: usersInfoForPacket });
         }
 
         for (const existingClient of establishedClients) {

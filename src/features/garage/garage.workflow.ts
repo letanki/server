@@ -114,7 +114,7 @@ export class GarageWorkflow {
             // Destroying the tank to respawn with new equipment also counts as a death.
             server.battleService.registerSuicideDeath(client.currentBattle, client);
 
-            const destructionPacket = new ConfirmDestructionPacket(client.user!.username, 3000);
+            const destructionPacket = new ConfirmDestructionPacket({ nickname: client.user!.username, delaytoSpawn: 3000 });
             const battle = client.currentBattle;
             const allPlayers = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
             allPlayers.forEach((player) => {

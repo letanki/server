@@ -48,13 +48,13 @@ export class DominationService {
             point.score = 0;
             point.scoreChangeRate = 0;
             point.tanksOnPoint = [];
-            battle.broadcast(new PointStateChangedPacket(point.id, STATE_NEUTRAL));
-            battle.broadcast(new PointScoreChangedPacket(point.id, 0, 0));
+            battle.broadcast(new PointStateChangedPacket({ pointId: point.id, state: STATE_NEUTRAL }));
+            battle.broadcast(new PointScoreChangedPacket({ pointId: point.id, score: 0, scoreChangeRate: 0 }));
         }
         battle.scoreRed = 0;
         battle.scoreBlue = 0;
-        battle.broadcast(new SetCtfScorePacket(STATE_RED, 0));
-        battle.broadcast(new SetCtfScorePacket(STATE_BLUE, 0));
+        battle.broadcast(new SetCtfScorePacket({ team: STATE_RED, score: 0 }));
+        battle.broadcast(new SetCtfScorePacket({ team: STATE_BLUE, score: 0 }));
     }
 
     /** Awards +1 to each owned point's team, broadcasts the team scores, and ends the round on the limit. */
@@ -65,8 +65,8 @@ export class DominationService {
             if (point.state === STATE_RED) redGained++;
             else if (point.state === STATE_BLUE) blueGained++;
         }
-        if (redGained > 0) { battle.scoreRed += redGained; battle.broadcast(new SetCtfScorePacket(STATE_RED, battle.scoreRed)); }
-        if (blueGained > 0) { battle.scoreBlue += blueGained; battle.broadcast(new SetCtfScorePacket(STATE_BLUE, battle.scoreBlue)); }
+        if (redGained > 0) { battle.scoreRed += redGained; battle.broadcast(new SetCtfScorePacket({ team: STATE_RED, score: battle.scoreRed })); }
+        if (blueGained > 0) { battle.scoreBlue += blueGained; battle.broadcast(new SetCtfScorePacket({ team: STATE_BLUE, score: battle.scoreBlue })); }
 
         const limit = battle.settings.scoreLimit;
         if (limit > 0 && (battle.scoreRed >= limit || battle.scoreBlue >= limit)) {
@@ -86,10 +86,10 @@ export class DominationService {
             const idx = point.tanksOnPoint.findIndex((u) => u.id === user.id);
             if (within && idx === -1) {
                 point.tanksOnPoint.push(user);
-                battle.broadcast(new PointTankEnteredPacket(point.id, user.username));
+                battle.broadcast(new PointTankEnteredPacket({ pointId: point.id, nickname: user.username }));
             } else if (!within && idx !== -1) {
                 point.tanksOnPoint.splice(idx, 1);
-                battle.broadcast(new PointTankLeftPacket(point.id, user.username));
+                battle.broadcast(new PointTankLeftPacket({ pointId: point.id, nickname: user.username }));
             }
         }
     }
@@ -100,7 +100,7 @@ export class DominationService {
             const idx = point.tanksOnPoint.findIndex((u) => u.username === username);
             if (idx !== -1) {
                 point.tanksOnPoint.splice(idx, 1);
-                battle.broadcast(new PointTankLeftPacket(point.id, username));
+                battle.broadcast(new PointTankLeftPacket({ pointId: point.id, nickname: username }));
             }
         }
     }
@@ -155,7 +155,7 @@ export class DominationService {
         else if (prev > 0 && point.score <= 0) newState = STATE_NEUTRAL;
         if (newState !== point.state) {
             point.state = newState as 0 | 1 | 2;
-            battle.broadcast(new PointStateChangedPacket(point.id, point.state));
+            battle.broadcast(new PointStateChangedPacket({ pointId: point.id, state: point.state }));
         }
 
         // The client extrapolates the bar from the last (score, rate), so only re-send when the rate
@@ -165,12 +165,12 @@ export class DominationService {
             // Capture start/stop sounds: fire when the meter starts or stops moving, tagged with the
             // team it's moving toward (negative = red, positive = blue).
             if (point.scoreChangeRate === 0 && broadcastRate !== 0) {
-                battle.broadcast(new PointCaptureStartedPacket(broadcastRate < 0 ? STATE_RED : STATE_BLUE));
+                battle.broadcast(new PointCaptureStartedPacket({ team: broadcastRate < 0 ? STATE_RED : STATE_BLUE }));
             } else if (point.scoreChangeRate !== 0 && broadcastRate === 0) {
-                battle.broadcast(new PointCaptureStoppedPacket(point.scoreChangeRate < 0 ? STATE_RED : STATE_BLUE));
+                battle.broadcast(new PointCaptureStoppedPacket({ team: point.scoreChangeRate < 0 ? STATE_RED : STATE_BLUE }));
             }
             point.scoreChangeRate = broadcastRate;
-            battle.broadcast(new PointScoreChangedPacket(point.id, point.score, broadcastRate));
+            battle.broadcast(new PointScoreChangedPacket({ pointId: point.id, score: point.score, scoreChangeRate: broadcastRate }));
         }
     }
 

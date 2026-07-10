@@ -177,7 +177,7 @@ export class CombatService {
         SupplyService.stopHealing(victimClient); // a death cancels any in-progress repair-kit regen
 
         // Kill notice (victim, killer, respawn delay) — drives the death on every client.
-        battle.broadcast(new KillPacket(victim.username, killer.username, KILL_RESPAWN_MS));
+        battle.broadcast(new KillPacket({ victim: victim.username, killer: killer.username, respawnDelayMs: KILL_RESPAWN_MS }));
 
         // Scoreboard: victim +1 death, killer +1 kill and score.
         victimClient.deaths++;

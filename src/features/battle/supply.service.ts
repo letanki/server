@@ -65,14 +65,14 @@ export class SupplyService {
         const endAt = Date.now() + durationMs;
         client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== slotId);
         client.activeEffects.push({ itemIndex: slotId, durationTime: durationMs, endAt });
-        battle.broadcast(new EffectStartedPacket(user.username, slotId, durationMs, 0));
+        battle.broadcast(new EffectStartedPacket({ nickname: user.username, effectType: slotId, durationMs, unknown: 0 }));
         setTimeout(() => {
             if (client.isDestroyed) return;
             const cur = client.activeEffects.find((e) => e.itemIndex === slotId);
             if (cur && cur.endAt !== endAt) return; // superseded by a re-activation
             client.activeEffects = client.activeEffects.filter((e) => e.itemIndex !== slotId);
             if (client.currentBattle !== battle || client.battleState !== "active") return;
-            battle.broadcast(new EffectStoppedPacket(user.username, slotId));
+            battle.broadcast(new EffectStoppedPacket({ nickname: user.username, effectType: slotId }));
             onEnd?.();
         }, durationMs);
     }
@@ -117,7 +117,7 @@ export class SupplyService {
         // otherwise it's the given nominal time (drop medkit) or the real heal time to deliver the budget.
         const ticks = Math.ceil(Math.min(10000 - client.currentHealth, budgetNormalized) / stepNormalized);
         const durationMs = parkour ? tickLimit * HEAL_TICK_MS : (effectDurationMs ?? ticks * HEAL_TICK_MS);
-        battle.broadcast(new EffectStartedPacket(user.username, SUPPLY_SLOT.HEALTH, durationMs, 0));
+        battle.broadcast(new EffectStartedPacket({ nickname: user.username, effectType: SUPPLY_SLOT.HEALTH, durationMs, unknown: 0 }));
 
         client.healTimer = setInterval(() => {
             if (client.isDestroyed || client.currentBattle !== battle || client.battleState !== "active") {
@@ -164,7 +164,7 @@ export class SupplyService {
         clearInterval(client.healTimer);
         client.healTimer = null;
         if (client.user && client.currentBattle) {
-            client.currentBattle.broadcast(new EffectStoppedPacket(client.user.username, SUPPLY_SLOT.HEALTH));
+            client.currentBattle.broadcast(new EffectStoppedPacket({ nickname: client.user.username, effectType: SUPPLY_SLOT.HEALTH }));
         }
     }
 

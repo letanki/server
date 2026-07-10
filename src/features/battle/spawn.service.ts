@@ -90,6 +90,6 @@ export class SpawnService {
         const spawnPoint = this.getSpawnPoint(battle, teamType);
         const finalSpawnPosition = { x: spawnPoint.position.x, y: spawnPoint.position.y, z: spawnPoint.position.z + 200 };
         client.pendingSpawnPoint = { position: finalSpawnPosition, rotation: spawnPoint.rotation };
-        client.sendPacket(new PrepareToSpawnPacket(finalSpawnPosition, spawnPoint.rotation));
+        client.sendPacket(new PrepareToSpawnPacket({ position: finalSpawnPosition, rotation: spawnPoint.rotation }));
     }
 }

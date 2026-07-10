@@ -166,7 +166,7 @@ export class BattleService {
         client.battleIncarnation++;
         this.registerSuicideDeath(battle, client);
 
-        const destroyPacket = new DestroyTankPacket(user.username, 3000);
+        const destroyPacket = new DestroyTankPacket({ nickname: user.username, readyToSpawnInMs: 3000 });
         for (const p of battle.getAllParticipants()) {
             const pc = this.server.findClientByUsername(p.username);
             if (pc && pc.currentBattle?.battleId === battle.battleId) pc.sendPacket(destroyPacket);
@@ -260,7 +260,7 @@ export class BattleService {
             // Falling into the void destroys the tank — counts as a death on the scoreboard.
             this.registerSuicideDeath(currentBattle, client);
 
-            const destroyPacket = new DestroyTankPacket(user.username, 3000);
+            const destroyPacket = new DestroyTankPacket({ nickname: user.username, readyToSpawnInMs: 3000 });
 
             const allParticipants = currentBattle.getAllParticipants();
             allParticipants.forEach((p: UserDocument) => {

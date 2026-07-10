@@ -109,7 +109,7 @@ export class RoundService {
         // Active supply effects clear on every tank.
         for (const c of battle.clients) {
             if (!c.user) continue;
-            for (const e of c.activeEffects) battle.broadcast(new EffectStoppedPacket(c.user.username, e.itemIndex));
+            for (const e of c.activeEffects) battle.broadcast(new EffectStoppedPacket({ nickname: c.user.username, effectType: e.itemIndex }));
             c.activeEffects = [];
             SupplyService.stopHealing(c);
         }
@@ -159,8 +159,8 @@ export class RoundService {
         if (battle.settings.battleMode === BattleMode.CTF) {
             this.ctf.returnFlagToBase(battle, "RED");
             this.ctf.returnFlagToBase(battle, "BLUE");
-            battle.broadcast(new SetCtfScorePacket(0, 0));
-            battle.broadcast(new SetCtfScorePacket(1, 0));
+            battle.broadcast(new SetCtfScorePacket({ team: 0, score: 0 }));
+            battle.broadcast(new SetCtfScorePacket({ team: 1, score: 0 }));
         }
 
         // Rebuild the scoreboard rosters with reset stats + the new team assignment.

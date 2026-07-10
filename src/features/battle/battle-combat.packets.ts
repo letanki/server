@@ -37,45 +37,21 @@ export class ActivatedSupplyPacket extends BasePacket {
 // S->C: updates a single consumable's count in the in-battle supply panel after a garage purchase
 // (e.g. bought more mines mid-battle). Body = optionalString(base supply id, e.g. "mine") + i32(new
 // total count).
-export class UpdateConsumableCountPacket extends BasePacket {
-    static readonly schema = defs.battle.UpdateConsumableCount.schema!;
-    itemId: string | null; count: number;
-    constructor(itemId: string | null = null, count: number = 0) { super(); this.itemId = itemId; this.count = count; }
-    read(buffer: Buffer): void { readSchema(this, UpdateConsumableCountPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, UpdateConsumableCountPacket.schema); }
-    static getId(): number { return defs.battle.UpdateConsumableCount.id; }
-}
+export const UpdateConsumableCountPacket = packetClass(defs.battle.UpdateConsumableCount);
+export type UpdateConsumableCountPacket = InstanceType<typeof UpdateConsumableCountPacket>;
 
 // S->C (broadcast): a supply effect started on a tank, so every client renders it. `effectType`
 // is the supply slotId (armor=2, double_damage=3, n2o=4, mine=5), `durationMs` is effectTime*1000.
-export class EffectStartedPacket extends BasePacket {
-    static readonly schema = defs.battle.EffectStarted.schema!;
-    nickname: string | null; effectType: number; durationMs: number; unknown: number;
-    constructor(nickname: string | null = null, effectType: number = 0, durationMs: number = 0, unknown: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; this.durationMs = durationMs; this.unknown = unknown; }
-    read(buffer: Buffer): void { readSchema(this, EffectStartedPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, EffectStartedPacket.schema); }
-    static getId(): number { return defs.battle.EffectStarted.id; }
-}
+export const EffectStartedPacket = packetClass(defs.battle.EffectStarted);
+export type EffectStartedPacket = InstanceType<typeof EffectStartedPacket>;
 
 // S->C (broadcast): a supply effect ended on a tank, so every client removes its visual. Sent at
 // the end of the effect duration, right before the spec is reverted (for movement effects).
-export class EffectStoppedPacket extends BasePacket {
-    static readonly schema = defs.battle.EffectStopped.schema!;
-    nickname: string | null; effectType: number;
-    constructor(nickname: string | null = null, effectType: number = 0) { super(); this.nickname = nickname; this.effectType = effectType; }
-    read(buffer: Buffer): void { readSchema(this, EffectStoppedPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, EffectStoppedPacket.schema); }
-    static getId(): number { return defs.battle.EffectStopped.id; }
-}
+export const EffectStoppedPacket = packetClass(defs.battle.EffectStopped);
+export type EffectStoppedPacket = InstanceType<typeof EffectStoppedPacket>;
 
-export class ConfirmDestructionPacket extends BasePacket implements BattleTypes.IConfirmDestruction {
-    static readonly schema = defs.battle.ConfirmDestruction.schema!;
-    nickname: string | null; delaytoSpawn: number;
-    constructor(nickname: string | null = null, delaytoSpawn: number = 0) { super(); this.nickname = nickname; this.delaytoSpawn = delaytoSpawn; }
-    read(buffer: Buffer): void { readSchema(this, ConfirmDestructionPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, ConfirmDestructionPacket.schema); }
-    static getId(): number { return defs.battle.ConfirmDestruction.id; }
-}
+export const ConfirmDestructionPacket = packetClass(defs.battle.ConfirmDestruction);
+export type ConfirmDestructionPacket = InstanceType<typeof ConfirmDestructionPacket>;
 
 // S->C (broadcast): floating damage number on a tank. count is always 1 here. damageType drives the
 // number's colour in the client: 0 = normal (white), 1 = critical (yellow), 2 = fatal/kill (red),
@@ -90,23 +66,11 @@ export class DamageIndicatorPacket extends BasePacket {
 }
 
 // S->C (broadcast): a tank was killed — victim, killer, and respawn delay (ms).
-export class KillPacket extends BasePacket {
-    static readonly schema = defs.battle.Kill.schema!;
-    victim: string | null; killer: string | null; respawnDelayMs: number;
-    constructor(victim: string | null = null, killer: string | null = null, respawnDelayMs: number = 3000) { super(); this.victim = victim; this.killer = killer; this.respawnDelayMs = respawnDelayMs; }
-    read(buffer: Buffer): void { readSchema(this, KillPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, KillPacket.schema); }
-    static getId(): number { return defs.battle.Kill.id; }
-}
+export const KillPacket = packetClass(defs.battle.Kill);
+export type KillPacket = InstanceType<typeof KillPacket>;
 
-export class DestroyTankPacket extends BasePacket implements BattleTypes.IDestroyTankPacket {
-    static readonly schema = defs.battle.DestroyTank.schema!;
-    nickname: string | null; readyToSpawnInMs: number;
-    constructor(nickname: string | null = null, readyToSpawnInMs: number = 0) { super(); this.nickname = nickname; this.readyToSpawnInMs = readyToSpawnInMs; }
-    read(buffer: Buffer): void { readSchema(this, DestroyTankPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, DestroyTankPacket.schema); }
-    static getId(): number { return defs.battle.DestroyTank.id; }
-}
+export const DestroyTankPacket = packetClass(defs.battle.DestroyTank);
+export type DestroyTankPacket = InstanceType<typeof DestroyTankPacket>;
 
 export class FullMoveCommandPacket extends BasePacket implements BattleTypes.IFullMoveCommand {
     static readonly codec = compileCodec(defs.battle.FullMoveCommand.schema!);
@@ -154,32 +118,15 @@ export class MovePacket extends BasePacket implements BattleTypes.IMovePacket {
 // C->S: the tank's input/control state (pressed-keys bitmask). Other clients simulate the
 // tank's physics from this; without relaying it (especially the key-release), remote tanks
 // keep moving/spinning. `control` is the bitmask; the other two are client timing fields.
-export class MovementControlCommandPacket extends BasePacket {
-    static readonly schema = defs.battle.MovementControlCommand.schema!;
-    throttleTime = 0; turnControl = 0; control = 0;
-    read(buffer: Buffer): void { readSchema(this, MovementControlCommandPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, MovementControlCommandPacket.schema); }
-    static getId(): number { return defs.battle.MovementControlCommand.id; }
-}
+export const MovementControlCommandPacket = packetClass(defs.battle.MovementControlCommand);
+export type MovementControlCommandPacket = InstanceType<typeof MovementControlCommandPacket>;
 
 // S->C: relays a tank's control state to the other players in the battle.
-export class MovementControlPacket extends BasePacket {
-    static readonly schema = defs.battle.MovementControl.schema!;
-    nickname: string | null = null; control = 0;
-    constructor(data?: Partial<MovementControlPacket>) { super(); if (data) Object.assign(this, data); }
-    read(buffer: Buffer): void { readSchema(this, MovementControlPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, MovementControlPacket.schema); }
-    static getId(): number { return defs.battle.MovementControl.id; }
-}
+export const MovementControlPacket = packetClass(defs.battle.MovementControl);
+export type MovementControlPacket = InstanceType<typeof MovementControlPacket>;
 
-export class PrepareToSpawnPacket extends BasePacket implements BattleTypes.IPrepareToSpawn {
-    static readonly schema = defs.battle.PrepareToSpawn.schema!;
-    position: BattleTypes.IVector3 | null; rotation: BattleTypes.IVector3 | null;
-    constructor(position: BattleTypes.IVector3 | null = null, rotation: BattleTypes.IVector3 | null = null) { super(); this.position = position; this.rotation = rotation; }
-    read(buffer: Buffer): void { readSchema(this, PrepareToSpawnPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, PrepareToSpawnPacket.schema); }
-    static getId(): number { return defs.battle.PrepareToSpawn.id; }
-}
+export const PrepareToSpawnPacket = packetClass(defs.battle.PrepareToSpawn);
+export type PrepareToSpawnPacket = InstanceType<typeof PrepareToSpawnPacket>;
 
 export class ReadyToActivatePacket extends BasePacket implements BattleTypes.IReadyToActivate {
     read(buffer: Buffer): void { }
@@ -211,44 +158,22 @@ export class DisablePausePacket extends BasePacket {
 export const RemoveTankPacket = packetClass(defs.battle.RemoveTank);
 export type RemoveTankPacket = InstanceType<typeof RemoveTankPacket>;
 
-export class RotateTurretCommandPacket extends BasePacket implements BattleTypes.IRotateTurretCommand {
-    static readonly schema = defs.battle.RotateTurretCommand.schema!;
-    clientTime: number = 0; angle: number = 0; control: number = 0; incarnation: number = 0;
-    read(buffer: Buffer): void { readSchema(this, RotateTurretCommandPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, RotateTurretCommandPacket.schema); }
-    static getId(): number { return defs.battle.RotateTurretCommand.id; }
-}
+export const RotateTurretCommandPacket = packetClass(defs.battle.RotateTurretCommand);
+export type RotateTurretCommandPacket = InstanceType<typeof RotateTurretCommandPacket>;
 
-export class TurretRotationPacket extends BasePacket implements BattleTypes.IRotateTurretPacket {
-    static readonly schema = defs.battle.TurretRotation.schema!;
-    nickname: string | null = null; angle: number = 0; control: number = 0;
-    constructor(data: BattleTypes.IRotateTurretPacketData) { super(); Object.assign(this, data); }
-    read(buffer: Buffer): void { readSchema(this, TurretRotationPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, TurretRotationPacket.schema); }
-    static getId(): number { return defs.battle.TurretRotation.id; }
-}
+export const TurretRotationPacket = packetClass(defs.battle.TurretRotation);
+export type TurretRotationPacket = InstanceType<typeof TurretRotationPacket>;
 
 // C->S: the continuous turret-direction stream (bare angle, no control). The client sends this every
 // frame while the turret turns, IN ADDITION to the discrete RotateTurretCommand (start/stop). Without
 // relaying it, remote turrets only update on the sparse control commands → jerky/stuck aim on others.
-export class TurretDirectionCommandPacket extends BasePacket {
-    static readonly schema = defs.battle.TurretDirectionCommand.schema!;
-    angle: number = 0;
-    read(buffer: Buffer): void { readSchema(this, TurretDirectionCommandPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, TurretDirectionCommandPacket.schema); }
-    static getId(): number { return defs.battle.TurretDirectionCommand.id; }
-}
+export const TurretDirectionCommandPacket = packetClass(defs.battle.TurretDirectionCommand);
+export type TurretDirectionCommandPacket = InstanceType<typeof TurretDirectionCommandPacket>;
 
 // S->C: relays the continuous turret direction to the other players (nickname + angle). Pairs with
 // TurretDirectionCommandPacket, exactly like TurretRotationPacket pairs with RotateTurretCommandPacket.
-export class TurretDirectionPacket extends BasePacket {
-    static readonly schema = defs.battle.TurretDirection.schema!;
-    nickname: string | null = null; angle: number = 0;
-    constructor(data?: Partial<TurretDirectionPacket>) { super(); if (data) Object.assign(this, data); }
-    read(buffer: Buffer): void { readSchema(this, TurretDirectionPacket.schema, buffer); }
-    write(): Buffer { return writeSchema(this, TurretDirectionPacket.schema); }
-    static getId(): number { return defs.battle.TurretDirection.id; }
-}
+export const TurretDirectionPacket = packetClass(defs.battle.TurretDirection);
+export type TurretDirectionPacket = InstanceType<typeof TurretDirectionPacket>;
 
 export const SelfDestructScheduledPacket = packetClass(defs.battle.SelfDestructScheduled);
 export type SelfDestructScheduledPacket = InstanceType<typeof SelfDestructScheduledPacket>;

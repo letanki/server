@@ -489,7 +489,7 @@ export class SuicidePacketHandler implements IPacketHandler<BattlePackets.Suicid
 
             server.battleService.dropFlag(user, currentBattle, client.battlePosition);
 
-            const destroyPacket = new BattlePackets.DestroyTankPacket(user.username, 3000);
+            const destroyPacket = new BattlePackets.DestroyTankPacket({ nickname: user.username, readyToSpawnInMs: 3000 });
             const allParticipants = currentBattle.getAllParticipants();
             allParticipants.forEach((participant: UserDocument) => {
                 const participantClient = server.findClientByUsername(participant.username);
