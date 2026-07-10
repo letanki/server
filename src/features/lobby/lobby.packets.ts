@@ -1,4 +1,3 @@
-import { readSchema, writeSchema, PacketSchema } from "@/packets/packet-schema";
 import { BasePacket } from "@/packets/base.packet";
 import { packetClass } from "@/packets/packet-class";
 import { ResourceManager } from "@/utils/resource.manager";
@@ -76,52 +75,38 @@ export type RequestLobbyPacket = InstanceType<typeof RequestLobbyPacket>;
 export const SetBattleInviteSound = packetClass(defs.lobby.SetBattleInviteSound);
 export type SetBattleInviteSound = InstanceType<typeof SetBattleInviteSound>;
 
-// S->C: initializes the clan module in the lobby (this is what makes the CLAN button appear). It
-// carries the static clan-system config (7 nested Alternativa sub-models). We ASSEMBLE it field by
-// field; the layout matches the official capture (2026-06-18_07-43). The only fields with a
-// confident meaning are the clan creation cost and the trailing RESOURCE (the rankings podium image
-// — 2/silver 1/gold 3/bronze); the rest are module flags and the (empty) clan state. The podium
-// resource is OUR own ("clan/podium"), resolved at runtime — not the official's id.
-// NOTE: the per-user clan tag is a SEPARATE packet (ClanNotifierData, id -117055417).
-// OVERRIDE do servidor: o def da lib (defs.lobby.InitUserClanModels) foi corrigido para a forma
-// OFICIAL do ProTanki. O letanki-server envia uma forma DIFERENTE (esta), então mantém o schema
-// local. NOTA: esta forma diverge do oficial no bloco de listas (envia 1 list<tag> onde o oficial
-// tem 5 Vector<String> anuláveis) — divergência histórica preservada aqui, não no protanki-protocol.
-const INIT_USER_CLAN_MODELS_SCHEMA: PacketSchema = [
-    { name: "moduleFlag1", type: "i8" }, { name: "moduleFlag2", type: "i8" }, { name: "moduleFlag3", type: "i8" },
-    { name: "reserved0", type: "i32" },
-    { name: "flagA", type: "i8" }, { name: "flagB", type: "i8" },
-    { name: "creationCost", type: "i32" },
-    { name: "reserved1", type: "i32" },
-    { name: "flagC", type: "i8" }, { name: "flagD", type: "i8" },
-    { name: "reserved2", type: "i32" }, { name: "reserved3", type: "i8" }, { name: "reserved4", type: "i8" },
-    { name: "requestTags", type: "list", of: [{ name: "tag", type: "string" }] },
-    { name: "reserved5", type: "i32" }, { name: "reserved6", type: "i32" }, { name: "reserved7", type: "i32" },
-    { name: "reserved8", type: "i8" }, { name: "reserved9", type: "i8" }, { name: "reserved10", type: "i8" },
-    { name: "podium", type: "resource" },
-];
-
+// S->C: initializes the clan module in the lobby (this is what makes the CLAN button appear).
+// Usa o def OFICIAL da lib (defs.lobby.InitUserClanModels), com campos semânticos. Os VALORES
+// dos flags reproduzem exatamente os bytes que o server já enviava no caso vazio (comportamento
+// validado, byte-idêntico), enquanto os pedidos de entrada pendentes agora vão no campo oficial
+// `outgoingRequestClanIds` — corrigindo o bug de estrutura antigo (que quebrava com 1+ pedido,
+// pois mandava 1 list<tag> onde o oficial tem 5 Vector<String> anuláveis).
+// NOTE: a tag do clã do próprio usuário vai num pacote SEPARADO (ClanNotifierData, id -117055417),
+// por isso `tag` aqui é null.
 export class InitUserClanModelsPacket extends BasePacket {
     static readonly CREATION_COST = 500000; // crystals to create a clan (0x7A120)
-    // Tags of the clans the user has a PENDING join request to. The client renders the "sent requests"
-    // list from this Vector<String> at init — without it the modal shows 0 even if the request cards
-    // (325031295) were sent. Confirmed by diffing captures: empty (s18) vs 1 request "LGC" (s19).
-    constructor(private readonly requestTags: string[] = []) { super(); }
+    // Tags of the clans the user has a PENDING join request to (só quando o usuário não tem clã).
+    constructor(private readonly outgoingRequestTags: string[] = []) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
-        return writeSchema({
-            moduleFlag1: 1, moduleFlag2: 1, moduleFlag3: 1,
-            reserved0: 0,
-            flagA: 1, flagB: 1,
-            creationCost: InitUserClanModelsPacket.CREATION_COST,
-            reserved1: 0,
-            flagC: 1, flagD: 8,
-            reserved2: 0, reserved3: 0, reserved4: 0,
-            requestTags: this.requestTags.map((tag) => ({ tag })),
-            reserved5: 0, reserved6: 0, reserved7: 0,
-            reserved8: 0, reserved9: 0, reserved10: 0,
-            podium: ResourceManager.getIdlowById("clan/podium"),
-        }, INIT_USER_CLAN_MODELS_SCHEMA);
+        return encodeBody(defs.lobby.InitUserClanModels, {
+            tag: null,
+            requestPending: true,
+            clansEnabled: true,
+            joinCooldownSeconds: 0,
+            unknownPanelFlag: true,
+            uiLocked: true,
+            createCost: InitUserClanModelsPacket.CREATION_COST,
+            notificationsCount: 0,
+            canCreateClan: true,
+            minRankToCreate: 8,
+            incomingInviteClanIds: [],
+            outgoingRequestClanIds: this.outgoingRequestTags,
+            viewedInviteClanIds: [],
+            memberNotificationNicks: [],
+            joinRequestNicks: [],
+            logoImageId: { high: 0, low: ResourceManager.getIdlowById("clan/podium") },
+        });
     }
     static getId(): number { return defs.lobby.InitUserClanModels.id; }
 }

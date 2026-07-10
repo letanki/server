@@ -369,7 +369,7 @@ export class ShowForeignClanWindowPacket extends BasePacket {
         const c = this.clan;
         return encodeBody(defs.clan.ShowForeignClanWindow, {
             f1: 0, clanId: c.clanId.readBigInt64BE(0), leader: c.leader, description: c.description, recruiting: c.recruiting,
-            f6: 0, f7: 0, f8: 0, name: c.name, f10: null, f11: 0, f12: 0, tag: c.tag,
+            f6: 0, f7: 0, minRank: c.minRank, name: c.name, f10: null, f11: 0, f12: 0, tag: c.tag,
             members: c.members.map(memberModel), logo: c.logo, rating: c.rating,
         });
     }
