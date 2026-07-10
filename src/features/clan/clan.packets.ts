@@ -24,7 +24,7 @@ export interface ClanView {
     rating: number;
     logo: string | null;
     recruiting: boolean; // f5: true => the client shows "Request to join" instead of "not recruiting"
-    minRank: number; // f8 byte: minimum rank to join (1-30, or -1 = no minimum)
+    minRank: number; // minimum rank to join, EFETIVO (8-30, nunca -1 — já normalizado por effectiveMinRank)
     joinRequests: string[]; // usernames with a pending join request — received (my-clan window list #4)
     sentInvites: string[]; // usernames the clan invited — sent invites (my-clan window list #5)
     members: ClanMemberView[];
@@ -361,16 +361,24 @@ export class ShowNotInClanWindowPacket extends BasePacket {
     static getId(): number { return defs.clan.ShowNotInClanWindow.id; }
 }
 
+/** Flags relativos ao USUÁRIO que abre a janela (definem o estado do botão de entrada). */
+export interface ForeignClanViewerFlags {
+    joinHidden: boolean; // já é membro deste clã → esconde o botão
+    invitedYou: boolean; // o clã convidou o viewer → botão "aceitar convite"
+    requestSent: boolean; // o viewer já pediu entrada → botão "remover pedido"
+}
+
 /** Full clan-details window (read-only view of any clan). Wraps ONE ClanModel (layout próprio). */
 export class ShowForeignClanWindowPacket extends BasePacket {
-    constructor(private readonly clan: ClanView) { super(); }
+    constructor(private readonly clan: ClanView, private readonly viewer: ForeignClanViewerFlags) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer {
         const c = this.clan;
         return encodeBody(defs.clan.ShowForeignClanWindow, {
-            f1: 0, clanId: c.clanId.readBigInt64BE(0), leader: c.leader, description: c.description, recruiting: c.recruiting,
-            f6: 0, f7: 0, minRank: c.minRank, name: c.name, f10: null, f11: 0, f12: 0, tag: c.tag,
-            members: c.members.map(memberModel), logo: c.logo, rating: c.rating,
+            blocked: false, creationDate: c.clanId.readBigInt64BE(0), founder: c.leader, description: c.description, recruiting: c.recruiting,
+            maxMembers: 16, joinHidden: this.viewer.joinHidden, minRank: c.minRank, name: c.name, blockReason: null,
+            invitedYou: this.viewer.invitedYou, requestSent: this.viewer.requestSent, tag: c.tag, // maxMembers = CLAN_MAX_MEMBERS
+            members: c.members.map(memberModel), logo: c.logo, score: c.rating,
         });
     }
     static getId(): number { return defs.clan.ShowForeignClanWindow.id; }

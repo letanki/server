@@ -529,7 +529,9 @@ export class ClanService {
             rating: Math.round(clan.rating ?? 0), // stored as float (per-delta contribution points), rounded for the wire
             logo: clan.logo || null,
             recruiting: clan.recruiting ?? true,
-            minRank: clan.minRank ?? -1,
+            // minRank EFETIVO: sempre 8-30 (nunca -1). O -1 armazenado = "sem mínimo" é normalizado
+            // pelo piso CLAN_MIN_RANK aqui, então o fio nunca recebe rank negativo.
+            minRank: effectiveMinRank(clan),
             joinRequests: await this.getJoinRequestNicks(clan),
             sentInvites: await this.getInviteNicks(clan),
             members: members.map((m) => this.buildMemberView(clan, m)),

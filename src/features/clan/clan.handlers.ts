@@ -341,12 +341,19 @@ export class ShowForeignClanHandler implements IPacketHandler<ClanPackets.ShowFo
     public readonly packetId = ClanPackets.ShowForeignClanPacket.getId();
     public async execute(client: GameClient, server: GameServer, packet: ClanPackets.ShowForeignClanPacket): Promise<void> {
         const clan = packet.clanTag ? await server.clanService.getClanByTag(packet.clanTag) : null;
-        if (!clan) {
+        if (!clan || !client.user) {
             logger.info(`Foreign clan view: "${packet.clanTag}" not found.`);
             return;
         }
         const view = await server.clanService.buildClanView(clan);
-        client.sendPacket(new ClanPackets.ShowForeignClanWindowPacket(view));
+        // Flags relativos a quem abre a janela → definem o botão de entrada.
+        const uid = String(client.user._id);
+        const viewerFlags = {
+            joinHidden: !!client.user.clanId, // viewer JÁ está em algum clã → não pode pedir entrada em outro
+            invitedYou: clan.invites.some((id) => String(id) === uid), // clã convidou o viewer
+            requestSent: clan.joinRequests.some((id) => String(id) === uid), // viewer já pediu entrada
+        };
+        client.sendPacket(new ClanPackets.ShowForeignClanWindowPacket(view, viewerFlags));
     }
 }
 
