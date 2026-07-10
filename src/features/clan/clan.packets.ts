@@ -333,11 +333,9 @@ export class JoinRequestModelPacket extends BasePacket {
     constructor(private readonly v: ClanView) { super(); }
     read(_buffer: Buffer): void {}
     write(): Buffer {
-        const v = this.v;
         return encodeBody(defs.clan.JoinRequestModel, {
-            outerTag: v.tag, f1: 0, clanId: v.clanId.readBigInt64BE(0), leader: v.leader, recruiting: v.recruiting,
-            f6: 1, f7: 3000, f8: 16, minRank: v.minRank, name: v.name, f11: 1, f12: 1, tag: v.tag,
-            memberNicks: v.members.map((m) => m.nick), logo: "", rating: v.rating,
+            tag: this.v.tag, // tag externa do card de pedido
+            clan: lightClanModel(this.v, true),
         });
     }
     static getId(): number { return defs.clan.JoinRequestModel.id; }
