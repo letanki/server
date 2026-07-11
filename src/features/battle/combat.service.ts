@@ -237,11 +237,12 @@ export class CombatService {
             const killerAssist = Math.round(assists.get(killer.id) ?? 0);
             assists.delete(killer.id); // pago junto ao abate — não repagar em _awardAssists
             const score = killPoints + killerAssist;
+            // XP DE BATALHA (placar + métrica da partida) = base, SEM bônus de passe.
             killerClient.battleScore += score;
-            // XP = base × (1 + bônus dos passes ativos), aplicado no momento do ganho (premium/upScore/newbie).
-            const xpGain = xpFromScore(killer, score);
-            killer.experience += xpGain;
-            killerClient.roundStats.xpEarned += xpGain;
+            killerClient.roundStats.xpEarned += score;
+            // XP DA CONTA (barra de progresso) = base × (1 + bônus dos passes ativos), aplicado no momento
+            // do ganho (premium/upScore/newbie). O bônus dos passes vai SÓ para a conta, nunca para a partida.
+            killer.experience += xpFromScore(killer, score);
             // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
             // newly-finished mission pushes the completion notification.
             const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score }).completed;

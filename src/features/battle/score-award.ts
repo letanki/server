@@ -19,19 +19,21 @@ export function broadcastUserStat(battle: Battle, client: GameClient): void {
 }
 
 /**
- * Single funnel for every scoring objective (kill/assist/flag deliver-return/point). Adds `points` to
- * the battle Score AND the matching XP — XP = base × (1 + passe bonus), applied at the moment of the
- * gain (premium/upScore/newbie); the Score itself never gets the multiplier. Advances the daily-quest
- * score objective (plus any `extraQuest` counters, e.g. `kills`), persists, pushes UpdateScore, and
- * rebroadcasts the scoreboard row. No-op for non-positive points.
+ * Single funnel for every scoring objective (kill/assist/flag deliver-return/point). There are TWO XP
+ * kinds: the BATTLE XP (scoreboard `battleScore` + the round metric) gets `points` flat, with NO passe
+ * bonus; the ACCOUNT XP (`user.experience`, the rank progress bar) gets `points × (1 + passe bonus)` —
+ * the premium/upScore/newbie multiplier lands ONLY on the account, never in the match. Advances the
+ * daily-quest score objective (plus any `extraQuest` counters, e.g. `kills`), persists, pushes
+ * UpdateScore, and rebroadcasts the scoreboard row. No-op for non-positive points.
  */
 export async function awardScore(battle: Battle, client: GameClient, points: number, extraQuest: { kills?: number } = {}): Promise<void> {
     const user = client.user;
     if (!user || points <= 0) return;
+    // XP DE BATALHA (placar + métrica da partida) = base, SEM bônus de passe.
     client.battleScore += points;
-    const xpGain = xpFromScore(user, points);
-    user.experience += xpGain;
-    client.roundStats.xpEarned += xpGain;
+    client.roundStats.xpEarned += points;
+    // XP DA CONTA (barra de progresso) = base × (1 + bônus dos passes). O bônus vai SÓ para a conta.
+    user.experience += xpFromScore(user, points);
     const questCompleted = advanceQuestsInMemory(user, { score: points, ...extraQuest }).completed;
     await user.save();
     client.sendPacket(new ProfilePackets.UpdateScorePacket({ score: user.experience }));
