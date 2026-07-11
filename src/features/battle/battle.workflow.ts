@@ -11,6 +11,7 @@ import { UnloadLobbyChatPacket } from "@/features/chat/chat.packets";
 import { LoadDependencies } from "@/features/loader/loader.packets";
 import { UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets";
+import { PREMIUM_CRYSTAL_BONUS_PERCENT } from "@/shared/models/passes";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
@@ -492,7 +493,7 @@ export class BattleWorkflow {
             mapName: settings.name,
             maxPeopleCount: settings.maxPeopleCount,
             parkourMode: settings.parkourMode,
-            premiumBonusInPercent: 100,
+            premiumBonusInPercent: PREMIUM_CRYSTAL_BONUS_PERCENT,
             spectator: client.isSpectator,
             suspiciousUserIds: [],
             timeLeft: timeLeftInSec,

@@ -2,6 +2,7 @@ import { ResourceManager } from "@/utils/resource.manager";
 import { ResourceId } from "@/generated/resourceTypes";
 import { hullsData, toHullBlueprint } from "@/config/hulls.data";
 import { turretsData, toTurretBlueprint } from "@/config/turrets.data";
+import { NEWBIE_DURATION_MS, UP_SCORE_DURATION_MS, PRO_BATTLE_DURATION_MS } from "@/shared/models/passes";
 
 // Resource keys (in resourceTypes.ts) for the supply preview icons. The actual images were
 // downloaded from the official CDN into resources/bonuses/<X>/preview, so they're served by OUR
@@ -1970,8 +1971,8 @@ export const itemBlueprints = {
     // (`expiresField`), não empilha item. `newbie` (price -1) é concedido na criação de conta e aparece no
     // depósito enquanto ativo; `up_score` é comprável no mercado.
     passes: [
-        { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", durationMs: 21 * 24 * 3600 * 1000, expiresField: "newbieExpiresAt" },
-        { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "upScoreExpiresAt" },
-        { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "proBattleExpiresAt", priceByRank: PRO_BATTLE_PRICE_BY_RANK },
+        { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", durationMs: NEWBIE_DURATION_MS, expiresField: "newbieExpiresAt" },
+        { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", durationMs: UP_SCORE_DURATION_MS, expiresField: "upScoreExpiresAt" },
+        { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: PRO_BATTLE_DURATION_MS, expiresField: "proBattleExpiresAt", priceByRank: PRO_BATTLE_PRICE_BY_RANK },
     ],
 };

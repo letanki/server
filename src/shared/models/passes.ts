@@ -37,9 +37,10 @@ export function xpFromScore(u: UserDocument, baseScore: number): number {
     return Math.round(baseScore * (1 + xpBonusPercent(u) / 100));
 }
 
-// Durações dos passes.
+// Durações dos passes (fonte única — a garagem importa daqui para o `durationMs` da compra).
 export const NEWBIE_DURATION_MS = 21 * 24 * 3600 * 1000; // 21 dias (concedido ao criar conta)
 export const UP_SCORE_DURATION_MS = 30 * 24 * 3600 * 1000; // 30 dias (comprável na garagem)
+export const PRO_BATTLE_DURATION_MS = 30 * 24 * 3600 * 1000; // 30 dias (comprável na garagem)
 
 /** Bônus de CRISTAIS por batalha do passe iniciante (separado do multiplicador de XP). */
 export const NEWBIE_CRYSTAL_BONUS_PERCENT = 100;
