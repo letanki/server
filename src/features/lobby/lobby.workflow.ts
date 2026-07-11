@@ -100,7 +100,11 @@ export class LobbyWorkflow {
         // Janela do Passe Iniciante enquanto ativo (+50% XP + 100% cristais/batalha). A imagem da janela
         // é servida por NÓS (resources/passes/newbie/window, idLow local) — pré-carregamos no cliente e só
         // então disparamos o InitNewbieBonus (no callback do load), garantindo a imagem pronta.
-        if (isNewbieActive(user)) {
+        // Mostra só UMA vez (no 1º login após ganhar o passe) — depois `newbieBonusShown` fica true e a
+        // janela não reaparece a cada login, mesmo com o passe ainda ativo.
+        if (isNewbieActive(user) && !user.newbieBonusShown) {
+            user.newbieBonusShown = true;
+            await user.save();
             const windowResource = "passes/newbie/window" as ResourceId;
             const windowImageIdLow = ResourceManager.getIdlowById(windowResource);
             const newbieCbId = server.registerDynamicCallback((acking) => {

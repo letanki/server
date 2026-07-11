@@ -94,6 +94,8 @@ export interface UserAttributes {
     premiumExpiresAt: Date | null;
     /** Passe Iniciante (newbie): +50% XP + 100% de cristais/batalha por ~21 dias. Concedido ao criar conta. */
     newbieExpiresAt: Date | null;
+    /** Janela de boas-vindas do Passe Iniciante já foi exibida (mostra só 1x, no 1º login após ganhar). */
+    newbieBonusShown: boolean;
     /** Passe Multiplicador de Pontos (up_score): +30% XP. Comprável na garagem, dura 30 dias. */
     upScoreExpiresAt: Date | null;
     /** Passe de Batalha PRO (pro_battle): criar batalhas próprias + Batalhas PRO. Comprável, dura 30 dias. */
@@ -165,6 +167,7 @@ const UserSchema = new Schema<UserDocument>({
     hasDoubleCrystal: { type: Boolean, default: false },
     premiumExpiresAt: { type: Date, default: null },
     newbieExpiresAt: { type: Date, default: null },
+    newbieBonusShown: { type: Boolean, default: false },
     upScoreExpiresAt: { type: Date, default: null },
     proBattleExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
