@@ -3,6 +3,7 @@ import * as ProfilePackets from "@/features/profile/profile.packets";
 import { advanceQuestsInMemory } from "@/features/quests/quests.service";
 import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { UserDocument } from "@/shared/models/user.model";
+import { xpFromScore } from "@/shared/models/passes";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -192,9 +193,11 @@ export class CombatService {
         // No self/team-kill credit.
         if (killer.id !== victim.id) {
             killerClient.kills++;
-            killerClient.battleScore += KILL_SCORE;
-            killer.experience += KILL_XP;
-            killerClient.roundStats.xpEarned += KILL_XP;
+            killerClient.battleScore += KILL_SCORE; // Score (Tab/fundo) = base, SEM multiplicador de passe.
+            // XP = base × (1 + bônus dos passes ativos), aplicado no momento do ganho (premium/upScore/newbie).
+            const xpGain = xpFromScore(killer, KILL_XP);
+            killer.experience += xpGain;
+            killerClient.roundStats.xpEarned += xpGain;
             // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
             // newly-finished mission pushes the completion notification.
             const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: KILL_SCORE }).completed;

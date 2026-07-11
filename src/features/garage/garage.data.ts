@@ -1945,4 +1945,12 @@ export const itemBlueprints = {
         { id: "mine", name: "Mina", description: "Coloca uma mina invisível que explode quando um inimigo se aproxima.", index: 7800, type: 4, rank: 5, price: 50 },
         { id: "1000_scores", name: "1000 experiência", description: "Concede 1000 pontos de experiência. É usado automaticamente logo após a compra.", index: 7550, type: 4, rank: 11, price: 2000, instantScore: 1000 },
     ],
+    // Passes/assinaturas (category "special", type 5). baseItemId/previewResourceId = ícones internos do
+    // client (números pequenos fixos, como os supplies). Comprar ESTENDE a expiração do passe no user
+    // (`expiresField`), não empilha item. `newbie` (price -1) é concedido na criação de conta e aparece no
+    // depósito enquanto ativo; `up_score` é comprável no mercado.
+    passes: [
+        { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", baseItemId: 1141, previewResourceId: 1141, durationMs: 21 * 24 * 3600 * 1000, expiresField: "newbieExpiresAt" },
+        { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", baseItemId: 1140, previewResourceId: 1140, durationMs: 30 * 24 * 3600 * 1000, expiresField: "upScoreExpiresAt" },
+    ],
 };

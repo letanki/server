@@ -92,6 +92,10 @@ export interface UserAttributes {
     mutedUntil: Date | null;
     hasDoubleCrystal: boolean;
     premiumExpiresAt: Date | null;
+    /** Passe Iniciante (newbie): +50% XP + 100% de cristais/batalha por ~21 dias. Concedido ao criar conta. */
+    newbieExpiresAt: Date | null;
+    /** Passe Multiplicador de Pontos (up_score): +30% XP. Comprável na garagem, dura 30 dias. */
+    upScoreExpiresAt: Date | null;
     rank: number;
     nextRankScore: number;
     /** Competitive matchmaking — LEGACY single-mode stats (kept only to seed rankedModes once). */
@@ -158,6 +162,8 @@ const UserSchema = new Schema<UserDocument>({
     mutedUntil: { type: Date, default: null },
     hasDoubleCrystal: { type: Boolean, default: false },
     premiumExpiresAt: { type: Date, default: null },
+    newbieExpiresAt: { type: Date, default: null },
+    upScoreExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
     nextRankScore: { type: Number, default: 100 },
     ranked: {

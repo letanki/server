@@ -35,7 +35,7 @@ export class GarageService {
         this.equipCooldowns.delete(userId);
     }
 
-    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | { supplyId: string; newCount: number; hadSuppliesBefore: boolean } | void> {
+    public async purchaseItem(user: UserDocument, fullItemId: string, quantity: number, expectedPrice: number): Promise<{ newExperience: number } | { supplyId: string; newCount: number; hadSuppliesBefore: boolean } | { passId: string } | void> {
         const { baseId, modification: clientRefMod } = this._parseItemId(fullItemId);
         const itemBlueprint = this._findItemBlueprint(baseId);
 
@@ -117,6 +117,26 @@ export class GarageService {
                 await user.save();
                 logger.info(`User ${user.username} bought ${quantity}x supply ${baseId} (now ${newCount}).`);
                 return { supplyId: baseId, newCount, hadSuppliesBefore };
+            }
+            case "special": {
+                // Passe/assinatura: ESTENDE a data de expiração no user (não empilha item).
+                if (quantity !== 1) throw new Error("Passes só podem ser comprados em quantidade de 1.");
+                if (itemBlueprint.price < 0) throw new Error("Este passe não está à venda.");
+                if (user.rank < itemBlueprint.rank) throw new Error("Rank insuficiente para comprar este item.");
+
+                effectivePrice = itemBlueprint.price;
+                if (effectivePrice !== expectedPrice) throw new Error("O preço do item não confere. Tente novamente.");
+                if (user.crystals < effectivePrice) throw new Error("Cristais insuficientes.");
+
+                user.crystals -= effectivePrice;
+                // Estende a partir do vencimento atual se ainda ativo, senão a partir de agora.
+                const field = itemBlueprint.expiresField as "upScoreExpiresAt" | "premiumExpiresAt" | "newbieExpiresAt";
+                const current = user[field] as Date | null;
+                const startFrom = current && current.getTime() > Date.now() ? current.getTime() : Date.now();
+                user[field] = new Date(startFrom + itemBlueprint.durationMs);
+                await user.save();
+                logger.info(`User ${user.username} bought pass ${baseId} (${field} → ${user[field]?.toISOString()}).`);
+                return { passId: baseId };
             }
             default:
                 throw new Error("Tipo de item desconhecido ou não comprável.");
@@ -254,6 +274,36 @@ export class GarageService {
             }
         });
 
+        // Passes/assinaturas (category "special", type 5): ATIVO → depósito com o tempo restante;
+        // senão → mercado. A expiração vem no userInventory (ver garage.workflow).
+        (itemBlueprints as any).passes?.forEach((pass: any) => {
+            const expiresAt: Date | null | undefined = userInventory[pass.expiresField];
+            const ms = expiresAt ? new Date(expiresAt).getTime() : 0;
+            const active = ms > Date.now();
+            const item = {
+                id: pass.id,
+                name: pass.name,
+                description: pass.description,
+                isInventory: true,
+                index: pass.index,
+                next_price: pass.price,
+                next_rank: pass.rank,
+                type: pass.type,
+                baseItemId: pass.baseItemId,
+                previewResourceId: pass.previewResourceId,
+                rank: pass.rank,
+                category: "special",
+                properts: [],
+                discount: { percent: 0, timeLeftInSeconds: -1751196680, timeToStartInSeconds: -1751196680 },
+                grouped: false,
+                isForRent: false,
+                price: pass.price,
+                remainingTimeInSec: active ? Math.round((ms - Date.now()) / 1000) : -1,
+            };
+            if (active) garageItems.push(item);
+            else shopItems.push(item);
+        });
+
         garageItems.sort((a, b) => a.index - b.index);
         shopItems.sort((a, b) => a.index - b.index || a.modificationID - b.modificationID);
 
@@ -282,6 +332,9 @@ export class GarageService {
 
         const supply = (itemBlueprints as any).supplies.find((i: any) => i.id === baseId);
         if (supply) return { ...supply, category: "inventory" };
+
+        const pass = (itemBlueprints as any).passes?.find((i: any) => i.id === baseId);
+        if (pass) return pass; // já traz category: "special"
 
         return undefined;
     }

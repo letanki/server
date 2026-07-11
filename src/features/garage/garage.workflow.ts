@@ -240,6 +240,10 @@ export class GarageWorkflow {
             ...Object.fromEntries(client.user.hulls),
             paints: client.user.paints,
             supplies: client.user.supplies,
+            // Expiração dos passes (para o render de assinaturas no market/depot).
+            newbieExpiresAt: client.user.newbieExpiresAt,
+            upScoreExpiresAt: client.user.upScoreExpiresAt,
+            premiumExpiresAt: client.user.premiumExpiresAt,
         };
 
         const { garageItems, shopItems } = server.garageService.buildGarageData(userInventory);

@@ -13,6 +13,7 @@ import { BonusService } from "./bonus.service";
 import { CtfService } from "./ctf.service";
 import { SpawnService } from "./spawn.service";
 import { SupplyService } from "./supply.service";
+import { crystalBonuses } from "@/shared/models/passes";
 import { ChangeFundPacket, EffectStoppedPacket, FinishBattlePacket, RestartRoundDmPacket, RestartRoundTeamPacket, SetCtfScorePacket, SetRoundTimePacket } from "./battle.packets";
 
 const ROUND_FINISH_PAUSE_MS = 10000; // results screen before a finished round restarts
@@ -75,19 +76,20 @@ export class RoundService {
 
         // Crystal payout from the battle fund (team-first in team modes, then per player).
         const players = [...battle.clients].filter((c) => c.user && !c.isSpectator);
-        const rewards = this._computeRewards(battle, players);
+        // Reward base do fundo + bônus de cristais dos passes (newbie +100%, premium +100%) por jogador.
+        const rewards = this._computeRewards(battle, players).map((r) => ({ ...r, ...crystalBonuses(r.client.user!, r.reward) }));
 
         // Long-term metrics: fold the fund payout into each player's earned-crystals tally now (so the
         // record reflects it); the actual stats flush is deferred until AFTER crystals are credited —
         // _awardCrystals reloads the doc and does a full save(), which would otherwise clobber the stats
         // write if they raced.
-        const rewardByClient = new Map(rewards.map((r) => [r.client, r.reward]));
+        const totalByClient = new Map(rewards.map((r) => [r.client, r.reward + r.newbieBonus + r.premiumBonus]));
         const outcomes = this._computeOutcomes(battle, players);
         for (const c of players) {
-            if (!c.statsFlushedForRound) c.roundStats.crystalsEarned += rewardByClient.get(c) ?? 0;
+            if (!c.statsFlushedForRound) c.roundStats.crystalsEarned += totalByClient.get(c) ?? 0;
         }
 
-        battle.broadcast(new FinishBattlePacket(rewards.map((r) => ({ nickname: r.nickname, reward: r.reward })), ROUND_FINISH_PAUSE_MS / 1000));
+        battle.broadcast(new FinishBattlePacket(rewards.map((r) => ({ nickname: r.nickname, reward: r.reward, newbieBonus: r.newbieBonus, premiumBonus: r.premiumBonus })), ROUND_FINISH_PAUSE_MS / 1000));
         // Lobby preview watchers: the running timer they see should reset.
         this._sendToWatchers(battle, new LobbyPackets.RoundFinishPacket({ battleId: battle.battleId }));
 
@@ -324,16 +326,17 @@ export class RoundService {
     }
 
     /** Persists each player's earned crystals and refreshes their displayed balance. */
-    private async _awardCrystals(rewards: { client: GameClient; reward: number }[]): Promise<void> {
-        for (const { client, reward } of rewards) {
-            if (reward <= 0 || !client.user) continue;
+    private async _awardCrystals(rewards: { client: GameClient; reward: number; newbieBonus?: number; premiumBonus?: number }[]): Promise<void> {
+        for (const { client, reward, newbieBonus = 0, premiumBonus = 0 } of rewards) {
+            const total = reward + newbieBonus + premiumBonus; // base do fundo + bônus dos passes
+            if (total <= 0 || !client.user) continue;
             try {
-                const newTotal = client.user.crystals + reward;
+                const newTotal = client.user.crystals + total;
                 const updated = await this.server.userService.updateResources(client.user.id, { crystals: newTotal });
                 client.user = updated;
                 client.sendPacket(new UpdateCrystals({ crystals: updated.crystals }));
                 // Fund crystals count toward the "earn crystals" daily quest.
-                const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals: reward });
+                const questCompleted = await this.server.questService.applyQuestEvent(updated, { crystals: total });
                 if (questCompleted && !client.isDestroyed) client.sendPacket(new QuestPackets.QuestCompletedNotification());
             } catch (error: any) {
                 logger.error(`Failed to award ${reward} crystals to ${client.user?.username}`, { error: error.message });

@@ -59,6 +59,11 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
                     }));
                     GarageWorkflow.reloadGarage(client, server);
                 }
+            } else if (result && "passId" in result) {
+                // Assinatura comprada: atualiza os cristais e recarrega a garagem (o passe vai pro
+                // depósito com o tempo restante; suas listas dependem do estado e não rebuildam in-place).
+                client.sendPacket(new ProfilePackets.UpdateCrystals({ crystals: client.user.crystals }));
+                GarageWorkflow.reloadGarage(client, server);
             } else if (result && "supplyId" in result) {
                 // Bought a stackable supply: keep the in-battle supply panel in sync. If the player had
                 // supplies already (panel loaded), update just this item's count; otherwise this is their

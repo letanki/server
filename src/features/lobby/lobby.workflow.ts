@@ -18,6 +18,7 @@ import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
+import { isNewbieActive, secondsLeft, NEWBIE_CRYSTAL_BONUS_PERCENT, NEWBIE_WINDOW_IMAGE_ID, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
 import { ResourceId } from "@/generated/resourceTypes";
@@ -96,6 +97,15 @@ export class LobbyWorkflow {
             pendingTags = pending.map((c) => c.tag);
         }
         client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags));
+        // Janela do Passe Iniciante enquanto ativo (+50% XP + 100% cristais/batalha).
+        if (isNewbieActive(user)) {
+            client.sendPacket(new LobbyPackets.InitNewbieBonusPacket({
+                durationSeconds: secondsLeft(user.newbieExpiresAt),
+                crystalBonusPercent: NEWBIE_CRYSTAL_BONUS_PERCENT,
+                experienceBonusPercent: XP_BONUS_PERCENT.NEWBIE,
+                windowImageId: { high: 0, low: NEWBIE_WINDOW_IMAGE_ID },
+            }));
+        }
         this.sendPlayerVitals(user, client, server);
         // Clan tag for the player's OWN top panel (the official sends SetClan for self after the panel).
         // Without it the panel renders the nickname with no clan tag even when the player is in a clan.

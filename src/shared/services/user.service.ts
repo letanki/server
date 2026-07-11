@@ -1,6 +1,7 @@
 import Invite from "@/features/invite/invite.model";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import User, { UserDocument } from "@/shared/models/user.model";
+import { NEWBIE_DURATION_MS } from "@/shared/models/passes";
 import { RankService } from "@/shared/services/rank.service";
 import logger from "@/utils/logger";
 import crypto from "crypto";
@@ -133,6 +134,8 @@ export class UserService {
                 rank: initialRankData.rank,
                 nextRankScore: initialRankData.nextRankScore,
                 isActive: true,
+                // Passe Iniciante concedido a toda conta nova (+50% XP + 100% cristais/batalha por 21 dias).
+                newbieExpiresAt: new Date(Date.now() + NEWBIE_DURATION_MS),
                 referralHash: crypto.randomBytes(16).toString("hex"),
             });
 

@@ -111,6 +111,11 @@ export class InitUserClanModelsPacket extends BasePacket {
     static getId(): number { return defs.lobby.InitUserClanModels.id; }
 }
 
+/** S->C: inicializa a janela do Passe Iniciante (duração + bônus de cristais/XP). Enviado no init pós-login
+ *  enquanto o passe estiver ativo. */
+export const InitNewbieBonusPacket = packetClass(defs.lobby.InitNewbieBonus);
+export type InitNewbieBonusPacket = InstanceType<typeof InitNewbieBonusPacket>;
+
 // --- Team-mode battle-lobby roster (mirror the DM packets, with a `team` field; 0=red, 1=blue). ---
 
 // S->C (battle list): a player reserved a team slot in a battle.

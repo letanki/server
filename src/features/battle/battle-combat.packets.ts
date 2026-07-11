@@ -240,6 +240,9 @@ export interface IFinishBattleReward {
     nickname: string | null;
     /** Crystals awarded to this player from the battle fund (shown on the results screen). */
     reward: number;
+    /** Cristais extras do Passe Iniciante (+100%) e do Premium (+100%), mostrados no resultado. */
+    newbieBonus?: number;
+    premiumBonus?: number;
 }
 
 // S->C: round finished. Per the client model (decompiled): a Vector<reward> + an int "break
@@ -251,7 +254,7 @@ export class FinishBattlePacket extends BasePacket {
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
         return encodeBody(defs.battle.FinishBattle, {
-            rewards: this.rewards.map((r) => ({ newbieBonus: 0, premiumBonus: 0, reward: r.reward, nickname: r.nickname })),
+            rewards: this.rewards.map((r) => ({ newbieBonus: r.newbieBonus ?? 0, premiumBonus: r.premiumBonus ?? 0, reward: r.reward, nickname: r.nickname })),
             breakSeconds: this.breakSeconds,
         });
     }
