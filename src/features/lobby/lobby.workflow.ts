@@ -22,7 +22,7 @@ import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
-import { isNewbieActive, isProBattleActive, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, secondsLeft, XP_BONUS_PERCENT } from "@/shared/models/passes";
+import { isNewbieActive, isProBattleActive, isCrystalAbonementActive, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, secondsLeft, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
 import { FormatUtils } from "@/utils/format.utils";
 import logger from "@/utils/logger";
@@ -247,9 +247,11 @@ export class LobbyWorkflow {
         }
         client.sendPacket(new PremiumInfo({ lifeTimeInSeconds: premiumSecondsLeft }));
 
-        let crystalAbonementSecondsLeft = 0;
+        // Duração do abonement de Dobro de Cristais em MILISSEGUNDOS (o cliente espera ms — captura ativa
+        // ~86399992 = 24h). -1 quando não há abonement temporizado (captura inativa: -1 / false).
+        let crystalAbonementMsLeft = -1;
         if (user.crystalAbonementExpiresAt && user.crystalAbonementExpiresAt > new Date()) {
-            crystalAbonementSecondsLeft = Math.round((user.crystalAbonementExpiresAt.getTime() - Date.now()) / 1000);
+            crystalAbonementMsLeft = user.crystalAbonementExpiresAt.getTime() - Date.now();
         }
 
         const rankInfo = server.rankService.getRankById(user.rank);
@@ -259,8 +261,8 @@ export class LobbyWorkflow {
             new LobbyPackets.LobbyData({
                 crystals: user.crystals,
                 currentRankScore: currentRankMinScore,
-                durationCrystalAbonement: crystalAbonementSecondsLeft,
-                hasDoubleCrystal: user.hasDoubleCrystal,
+                durationCrystalAbonement: crystalAbonementMsLeft,
+                hasDoubleCrystal: isCrystalAbonementActive(user),
                 nextRankScore: user.nextRankScore,
                 place: 0,
                 rank: user.rank,
