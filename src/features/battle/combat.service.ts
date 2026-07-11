@@ -110,12 +110,14 @@ export class CombatService {
             targetClient.roundStats.damageTaken += shownDamage;
         }
 
-        battle.broadcast(new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }));
-        // O número flutuante de dano só aparece para QUEM causou o dano (não é broadcast), e apenas se
-        // esse jogador não desativou "mostrar dano" nas configurações.
-        if (shooterClient.showDamage !== false) {
-            shooterClient.sendPacket(new DamageIndicatorPacket(targetUser.username, shownDamage, shownType));
-        }
+        // A vida do alvo só vai para o próprio alvo, seus aliados e os espectadores — NUNCA para
+        // inimigos (impede um cliente modificado de ler o HP alheio e escolher a hora de atacar).
+        battle.broadcastToTeamOf(new SetHealthPacket({ nickname: targetUser.username, health: Math.round(targetClient.currentHealth) }), targetUser);
+        // O número flutuante de dano aparece para QUEM causou o dano (se não desativou "mostrar dano")
+        // e para os espectadores (que veem todos os danos). Nunca para o alvo/inimigos.
+        const indicator = new DamageIndicatorPacket(targetUser.username, shownDamage, shownType);
+        if (shooterClient.showDamage !== false) shooterClient.sendPacket(indicator);
+        battle.broadcastToSpectators(indicator);
         logger.info(`${shooterClient.user?.username} hit ${targetUser.username}: ${Math.round(realDamage)} dmg (hull ${hullHP}hp) -> ${Math.round(targetClient.currentHealth)}/10000`);
 
         if (fatal) {

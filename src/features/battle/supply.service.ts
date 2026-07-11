@@ -136,7 +136,7 @@ export class SupplyService {
                 const step = Math.min(stepNormalized, 10000 - client.currentHealth);
                 if (step > 0) {
                     client.currentHealth += step;
-                    battle.broadcast(new SetHealthPacket({ nickname: user.username, health: Math.round(client.currentHealth) }));
+                    battle.broadcastToTeamOf(new SetHealthPacket({ nickname: user.username, health: Math.round(client.currentHealth) }), user);
                 }
                 if (++ticksElapsed >= tickLimit) SupplyService.stopHealing(client);
                 return;
@@ -148,7 +148,7 @@ export class SupplyService {
             if (step > 0) {
                 client.currentHealth += step;
                 delivered += step;
-                battle.broadcast(new SetHealthPacket({ nickname: user.username, health: Math.round(client.currentHealth) }));
+                battle.broadcastToTeamOf(new SetHealthPacket({ nickname: user.username, health: Math.round(client.currentHealth) }), user);
             }
             // Stop on a full tank or once the kit has poured in its whole budget.
             if (client.currentHealth >= 10000 || delivered >= budgetNormalized) SupplyService.stopHealing(client);

@@ -249,4 +249,33 @@ export class Battle {
             client.sendRaw(raw, packetId);
         }
     }
+
+    /**
+     * Envia o pacote ao próprio `user`, aos seus ALIADOS (mesmo time) e aos ESPECTADORES. Em DM (sem
+     * times), só o próprio jogador + espectadores. Usado para info que INIMIGOS não devem ver — ex.: a
+     * vida do tanque (subindo numa cura ou caindo por dano); esconder isso impede um cliente modificado
+     * de saber o HP alheio e escolher a hora de atacar. Espectadores veem tudo.
+     */
+    public broadcastToTeamOf(packet: IPacket, user: UserDocument): void {
+        const raw = packet.write();
+        const packetId = packet.getId();
+        const teamMode = this.isTeamMode();
+        const team = this.teamOf(user);
+        for (const client of this.clients) {
+            if (client.isDestroyed || client.isJoiningBattle || !client.user) continue;
+            const isSelf = client.user.id === user.id;
+            const isAlly = teamMode && this.teamOf(client.user) === team;
+            if (isSelf || isAlly || client.isSpectator) client.sendRaw(raw, packetId);
+        }
+    }
+
+    /** Envia o pacote apenas aos ESPECTADORES da batalha (eles veem tudo: dano/cura/indicadores). */
+    public broadcastToSpectators(packet: IPacket): void {
+        const raw = packet.write();
+        const packetId = packet.getId();
+        for (const client of this.clients) {
+            if (client.isDestroyed || client.isJoiningBattle) continue;
+            if (client.isSpectator) client.sendRaw(raw, packetId);
+        }
+    }
 }
