@@ -10,7 +10,7 @@ import { GameServer } from "@/server/game.server";
 import { ResourceId } from "@/generated/resourceTypes";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints, supplyPreviewResources } from "./garage.data";
+import { itemBlueprints, supplyPreviewResources, passPreviewResources } from "./garage.data";
 import * as GaragePackets from "./garage.packets";
 
 export class GarageWorkflow {
@@ -38,6 +38,8 @@ export class GarageWorkflow {
 
         // Supply preview icons (served from our own resource server, like every other resource).
         Object.values(supplyPreviewResources).forEach((resourceId) => resourceIds.push(resourceId));
+        // Subscription-pass preview icons (newbie/up_score/pro_battle).
+        Object.values(passPreviewResources).forEach((resourceId) => resourceIds.push(resourceId));
 
         const uniqueResourceIds = [...new Set(resourceIds)];
 
@@ -244,6 +246,7 @@ export class GarageWorkflow {
             newbieExpiresAt: client.user.newbieExpiresAt,
             upScoreExpiresAt: client.user.upScoreExpiresAt,
             premiumExpiresAt: client.user.premiumExpiresAt,
+            proBattleExpiresAt: client.user.proBattleExpiresAt,
         };
 
         const { garageItems, shopItems } = server.garageService.buildGarageData(userInventory);

@@ -15,6 +15,15 @@ export const supplyPreviewResources: Record<string, ResourceId> = {
     "1000_scores": "bonuses/scores/preview",
 };
 
+// Preview icons for the subscription passes (category "special", type 5). Downloaded from the official
+// CDN into resources/passes/<id>/preview and served with OUR idLows (see ResourceManager) — never the
+// official ids (1141/1140/1136).
+export const passPreviewResources: Record<string, ResourceId> = {
+    newbie: "passes/newbie/preview",
+    up_score: "passes/up_score/preview",
+    pro_battle: "passes/pro_battle/preview",
+};
+
 export const itemBlueprints = {
     turrets: turretsData.map(toTurretBlueprint),
     hulls: hullsData.map(toHullBlueprint),
@@ -1950,7 +1959,8 @@ export const itemBlueprints = {
     // (`expiresField`), não empilha item. `newbie` (price -1) é concedido na criação de conta e aparece no
     // depósito enquanto ativo; `up_score` é comprável no mercado.
     passes: [
-        { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", baseItemId: 1141, previewResourceId: 1141, durationMs: 21 * 24 * 3600 * 1000, expiresField: "newbieExpiresAt" },
-        { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", baseItemId: 1140, previewResourceId: 1140, durationMs: 30 * 24 * 3600 * 1000, expiresField: "upScoreExpiresAt" },
+        { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", durationMs: 21 * 24 * 3600 * 1000, expiresField: "newbieExpiresAt" },
+        { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "upScoreExpiresAt" },
+        { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "proBattleExpiresAt" },
     ],
 };

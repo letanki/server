@@ -1,7 +1,7 @@
 import { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints, supplyPreviewResources } from "./garage.data";
+import { itemBlueprints, supplyPreviewResources, passPreviewResources } from "./garage.data";
 
 export class GarageService {
     private static readonly EQUIP_COOLDOWN_MS = 15 * 60 * 1000; // 15 min per equipment category (re-arm battles)
@@ -130,7 +130,7 @@ export class GarageService {
 
                 user.crystals -= effectivePrice;
                 // Estende a partir do vencimento atual se ainda ativo, senão a partir de agora.
-                const field = itemBlueprint.expiresField as "upScoreExpiresAt" | "premiumExpiresAt" | "newbieExpiresAt";
+                const field = itemBlueprint.expiresField as "upScoreExpiresAt" | "premiumExpiresAt" | "newbieExpiresAt" | "proBattleExpiresAt";
                 const current = user[field] as Date | null;
                 const startFrom = current && current.getTime() > Date.now() ? current.getTime() : Date.now();
                 user[field] = new Date(startFrom + itemBlueprint.durationMs);
@@ -280,6 +280,9 @@ export class GarageService {
             const expiresAt: Date | null | undefined = userInventory[pass.expiresField];
             const ms = expiresAt ? new Date(expiresAt).getTime() : 0;
             const active = ms > Date.now();
+            // Preview served by OUR resource server (downloaded to resources/passes/<id>/preview) with
+            // our own idLow — never the official 1140/1141/1136.
+            const previewIdLow = ResourceManager.getIdlowById(passPreviewResources[pass.id]);
             const item = {
                 id: pass.id,
                 name: pass.name,
@@ -289,8 +292,8 @@ export class GarageService {
                 next_price: pass.price,
                 next_rank: pass.rank,
                 type: pass.type,
-                baseItemId: pass.baseItemId,
-                previewResourceId: pass.previewResourceId,
+                baseItemId: previewIdLow,
+                previewResourceId: previewIdLow,
                 rank: pass.rank,
                 category: "special",
                 properts: [],
@@ -300,8 +303,11 @@ export class GarageService {
                 price: pass.price,
                 remainingTimeInSec: active ? Math.round((ms - Date.now()) / 1000) : -1,
             };
+            // Active → depósito (com o tempo restante). Senão: só entra no mercado se for comprável
+            // (price >= 0). O `newbie` (price -1) é concedido na criação da conta — nunca aparece no
+            // mercado, só no depósito de quem o tem.
             if (active) garageItems.push(item);
-            else shopItems.push(item);
+            else if (pass.price >= 0) shopItems.push(item);
         });
 
         garageItems.sort((a, b) => a.index - b.index);
