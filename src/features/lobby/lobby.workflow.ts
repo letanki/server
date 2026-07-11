@@ -1,4 +1,5 @@
 import { battleDataObject } from "@/config/battle.data";
+import { newsData } from "@/config/news.data";
 import { CALLBACK, WEBPANEL } from "@/config/constants";
 import { HideLoginForm, Punishment } from "@/features/authentication/auth.packets";
 import { Battle, BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
@@ -118,6 +119,17 @@ export class LobbyWorkflow {
                 }));
             });
             client.sendPacket(new LoadDependencies({ resources: ResourceManager.getBulkResources([windowResource]) }, newbieCbId));
+        }
+
+        // Notícias do lobby: envia só as que este usuário ainda NÃO viu (cada uma aparece 1x por pessoa)
+        // e as marca como vistas. O `id` de cada notícia é interno (rastreio), não vai no pacote.
+        const unseenNews = newsData.filter((n) => !user.seenNewsIds.includes(n.id));
+        if (unseenNews.length > 0) {
+            client.sendPacket(new LobbyPackets.InitNewsPacket({
+                news: unseenNews.map((n) => ({ imageUrl: n.imageUrl, date: n.date, textHtml: n.textHtml })),
+            }));
+            user.seenNewsIds.push(...unseenNews.map((n) => n.id));
+            await user.save();
         }
         this.sendPlayerVitals(user, client, server);
         // Clan tag for the player's OWN top panel (the official sends SetClan for self after the panel).

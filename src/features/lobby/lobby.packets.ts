@@ -116,6 +116,10 @@ export class InitUserClanModelsPacket extends BasePacket {
 export const InitNewbieBonusPacket = packetClass(defs.lobby.InitNewbieBonus);
 export type InitNewbieBonusPacket = InstanceType<typeof InitNewbieBonusPacket>;
 
+/** S->C: notícias da janela do lobby. Cada item = { imageUrl, date, textHtml }. */
+export const InitNewsPacket = packetClass(defs.lobby.InitNews);
+export type InitNewsPacket = InstanceType<typeof InitNewsPacket>;
+
 // --- Team-mode battle-lobby roster (mirror the DM packets, with a `team` field; 0=red, 1=blue). ---
 
 // S->C (battle list): a player reserved a team slot in a battle.
