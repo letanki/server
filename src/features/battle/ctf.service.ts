@@ -7,7 +7,7 @@ import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
 import { CollisionService } from "./collision.service";
 import { CaptureFlagPacket, DropFlagPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket } from "./battle.packets";
-import { deliverFlagShares } from "./scoring";
+import { deliverFlagShares, returnFlagScore } from "./scoring";
 import { awardScore } from "./score-award";
 
 // Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
@@ -181,6 +181,23 @@ export class CtfService {
             return;
         }
 
+        // Return reward (only for a PLAYER-triggered return — not the auto-timer / void drop): score by
+        // how far the flag had been carried from its own base toward the enemy base. 0 near home … 5×enemy
+        // near the enemy base (a last-second return, worth the most). Read the flag position BEFORE the
+        // reset below wipes it back to the base.
+        if (returningUser) {
+            const flagPos = battle[flagPositionProp];
+            const ownBase = battle[flagBasePositionProp];
+            const enemyBase = flagTeam === "RED" ? battle.flagBasePositionBlue : battle.flagBasePositionRed;
+            const client = [...battle.clients].find((c) => c.user?.id === returningUser.id);
+            if (flagPos && ownBase && enemyBase && client) {
+                const enemyTeamId = flagTeam === "RED" ? 1 : 0;
+                const enemyCount = [...battle.clients].filter((c) => !c.isDestroyed && c.user && battle.teamOf(c.user) === enemyTeamId).length;
+                const points = returnFlagScore(this._dist(flagPos, ownBase), this._dist(ownBase, enemyBase), enemyCount);
+                if (points > 0) this._awardFlagDelivery(battle, new Map([[returningUser.id, points]])).catch((e) => logger.error(`Flag return award failed: ${e}`));
+            }
+        }
+
         this._resetFlagState(battle, flagTeam);
 
         const nickname = returningUser ? returningUser.username : null;
@@ -233,6 +250,12 @@ export class CtfService {
 
         // Preview + score-limit reactions are decoupled via the bus.
         this.events.emit("flagCaptured", { battle, capturingTeamId, newScore });
+    }
+
+    /** Straight-line 3D distance between two points (bases are ~coplanar, so z barely matters). */
+    private _dist(a: IVector3, b: IVector3): number {
+        const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /** Pays each contributor their rounded slice of a flag delivery (Score + XP), by matching userId. */
