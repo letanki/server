@@ -1,34 +1,34 @@
 import { battleDataObject } from "@/config/battle.data";
-import { newsData } from "@/config/news.data";
 import { CALLBACK, WEBPANEL } from "@/config/constants";
+import { newsData } from "@/config/news.data";
 import { HideLoginForm, Punishment } from "@/features/authentication/auth.packets";
 import { Battle, BattleMode, EquipmentConstraintsMode, MapTheme } from "@/features/battle/battle.model";
 import { BattleWorkflow } from "@/features/battle/battle.workflow";
 import * as ChatPackets from "@/features/chat/chat.packets";
-import * as ClanPackets from "@/features/clan/clan.packets";
-import * as QuestPackets from "@/features/quests/quests.packets";
 import { PopulatedChatMessage } from "@/features/chat/chat.service";
 import { IChatMessageData } from "@/features/chat/chat.types";
+import * as ClanPackets from "@/features/clan/clan.packets";
 import { UnloadGaragePacket } from "@/features/garage/garage.packets";
 import { LoadDependencies } from "@/features/loader/loader.packets";
-import { AchievementTips, EmailInfo, PremiumInfo } from "@/features/profile/profile.packets";
 import * as ProfilePackets from "@/features/profile/profile.packets";
+import { AchievementTips, EmailInfo, PremiumInfo } from "@/features/profile/profile.packets";
+import * as QuestPackets from "@/features/quests/quests.packets";
 import { ReferralInfo } from "@/features/referral/referral.packets";
 import { LocalizationInfo } from "@/features/shop/shop.packets";
 import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets";
+import { sendWebPanel } from "@/features/webpanel/webpanel.service";
+import { ResourceId } from "@/generated/resourceTypes";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
-import { isNewbieActive, isProBattleActive, secondsLeft, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
+import { isNewbieActive, isProBattleActive, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, secondsLeft, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
-import { ResourceId } from "@/generated/resourceTypes";
 import { FormatUtils } from "@/utils/format.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as LobbyPackets from "./lobby.packets";
 import { UnloadBattleListPacket } from "./lobby.packets";
-import { sendWebPanel } from "@/features/webpanel/webpanel.service";
 
 const mapUserToObject = (user: UserDocument) => ({
     kills: 0,
