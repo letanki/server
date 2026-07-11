@@ -7,6 +7,8 @@ import { Battle, BattleMode } from "./battle.model";
 import { BattleEvents } from "./battle-events";
 import { CollisionService } from "./collision.service";
 import { CaptureFlagPacket, DropFlagPacket, ReturnFlagPacket, SetCtfScorePacket, TakeFlagPacket } from "./battle.packets";
+import { deliverFlagShares } from "./scoring";
+import { awardScore } from "./score-award";
 
 // Flag pickup/capture proximity, built from the REAL hull collision box (generated from the .3ds
 // models — mammoth's box is bigger than wasp's) oriented by the tank, plus an occlusion check so a
@@ -20,7 +22,6 @@ const FLAG_PICKUP_UP = 160;
 // forward axis): 0 = model +Y is forward, Math.PI/2 swaps width/length.
 const HULL_YAW_OFFSET = 0;
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 };
-const CAPTURE_SCORE_PER_ENEMY = 10; // capturing a flag is worth this much per player on the enemy team
 const FLAG_RETURN_DELAY_MS = 30000; // a dropped flag auto-returns to base after this
 const FLAG_PICKUP_COOLDOWN_MS = 5000; // can't re-grab a flag you just dropped, for this long
 
@@ -103,6 +104,12 @@ export class CtfService {
             this._clearFlagReturnTimer(battle, flagTeam);
         }
 
+        // Was the flag on its base (a base-take → 20% role) or picked up mid-field (just a carrier)?
+        // Captured BEFORE the flagPosition is nulled below.
+        const basePos = flagTeam === "RED" ? battle.flagBasePositionRed : battle.flagBasePositionBlue;
+        const curPos = battle[flagPositionProp];
+        const fromBase = !!curPos && !!basePos && curPos.x === basePos.x && curPos.y === basePos.y;
+
         if (flagTeam === "RED") {
             if (battle.flagCarrierRed) throw new Error("Red flag is already taken.");
             battle.flagCarrierRed = user;
@@ -112,6 +119,12 @@ export class CtfService {
             battle.flagCarrierBlue = user;
             battle.flagPositionBlue = null;
         }
+
+        // Delivery roles for this journey: everyone who takes it is a carrier; taking it off the base
+        // also marks a base-taker. Accumulated until the flag goes home (return/capture resets them).
+        const roles = flagTeam === "RED" ? battle.flagRolesRed : battle.flagRolesBlue;
+        roles.carriers.add(user.id);
+        if (fromBase) roles.baseTakers.add(user.id);
 
         logger.info(`User ${user.username} took the ${flagTeam} flag in battle ${battle.battleId}`);
 
@@ -188,13 +201,20 @@ export class CtfService {
         // Classic CTF rule: you can only score the enemy flag while your OWN flag is home at base.
         if (!this._isOwnFlagAtBase(battle, capturingTeamName)) return;
 
-        // Credit the capturer with battle score so captures count toward their individual share of the
-        // end-of-round crystal payout. A capture is worth CAPTURE_SCORE_PER_ENEMY per CONNECTED player on
-        // the enemy team (the team whose flag was captured) — e.g. 10 enemies => 100 points. Players who
-        // closed the game without leaving are no longer in battle.clients, so they don't count.
+        // Delivery reward = 10 × enemy, split by ROLE (50% capturer / 20% base-taker / 30% carriers),
+        // so a capture counts toward each contributor's Score + XP (and their end-of-round crystal share).
+        // "enemy" = CONNECTED players on the enemy team (whose flag was captured); players who closed the
+        // game without leaving are no longer in battle.clients, so they don't count. Snapshot the roles
+        // NOW — _resetFlagState below clears them. The capturer is added as a carrier too (roles accumulate).
         const enemyTeamId = capturedFlagTeam === "RED" ? 0 : 1;
         const enemyCount = [...battle.clients].filter((c) => !c.isDestroyed && c.user && battle.teamOf(c.user) === enemyTeamId).length;
-        client.battleScore += CAPTURE_SCORE_PER_ENEMY * enemyCount;
+        const roleState = capturedFlagTeam === "RED" ? battle.flagRolesRed : battle.flagRolesBlue;
+        const shares = deliverFlagShares(enemyCount, {
+            capturers: [user.id],
+            baseTakers: [...roleState.baseTakers],
+            carriers: [...roleState.carriers],
+        });
+        this._awardFlagDelivery(battle, shares).catch((e) => logger.error(`Flag delivery award failed: ${e}`));
 
         logger.info(`Team ${capturingTeamName} (${user.username}) captured the ${capturedFlagTeam} flag in battle ${battle.battleId}`);
 
@@ -213,6 +233,16 @@ export class CtfService {
 
         // Preview + score-limit reactions are decoupled via the bus.
         this.events.emit("flagCaptured", { battle, capturingTeamId, newScore });
+    }
+
+    /** Pays each contributor their rounded slice of a flag delivery (Score + XP), by matching userId. */
+    private async _awardFlagDelivery(battle: Battle, shares: Map<string, number>): Promise<void> {
+        for (const client of battle.clients) {
+            const user = client.user;
+            if (!user) continue;
+            const points = Math.round(shares.get(user.id) ?? 0);
+            if (points > 0) await awardScore(battle, client, points);
+        }
     }
 
     /** Clears both flags' pending auto-return timers (e.g. when the battle empties out). */
@@ -242,6 +272,10 @@ export class CtfService {
         battle[flagPositionProp] = battle[flagBasePositionProp];
         battle[carrierProp] = null;
         battle[lastDroppedProp] = null;
+        // Flag went home → a new journey starts fresh with no delivery roles.
+        const roles = flagTeam === "RED" ? battle.flagRolesRed : battle.flagRolesBlue;
+        roles.baseTakers.clear();
+        roles.carriers.clear();
         this._clearFlagReturnTimer(battle, flagTeam);
     }
 

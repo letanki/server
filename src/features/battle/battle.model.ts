@@ -120,6 +120,11 @@ export class Battle {
     public flagCarrierRed: UserDocument | null = null;
     public flagLastDroppedByRed: { userId: string; timestamp: number } | null = null;
     public flagLastDroppedByBlue: { userId: string; timestamp: number } | null = null;
+    // CTF delivery roles for the flag's CURRENT journey (taken-from-base → captured): who took it off
+    // the base (20%) and everyone who carried it in any leg (30%). The capturer (50%) is known at
+    // capture. Reset when the flag goes home (return/capture). See CtfService + scoring.deliverFlagShares.
+    public flagRolesRed: { baseTakers: Set<string>; carriers: Set<string> } = { baseTakers: new Set(), carriers: new Set() };
+    public flagRolesBlue: { baseTakers: Set<string>; carriers: Set<string> } = { baseTakers: new Set(), carriers: new Set() };
     public domPoints: IDomPointState[] = [];
     /** Active drops on the field, keyed by bonus id ("type#instance"). Managed by BonusService. */
     public readonly activeBonuses = new Map<string, IActiveBonus>();

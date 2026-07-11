@@ -4,7 +4,8 @@ import { advanceQuestsInMemory } from "@/features/quests/quests.service";
 import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { UserDocument } from "@/shared/models/user.model";
 import { xpFromScore } from "@/shared/models/passes";
-import { killScore, assistShares } from "@/features/battle/scoring";
+import { killScore, killFlagCarrierScore, assistShares } from "@/features/battle/scoring";
+import { awardScore, broadcastUserStat } from "@/features/battle/score-award";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -12,7 +13,7 @@ import { Battle, BattleRoundState, EquipmentConstraintsMode } from "./battle.mod
 import { SUPPLY_SLOT, SupplyService } from "./supply.service";
 import { CollisionService } from "./collision.service";
 import { BattleEvents } from "./battle-events";
-import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
+import { DamageIndicatorPacket, KillPacket, SetHealthPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
 
@@ -200,9 +201,11 @@ export class CombatService {
         // No self/team-kill credit for the kill bonus.
         if (killer.id !== victim.id) {
             killerClient.kills++;
-            // Score pelo casco da VÍTIMA: 8 (leve: Wasp/Hornet) ou 10 (demais) + a fatia de assistência do
-            // próprio abatedor (dobrado abaixo). Score (Tab/fundo) = base, SEM multiplicador de passe.
-            const killPoints = killScore(victim.equippedHull);
+            // Score pelo casco da VÍTIMA: 8 (leve: Wasp/Hornet) ou 10 (demais). Se a vítima estava
+            // CARREGANDO uma bandeira, o abate vale o DOBRO (16–20) — checado aqui, antes do emit("kill")
+            // que dropa a bandeira. O pool de assistência (15) NÃO dobra; só o bônus do abate.
+            const victimCarriesFlag = battle.flagCarrierRed?.id === victim.id || battle.flagCarrierBlue?.id === victim.id;
+            const killPoints = victimCarriesFlag ? killFlagCarrierScore(victim.equippedHull) : killScore(victim.equippedHull);
             const killerAssist = Math.round(assists.get(killer.id) ?? 0);
             assists.delete(killer.id); // pago junto ao abate — não repagar em _awardAssists
             const score = killPoints + killerAssist;
@@ -242,26 +245,12 @@ export class CombatService {
             const user = client.user;
             if (!user) continue;
             const points = Math.round(shares.get(user.id) ?? 0);
-            if (points <= 0) continue;
-            client.battleScore += points;
-            const xpGain = xpFromScore(user, points);
-            user.experience += xpGain;
-            client.roundStats.xpEarned += xpGain;
-            const questCompleted = advanceQuestsInMemory(user, { score: points }).completed;
-            await user.save();
-            client.sendPacket(new ProfilePackets.UpdateScorePacket({ score: user.experience }));
-            if (questCompleted) client.sendPacket(new QuestCompletedNotification());
-            this._broadcastUserStat(battle, client, user);
+            if (points > 0) await awardScore(battle, client, points);
         }
     }
 
     /** Broadcasts a player's kills/deaths/score using the DM or team scoreboard packet for the mode. */
-    private _broadcastUserStat(battle: Battle, client: GameClient, user: UserDocument): void {
-        const data = { deaths: client.deaths, kills: client.kills, score: client.battleScore, nickname: user.username };
-        if (battle.isTeamMode()) {
-            battle.broadcast(new UpdateBattleUserTeamPacket({ ...data, team: battle.teamOf(user) }));
-        } else {
-            battle.broadcast(new UpdateBattleUserDMPacket(data));
-        }
+    private _broadcastUserStat(battle: Battle, client: GameClient, _user: UserDocument): void {
+        broadcastUserStat(battle, client);
     }
 }
