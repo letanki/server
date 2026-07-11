@@ -233,6 +233,9 @@ export class ReadyToActivateHandler implements IPacketHandler<BattlePackets.Read
         logger.info(`Activating tank for user ${client.user.username} in battle ${client.currentBattle.battleId}.`);
 
         client.battleState = "active";
+        // A new life starts with a clean assist ledger (damage taken is tracked per-life). Activation is
+        // the single reset point every death path funnels through, so this covers combat/suicide/void.
+        client.damageFromAttackers.clear();
         // Supplies only become usable when the tank ACTIVATES, so this is the single reset point for the
         // server-side supply cooldowns (a new life starts with free slots, matching the client). Clearing
         // earlier (spawn prep / battle entry) would be redundant — activation always happens in between.

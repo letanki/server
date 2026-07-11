@@ -4,7 +4,7 @@ import { advanceQuestsInMemory } from "@/features/quests/quests.service";
 import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { UserDocument } from "@/shared/models/user.model";
 import { xpFromScore } from "@/shared/models/passes";
-import { killScore } from "@/features/battle/scoring";
+import { killScore, assistShares } from "@/features/battle/scoring";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -108,6 +108,9 @@ export class CombatService {
         if (shooterUser && shooterUser.id !== targetUser.id) {
             shooterClient.roundStats.damageDealt += shownDamage;
             targetClient.roundStats.damageTaken += shownDamage;
+            // Assist ledger for this life: who wounded the target and how much. On the killing blow this
+            // decides the assist split (max 15 proportional to damage). Self-damage is excluded.
+            targetClient.damageFromAttackers.set(shooterUser.id, (targetClient.damageFromAttackers.get(shooterUser.id) ?? 0) + shownDamage);
         }
 
         // A vida do alvo só vai para o próprio alvo, seus aliados e os espectadores — NUNCA para
@@ -189,25 +192,36 @@ export class CombatService {
         victimClient.deaths++;
         this._broadcastUserStat(battle, victimClient, victim);
 
-        // No self/team-kill credit.
+        // Assist pool (team modes only — a tabela do wiki lista assistência só em CTF/CP/TDM, não DM):
+        // 15 dividido proporcional ao dano que cada atacante causou NESTA vida. O abatedor entra no
+        // rateio; o bônus de kill (abaixo) é separado, por cima.
+        const assists = battle.isTeamMode() ? assistShares(victimClient.damageFromAttackers) : new Map<string, number>();
+
+        // No self/team-kill credit for the kill bonus.
         if (killer.id !== victim.id) {
             killerClient.kills++;
-            // Score pelo casco da VÍTIMA: 8 (leve: Wasp/Hornet) ou 10 (demais). Score (Tab/fundo) = base,
-            // SEM multiplicador de passe.
+            // Score pelo casco da VÍTIMA: 8 (leve: Wasp/Hornet) ou 10 (demais) + a fatia de assistência do
+            // próprio abatedor (dobrado abaixo). Score (Tab/fundo) = base, SEM multiplicador de passe.
             const killPoints = killScore(victim.equippedHull);
-            killerClient.battleScore += killPoints;
+            const killerAssist = Math.round(assists.get(killer.id) ?? 0);
+            assists.delete(killer.id); // pago junto ao abate — não repagar em _awardAssists
+            const score = killPoints + killerAssist;
+            killerClient.battleScore += score;
             // XP = base × (1 + bônus dos passes ativos), aplicado no momento do ganho (premium/upScore/newbie).
-            const xpGain = xpFromScore(killer, killPoints);
+            const xpGain = xpFromScore(killer, score);
             killer.experience += xpGain;
             killerClient.roundStats.xpEarned += xpGain;
             // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
             // newly-finished mission pushes the completion notification.
-            const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: killPoints }).completed;
+            const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score }).completed;
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket({ score: killer.experience }));
             if (questCompleted) killerClient.sendPacket(new QuestCompletedNotification());
         }
         this._broadcastUserStat(battle, killerClient, killer);
+
+        // Demais assistentes (todos que feriram a vítima, menos o abatedor já pago): Score + XP.
+        await this._awardAssists(battle, assists);
 
         logger.info(`${killer.username} killed ${victim.username} in battle ${battle.battleId}.`);
 
@@ -215,6 +229,30 @@ export class CombatService {
         // decoupled via the bus, so combat doesn't call CTF/round directly.
         this.events.emit("kill", { battle, killerClient, victimClient });
         this.events.emit("tankDestroyed", { battle, client: victimClient });
+    }
+
+    /**
+     * Credits the assist shares (already rounded fractions of the max-15 pool) to each attacker still in
+     * `shares` — the killer was removed and paid with the kill. Each gets Score + XP (passe-multiplied) +
+     * daily-quest score progress, and their scoreboard row is rebroadcast.
+     */
+    private async _awardAssists(battle: Battle, shares: Map<string, number>): Promise<void> {
+        if (shares.size === 0) return;
+        for (const client of battle.clients) {
+            const user = client.user;
+            if (!user) continue;
+            const points = Math.round(shares.get(user.id) ?? 0);
+            if (points <= 0) continue;
+            client.battleScore += points;
+            const xpGain = xpFromScore(user, points);
+            user.experience += xpGain;
+            client.roundStats.xpEarned += xpGain;
+            const questCompleted = advanceQuestsInMemory(user, { score: points }).completed;
+            await user.save();
+            client.sendPacket(new ProfilePackets.UpdateScorePacket({ score: user.experience }));
+            if (questCompleted) client.sendPacket(new QuestCompletedNotification());
+            this._broadcastUserStat(battle, client, user);
+        }
     }
 
     /** Broadcasts a player's kills/deaths/score using the DM or team scoreboard packet for the mode. */

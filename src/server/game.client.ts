@@ -138,6 +138,10 @@ export class GameClient {
   public kills: number = 0;
   public deaths: number = 0;
   public battleScore: number = 0;
+  // Assist tracking: real HP damage taken THIS LIFE, per attacker userId → cumulative. On death the
+  // kill's assist pool (max 15) is split proportional to these (killer included). Cleared at the start
+  // of each life (ReadyToActivate). See CombatService.applyDamage / _handleKill.
+  public damageFromAttackers: Map<string, number> = new Map();
   // Per-round competitive-metric accumulator (kills/deaths come from the fields above; the rest here).
   // Flushed to the user's persistent `stats` at round finish / on leave, then reset. See StatsService.
   public roundStats: RoundStatAccumulator = createRoundStats();
