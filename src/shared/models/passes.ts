@@ -36,9 +36,6 @@ export const UP_SCORE_DURATION_MS = 30 * 24 * 3600 * 1000; // 30 dias (compráve
 /** Bônus de CRISTAIS por batalha do passe iniciante (separado do multiplicador de XP). */
 export const NEWBIE_CRYSTAL_BONUS_PERCENT = 100;
 
-/** Resource id da imagem da janela do passe iniciante (do InitNewbieBonus; capturado como low=8632). */
-export const NEWBIE_WINDOW_IMAGE_ID = 8632;
-
 /** % de cristais extra por batalha com Premium (= premiumBonusInPercent enviado na BattleStats). */
 export const PREMIUM_CRYSTAL_BONUS_PERCENT = 100;
 
