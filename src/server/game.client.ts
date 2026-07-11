@@ -151,6 +151,9 @@ export class GameClient {
   public railgunChargeStart: number = 0;
   // When the shaft entered aiming mode (the sniper damage scales with how long it has charged).
   public shaftAimStart: number = 0;
+  // Settings toggle "SHOW_DAMAGE" (SetShowDamageSetting, c2s): when false, we don't send this player
+  // the floating damage numbers for the damage THEY deal. Default true (client sends it at settings init).
+  public showDamage: boolean = true;
   // Flamethrower burn: single heat value (0..1) driving both the red "burning" glow (broadcast via the
   // Temperature packet) and the residual burn DoT (FLAME_TEMPERATURE_LIMIT × heat). flameSource = who lit it
   // (for kill credit).
