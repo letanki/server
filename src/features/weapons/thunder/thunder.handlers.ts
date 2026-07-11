@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
@@ -125,7 +126,12 @@ export class ThunderTargetShotCommandHandler implements IPacketHandler<ThunderPa
         // factor 1 → full damage), and nearby tanks take the splash falloff from there. Fall back to the
         // reported world/target hit point if the target isn't resolvable — a surface point, so its
         // occlusion test gets the same anti-leak nudge as the static shot (damage stays at the point).
-        const directTarget = packet.nicknameTarget ? server.findClientByUsername(packet.nicknameTarget) : null;
+        let directTarget = packet.nicknameTarget ? server.findClientByUsername(packet.nicknameTarget) : null;
+        // Anti-cheat: se a vida (incarnation) ou a posição do alvo direto não confere, NÃO centra a
+        // explosão nele (hit obsoleto/forjado) — cai no ponto de superfície reportado (splash normal).
+        if (directTarget && !isReportedHitValid(directTarget, { incarnation: packet.incarnationTarget, targetPosition: packet.positionTarget })) {
+            directTarget = null;
+        }
         const fallback = packet.positionInWorld ?? packet.positionTarget ?? null;
         const center = directTarget?.battlePosition ?? fallback;
         await detonateThunder(server, client, center, directTarget ? null : nudgeTowardShooter(client, fallback));

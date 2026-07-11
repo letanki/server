@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -102,12 +103,16 @@ export class FreezeHitCommandHandler implements IPacketHandler<FreezePackets.Fre
         const perPeriod = ItemUtils.getPropertyValue(turretMod, "DAMAGE_PER_SECOND", "DAMAGE_PER_PERIOD") ?? 0;
         const physics = weaponPhysicsData.weapons.find((w) => w.id === `${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`);
 
-        for (const targetName of packet.targets) {
+        for (const t of packet.targets) {
+            const targetName = t.nickname;
             const targetClient = server.findClientByUsername(targetName);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
             // Friendly fire: skip teammates entirely (no damage AND no chill/slow) — applyDamage would drop
             // the damage but the freeze effect below runs separately, so allies were being frozen anyway.
             if (targetClient.user && currentBattle.isFriendlyBlocked(user, targetClient.user)) continue;
+            // Anti-cheat: valida o hit reportado (incarnation da vida atual + posição do alvo) antes de
+            // aplicar dano/congelamento — descarta hit obsoleto (alvo já morreu/renasceu) ou alvo forjado.
+            if (!isReportedHitValid(targetClient, t)) continue;
             const factor = distanceFactor(client, targetClient, physics?.max_damage_radius ?? 5, physics?.min_damage_radius ?? 18.39, (physics?.min_damage_percent ?? 30) / 100);
 
             await server.battleService.applyDamage(currentBattle, client, targetClient, (perPeriod / FREEZE_DIRECT_DIVISOR) * factor, 0);

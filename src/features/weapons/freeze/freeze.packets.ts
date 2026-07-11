@@ -1,17 +1,18 @@
 import { BasePacket } from "@/packets/base.packet";
 import { packetClass } from "@/packets/packet-class";
 import { defs, decodeBody } from "protanki-protocol";
+import { HitTarget, parseHitTargets } from "@/features/weapons/hit-validation";
 
 // IDs e schemas em `protanki-protocol` (defs.weapons.*). Server só faz lógica; a lib lê/escreve.
 
 /**
- * C→S: a Freeze beam tick. Mesma forma do Firebird (o cone toca vários tanques). Só precisamos de
- * clientTime + targets; o schema lê só esses dois e ignora o resto do fio.
+ * C→S: a Freeze beam tick. Mesma forma do Firebird (o cone toca vários tanques) — vetores paralelos
+ * zipados num alvo-por-índice para VALIDAR o dano (incarnation da vida + posição). Ver hit-validation.
  */
 export class FreezeHitCommandPacket extends BasePacket {
-    public targets: string[] = [];
+    public targets: HitTarget[] = [];
     public read(buffer: Buffer): void {
-        try { this.targets = decodeBody(defs.weapons.FreezeHitCommand, buffer).fields.targets; }
+        try { this.targets = parseHitTargets(decodeBody(defs.weapons.FreezeHitCommand, buffer).fields); }
         catch { this.targets = []; }
     }
     public write(): Buffer { throw new Error("This is a client-to-server packet only."); }

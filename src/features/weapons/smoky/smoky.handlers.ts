@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -86,7 +87,9 @@ export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPacket
         // the flat CRITICAL_HIT_DAMAGE property (distance- and roll-independent; = DAMAGE_FROM+DAMAGE_TO in
         // the data — official crits dealt exactly that). damageType 0 = normal, 1 = critical.
         const targetClient = server.findClientByUsername(packet.targetUserId);
-        if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+        // Anti-cheat: valida a vida (incarnation) e a posição do alvo antes de aplicar dano.
+        if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active"
+            && isReportedHitValid(targetClient, { incarnation: packet.targetIncarnation, targetPosition: packet.targetPosition })) {
             const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
             const dmgTo = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_TO") ?? dmgFrom;
             const critDamage = ItemUtils.getPropertyValue(turretMod, "CRITICAL_HIT_DAMAGE") ?? dmgFrom + dmgTo;

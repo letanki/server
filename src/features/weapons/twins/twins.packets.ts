@@ -22,7 +22,8 @@ export class TwinsTargetShotCommandPacket extends BasePacket {
     public clientTime: number = 0;
     public shotId: number = 0;
     public target: string | null = null;
-    public hitGlobalPosition: IVector3 | null = null;
+    // Posição do alvo (1º vec3 do tail — mesmo slot do antigo `hitGlobalPosition`); usada no falloff.
+    public targetPosition: IVector3 | null = null;
     public read(buffer: Buffer): void {
         const schema = defs.weapons.TwinsTargetShotCommand.schema!;
         const { result: head, bytesRead } = decodeSchema(schema.slice(0, 2), buffer);
@@ -32,10 +33,10 @@ export class TwinsTargetShotCommandPacket extends BasePacket {
             try {
                 const { result: tail } = decodeSchema(schema.slice(2), buffer.subarray(bytesRead));
                 this.target = tail.target;
-                this.hitGlobalPosition = tail.hitGlobalPosition;
+                this.targetPosition = tail.targetPosition;
             } catch {
                 this.target = null;
-                this.hitGlobalPosition = null;
+                this.targetPosition = null;
             }
         }
     }

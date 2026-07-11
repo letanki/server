@@ -1,5 +1,6 @@
 import { weaponPhysicsData } from "@/config/physics.data";
 import { EquipmentConstraintsMode } from "@/features/battle/battle.model";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
@@ -76,6 +77,9 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         for (const target of packet.targets) {
             const targetClient = server.findClientByUsername(target.nickname);
             if (!targetClient || !targetClient.user || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
+            // Anti-cheat: valida a vida (incarnation) e a posição do alvo antes do dano — hit obsoleto ou
+            // alvo forjado não consome nem sequer um índice de perfuração (o `continue` pula o pierce).
+            if (!isReportedHitValid(targetClient, { incarnation: target.incarnation, targetPosition: target.position })) continue;
 
             const rawDamage = twoShotMode ? XP_BP_DAMAGE_FRACTION * ItemUtils.getHullArmor(targetClient.user) : baseDamage;
             const damage = rawDamage * Math.pow(weakeningCoeff, pierceIndex);

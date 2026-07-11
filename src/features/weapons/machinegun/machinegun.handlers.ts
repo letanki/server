@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -150,6 +151,9 @@ export class MachinegunShotCommandHandler implements IPacketHandler<MachinegunPa
             if (!target.nickname) continue;
             const targetClient = server.findClientByUsername(target.nickname);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
+            // Anti-cheat: o machinegun não carrega incarnation, mas manda a posição do alvo — valida-a
+            // contra a conhecida pelo servidor (alvo forjado/dessincronizado é descartado).
+            if (!isReportedHitValid(targetClient, { targetPosition: target.position })) continue;
             const factor = distanceFactor(client, targetClient, physics?.max_damage_radius ?? 33, physics?.min_damage_radius ?? 130, (physics?.min_damage_percent ?? 25) / 100);
             await server.battleService.applyDamage(currentBattle, client, targetClient, dps * elapsed * factor, 0);
         }

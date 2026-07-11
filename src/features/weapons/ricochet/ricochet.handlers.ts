@@ -1,3 +1,4 @@
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -44,6 +45,8 @@ export class RicochetTargetShotCommandHandler implements IPacketHandler<Ricochet
 
         const targetClient = server.findClientByUsername(packet.target);
         if (!targetClient || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") return;
+        // Anti-cheat: valida a posição do alvo (ricochet não carrega incarnation) antes de aplicar dano.
+        if (!isReportedHitValid(targetClient, { targetPosition: packet.targetPosition })) return;
 
         const turretMod = ItemUtils.getItemModification(user, "turret");
         const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;

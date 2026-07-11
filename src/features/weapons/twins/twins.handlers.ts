@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -29,6 +30,8 @@ export class TwinsTargetShotCommandHandler implements IPacketHandler<TwinsPacket
 
         const targetClient = server.findClientByUsername(packet.target);
         if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") return;
+        // Anti-cheat: valida a posição do alvo (twins não carrega incarnation) antes de aplicar dano.
+        if (!isReportedHitValid(targetClient, { targetPosition: packet.targetPosition })) return;
 
         const turretMod = ItemUtils.getItemModification(user, "turret");
         const dmgFrom = ItemUtils.getPropertyValue(turretMod, "DAMAGE", "DAMAGE_FROM") ?? 0;
@@ -43,10 +46,10 @@ export class TwinsTargetShotCommandHandler implements IPacketHandler<TwinsPacket
         // back-calculating the base across both distance clusters in the official capture (lands on m1's
         // 9.8-11.9 only at /200; /100 gives an inconsistent 15-19).
         let dist = 0;
-        if (client.battlePosition && packet.hitGlobalPosition) {
-            const dx = client.battlePosition.x - packet.hitGlobalPosition.x;
-            const dy = client.battlePosition.y - packet.hitGlobalPosition.y;
-            const dz = client.battlePosition.z - packet.hitGlobalPosition.z;
+        if (client.battlePosition && packet.targetPosition) {
+            const dx = client.battlePosition.x - packet.targetPosition.x;
+            const dy = client.battlePosition.y - packet.targetPosition.y;
+            const dz = client.battlePosition.z - packet.targetPosition.z;
             dist = Math.sqrt(dx * dx + dy * dy + dz * dz) / 200;
         }
         let factor = 1;

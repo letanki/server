@@ -1,3 +1,4 @@
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -81,9 +82,12 @@ export class ShaftArcadeShotCommandHandler implements IPacketHandler<ShaftPacket
 
         // Damage cada tank perfurado (o shaft atravessa vários).
         const { from, to } = turretDamage(user);
-        for (const nick of packet.targets ?? []) {
-            const targetClient = server.findClientByUsername(nick);
-            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+        const arcadeTargets = packet.targets ?? [];
+        for (let k = 0; k < arcadeTargets.length; k++) {
+            const targetClient = server.findClientByUsername(arcadeTargets[k]);
+            // Anti-cheat: valida a vida (incarnation, array paralelo) do alvo antes de aplicar dano.
+            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active"
+                && isReportedHitValid(targetClient, { incarnation: packet.incarnations?.[k]?.i ?? null })) {
                 await server.battleService.applyDamage(currentBattle, client, targetClient, from + Math.random() * (to - from), 0);
             }
         }
@@ -109,9 +113,12 @@ export class ShaftAimingShotCommandHandler implements IPacketHandler<ShaftPacket
 
         // Damage cada tank perfurado, com o dano de mira carregado.
         const { to, aimMax } = turretDamage(user);
-        for (const nick of packet.targets ?? []) {
-            const targetClient = server.findClientByUsername(nick);
-            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active") {
+        const aimTargets = packet.targets ?? [];
+        for (let k = 0; k < aimTargets.length; k++) {
+            const targetClient = server.findClientByUsername(aimTargets[k]);
+            // Anti-cheat: valida a vida (incarnation, array paralelo) do alvo antes de aplicar dano.
+            if (targetClient && targetClient !== client && targetClient.currentBattle === currentBattle && targetClient.battleState === "active"
+                && isReportedHitValid(targetClient, { incarnation: packet.incarnations?.[k]?.i ?? null })) {
                 await server.battleService.applyDamage(currentBattle, client, targetClient, to + (aimMax - to) * ratio, 0);
             }
         }

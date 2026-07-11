@@ -1,4 +1,5 @@
 import { weaponPhysicsData } from "@/config/physics.data";
+import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -93,12 +94,16 @@ export class FirebirdHitCommandHandler implements IPacketHandler<FlamethrowerPac
         const tempLimit = ItemUtils.getPropertyValue(turretMod, "FIRE_DAMAGE", "FLAME_TEMPERATURE_LIMIT") ?? 6;
         const physics = weaponPhysicsData.weapons.find((w) => w.id === `${user.equippedTurret}_m${user.turrets.get(user.equippedTurret) ?? 0}`);
 
-        for (const targetName of packet.targets) {
+        for (const t of packet.targets) {
+            const targetName = t.nickname;
             const targetClient = server.findClientByUsername(targetName);
             if (!targetClient || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
             // Friendly fire: skip teammates entirely (no damage AND no burn/glow) — applyDamage drops the
             // damage, but the ignite + visual glow below run separately, so allies were catching fire anyway.
             if (targetClient.user && currentBattle.isFriendlyBlocked(user, targetClient.user)) continue;
+            // Anti-cheat: valida o hit reportado (incarnation da vida atual + posição do alvo) antes de
+            // aplicar dano/queimadura — descarta hit obsoleto (alvo já morreu/renasceu) ou alvo forjado.
+            if (!isReportedHitValid(targetClient, t)) continue;
             const factor = distanceFactor(client, targetClient, physics?.max_damage_radius ?? 5, physics?.min_damage_radius ?? 17, (physics?.min_damage_percent ?? 50) / 100);
 
             // Direct flame contact.
