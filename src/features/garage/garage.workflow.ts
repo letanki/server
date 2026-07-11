@@ -247,6 +247,7 @@ export class GarageWorkflow {
             upScoreExpiresAt: client.user.upScoreExpiresAt,
             premiumExpiresAt: client.user.premiumExpiresAt,
             proBattleExpiresAt: client.user.proBattleExpiresAt,
+            crystalAbonementExpiresAt: client.user.crystalAbonementExpiresAt,
             // Rank do jogador — para passes com preço que escala por rank (pro_battle).
             rank: client.user.rank,
         };

@@ -23,6 +23,7 @@ export const passPreviewResources: Record<string, ResourceId> = {
     newbie: "passes/newbie/preview",
     up_score: "passes/up_score/preview",
     pro_battle: "passes/pro_battle/preview",
+    double_crystalls: "passes/double_crystalls/preview",
 };
 
 // Preço do Passe de Batalha PRO por RANK do comprador (índice 0 = rank 1 … índice 29 = rank 30).
@@ -1974,5 +1975,9 @@ export const itemBlueprints = {
         { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", durationMs: NEWBIE_DURATION_MS, expiresField: "newbieExpiresAt" },
         { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", durationMs: UP_SCORE_DURATION_MS, expiresField: "upScoreExpiresAt" },
         { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: PRO_BATTLE_DURATION_MS, expiresField: "proBattleExpiresAt", priceByRank: PRO_BATTLE_PRICE_BY_RANK },
+        // Card "Dobro de cristais" (double_crystalls): NÃO comprável na garagem (price -1) — só aparece no
+        // depósito, com o tempo de validade, enquanto ativo (dura 24h). Dobra os cristais de DOAÇÕES no
+        // shop (não os ganhos em jogo). id/index/preview/descrição espelham o oficial (captura s6-54824).
+        { id: "double_crystalls", name: "Dobro de cristais", description: "O nome deste cartão é auto-explicativo. Comprando cristais com dinheiro real você ganha o dobro deles do que o normal. Qualquer quantidade de cristais que você comprou será multiplicada por dois! Mas cuidado! Este cartão permanece ativo por apenas 24 horas. Certifique-se de usá-lo enquanto pode para aproveitar ao máximo suas compras!", index: 8150, type: 5, rank: 1, price: -1, category: "special", durationMs: 0, expiresField: "crystalAbonementExpiresAt" },
     ],
 };

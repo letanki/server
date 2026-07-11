@@ -16,7 +16,7 @@ export interface NewsItem {
 export const newsData: NewsItem[] = [
     {
         id: "welcome",
-        imageUrl: "",
+        imageUrl: "http://146.59.110.103/icons/xt.png",
         date: "11.07.2026",
         textHtml: "<div><b>Bem-vindo ao LeTanki!</b><br/>Divirta-se nas batalhas.</div>",
     },

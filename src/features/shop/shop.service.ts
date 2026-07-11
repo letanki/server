@@ -1,4 +1,5 @@
 import { UserDocument } from "@/shared/models/user.model";
+import { isCrystalAbonementActive } from "@/shared/models/passes";
 
 type PriceInfo = { price: number; currency: string };
 type PricingData = Record<string, Record<string, PriceInfo>>;
@@ -84,7 +85,9 @@ export class ShopService {
         });
 
         const payload = {
-            have_double_crystals: user.hasDoubleCrystal,
+            // Dobro de cristais nas DOAÇÕES (o cliente exibe os valores dobrados): ativo pelo perk
+            // permanente ou pelo abonement temporizado.
+            have_double_crystals: isCrystalAbonementActive(user),
             data: JSON.stringify(shopForCountry),
         };
 

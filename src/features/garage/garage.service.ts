@@ -131,7 +131,7 @@ export class GarageService {
 
                 user.crystals -= effectivePrice;
                 // Estende a partir do vencimento atual se ainda ativo, senão a partir de agora.
-                const field = itemBlueprint.expiresField as "upScoreExpiresAt" | "premiumExpiresAt" | "newbieExpiresAt" | "proBattleExpiresAt";
+                const field = itemBlueprint.expiresField as "upScoreExpiresAt" | "premiumExpiresAt" | "newbieExpiresAt" | "proBattleExpiresAt" | "crystalAbonementExpiresAt";
                 const current = user[field] as Date | null;
                 const startFrom = current && current.getTime() > Date.now() ? current.getTime() : Date.now();
                 user[field] = new Date(startFrom + itemBlueprint.durationMs);

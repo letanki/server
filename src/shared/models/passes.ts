@@ -16,6 +16,12 @@ export const isUpScoreActive = (u: UserDocument): boolean => isActive(u.upScoreE
 /** Passe de Batalha PRO ativo: permite CRIAR batalhas (com configurações próprias). */
 export const isProBattleActive = (u: UserDocument): boolean => isActive(u.proBattleExpiresAt);
 
+/**
+ * Abonement de Dobro de Cristais ativo: DOBRA os cristais de DOAÇÕES no shop (não os ganhos em jogo).
+ * Ativo se a assinatura temporizada está no futuro OU se a conta tem o perk permanente `hasDoubleCrystal`.
+ */
+export const isCrystalAbonementActive = (u: UserDocument): boolean => u.hasDoubleCrystal || isActive(u.crystalAbonementExpiresAt);
+
 /** Custo em cristais para ENTRAR numa Batalha PRO sem ter o passe (cobrado 1x por batalha; ver Battle.paidEntryUserIds). */
 export const PRO_BATTLE_ENTER_PRICE = 150;
 
