@@ -17,14 +17,17 @@ export const isUpScoreActive = (u: UserDocument): boolean => isActive(u.upScoreE
 /** Percentual de bônus de XP por passe (wiki + confirmação do dono). */
 export const XP_BONUS_PERCENT = { PREMIUM: 50, UP_SCORE: 30, NEWBIE: 50 } as const;
 
-/** Soma dos bônus de XP dos passes ativos do usuário (ex.: os três ativos → 130). */
+/**
+ * Soma dos bônus de XP dos passes ativos (ex.: os três ativos → 130). TODOS os passes valem em TODOS os
+ * modos — o bônus incide só no XP DA CONTA (barra de progresso), nunca no battleScore da partida.
+ */
 export function xpBonusPercent(u: UserDocument): number {
     return (isPremiumActive(u) ? XP_BONUS_PERCENT.PREMIUM : 0)
         + (isUpScoreActive(u) ? XP_BONUS_PERCENT.UP_SCORE : 0)
         + (isNewbieActive(u) ? XP_BONUS_PERCENT.NEWBIE : 0);
 }
 
-/** XP ganho a partir do Score base, aplicando os multiplicadores dos passes. O Score em si não muda. */
+/** XP da conta a partir do Score base, aplicando os multiplicadores dos passes. O Score em si não muda. */
 export function xpFromScore(u: UserDocument, baseScore: number): number {
     return Math.round(baseScore * (1 + xpBonusPercent(u) / 100));
 }

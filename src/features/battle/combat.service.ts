@@ -241,7 +241,7 @@ export class CombatService {
             killerClient.battleScore += score;
             killerClient.roundStats.xpEarned += score;
             // XP DA CONTA (barra de progresso) = base × (1 + bônus dos passes ativos), aplicado no momento
-            // do ganho (premium/upScore/newbie). O bônus dos passes vai SÓ para a conta, nunca para a partida.
+            // do ganho (premium/upScore/newbie). O bônus vai SÓ para a conta, nunca para a partida.
             killer.experience += xpFromScore(killer, score);
             // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
             // newly-finished mission pushes the completion notification.
