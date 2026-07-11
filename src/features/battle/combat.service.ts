@@ -9,13 +9,16 @@ import { awardScore, broadcastUserStat } from "@/features/battle/score-award";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
-import { Battle, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
+import { Battle, BattleMode, BattleRoundState, EquipmentConstraintsMode } from "./battle.model";
 import { SUPPLY_SLOT, SupplyService } from "./supply.service";
 import { CollisionService } from "./collision.service";
 import { BattleEvents } from "./battle-events";
-import { DamageIndicatorPacket, KillPacket, SetHealthPacket } from "./battle.packets";
+import { DamageIndicatorPacket, KillPacket, SetCtfScorePacket, SetHealthPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
+// "−10 XP from the match" on self-destruct/void = 10 off the in-match Score (Tab / crystal fund), never
+// the account XP. Applied in TDM/CP/CTF only (DM just loses the kill). Floored at 0.
+const SELF_DESTRUCT_SCORE_PENALTY = 10;
 
 // Each weapon (turret id) → the paint-resistance property that protects against it. The victim's
 // equipped paint reduces incoming damage from this weapon by its RESISTANCE percent (garage `properts`).
@@ -163,12 +166,37 @@ export class CombatService {
         }
     }
 
-    /** A death with no killer (self-destruct, void): +1 death on the scoreboard, no kill credit. */
+    /** A death with no killer (self-destruct, void): +1 death, no kill credit, plus the per-mode penalty. */
     public registerSuicideDeath(battle: Battle, client: GameClient): void {
-        if (!client.user) return;
+        const user = client.user;
+        if (!user) return;
         client.deaths++;
         client.roundStats.suicides++;
-        this._broadcastUserStat(battle, client, client.user);
+
+        // Self-destruct/void penalty — hits ONLY the in-match numbers, never the account XP
+        // (user.experience) nor the net XP earned this round (roundStats.xpEarned). Per the wiki, your
+        // ending Score can end up below the XP you gained. All floored at 0. Per mode:
+        //   • every mode: −1 kill on the scoreboard ("1 kill do stats").
+        //   • TDM/CP/CTF: −10 battleScore (the "−10 XP from the match" = Tab Score, which feeds the fund).
+        //   • CP: also −1 on the suicider's TEAM point score (rebroadcast the CP scoreboard).
+        //   • TDM's team total is the sum of member kills, so the −1 kill already lowers it.
+        const mode = battle.settings.battleMode;
+        if (client.kills > 0) client.kills--;
+        if (mode !== BattleMode.DM) {
+            client.battleScore = Math.max(0, client.battleScore - SELF_DESTRUCT_SCORE_PENALTY);
+        }
+        if (mode === BattleMode.CP) {
+            const team = battle.teamOf(user);
+            if (team === 0 && battle.scoreRed > 0) {
+                battle.scoreRed--;
+                battle.broadcast(new SetCtfScorePacket({ team: 0, score: battle.scoreRed }));
+            } else if (team === 1 && battle.scoreBlue > 0) {
+                battle.scoreBlue--;
+                battle.broadcast(new SetCtfScorePacket({ team: 1, score: battle.scoreBlue }));
+            }
+        }
+
+        this._broadcastUserStat(battle, client, user);
         this.events.emit("tankDestroyed", { battle, client });
     }
 
