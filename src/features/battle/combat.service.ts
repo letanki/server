@@ -4,6 +4,7 @@ import { advanceQuestsInMemory } from "@/features/quests/quests.service";
 import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { UserDocument } from "@/shared/models/user.model";
 import { xpFromScore } from "@/shared/models/passes";
+import { killScore } from "@/features/battle/scoring";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -14,8 +15,6 @@ import { BattleEvents } from "./battle-events";
 import { DamageIndicatorPacket, KillPacket, SetHealthPacket, UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
 
 const KILL_RESPAWN_MS = 3000;
-const KILL_SCORE = 10; // in-battle scoreboard points per kill
-const KILL_XP = 10; // rank experience per kill
 
 // Each weapon (turret id) → the paint-resistance property that protects against it. The victim's
 // equipped paint reduces incoming damage from this weapon by its RESISTANCE percent (garage `properts`).
@@ -193,14 +192,17 @@ export class CombatService {
         // No self/team-kill credit.
         if (killer.id !== victim.id) {
             killerClient.kills++;
-            killerClient.battleScore += KILL_SCORE; // Score (Tab/fundo) = base, SEM multiplicador de passe.
+            // Score pelo casco da VÍTIMA: 8 (leve: Wasp/Hornet) ou 10 (demais). Score (Tab/fundo) = base,
+            // SEM multiplicador de passe.
+            const killPoints = killScore(victim.equippedHull);
+            killerClient.battleScore += killPoints;
             // XP = base × (1 + bônus dos passes ativos), aplicado no momento do ganho (premium/upScore/newbie).
-            const xpGain = xpFromScore(killer, KILL_XP);
+            const xpGain = xpFromScore(killer, killPoints);
             killer.experience += xpGain;
             killerClient.roundStats.xpEarned += xpGain;
             // Real-time daily-quest progress (kills + battle score). Persisted by the killer.save() below; a
             // newly-finished mission pushes the completion notification.
-            const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: KILL_SCORE }).completed;
+            const questCompleted = advanceQuestsInMemory(killer, { kills: 1, score: killPoints }).completed;
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket({ score: killer.experience }));
             if (questCompleted) killerClient.sendPacket(new QuestCompletedNotification());
