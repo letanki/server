@@ -24,6 +24,17 @@ export const passPreviewResources: Record<string, ResourceId> = {
     pro_battle: "passes/pro_battle/preview",
 };
 
+// Preço do Passe de Batalha PRO por RANK do comprador (índice 0 = rank 1 … índice 29 = rank 30).
+// Progressão aritmética oficial: base 139, passo +340 (139, 479, 819 … 9999).
+export const PRO_BATTLE_PRICE_BY_RANK: number[] = Array.from({ length: 30 }, (_, i) => 139 + i * 340);
+
+/** Preço de um passe para um dado rank: usa `priceByRank` (escala por rank) se houver, senão o fixo. */
+export function passPriceForRank(pass: { price: number; priceByRank?: number[] }, rank: number): number {
+    if (!pass.priceByRank) return pass.price;
+    const idx = Math.min(pass.priceByRank.length, Math.max(1, rank)) - 1;
+    return pass.priceByRank[idx];
+}
+
 export const itemBlueprints = {
     turrets: turretsData.map(toTurretBlueprint),
     hulls: hullsData.map(toHullBlueprint),
@@ -1961,6 +1972,6 @@ export const itemBlueprints = {
     passes: [
         { id: "newbie", name: "Passe Iniciante", description: "Com o passe de iniciante, o jogador ganha 50% a mais de experiência e 100% a cada batalha disputada.", index: 7900, type: 5, rank: 1, price: -1, category: "special", durationMs: 21 * 24 * 3600 * 1000, expiresField: "newbieExpiresAt" },
         { id: "up_score", name: "Passe Multiplicador de Pontos", description: "Aumenta em 30% o XP recebido.\n\nDura 1 mês.\n\nAtenção, a assinatura não dá vantagem em batalhas de equipe!", index: 8000, type: 5, rank: 1, price: 12500, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "upScoreExpiresAt" },
-        { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "proBattleExpiresAt" },
+        { id: "pro_battle", name: "Passe de Batalha PRO", description: "A duração é de 1 mês. Permite que você crie suas próprias batalhas e escolha suas configurações, além de participar de «Batalhas PRO» um número ilimitado de vezes dentro de 31 dias a partir da data da compra.", index: 8200, type: 5, rank: 1, price: 139, category: "special", durationMs: 30 * 24 * 3600 * 1000, expiresField: "proBattleExpiresAt", priceByRank: PRO_BATTLE_PRICE_BY_RANK },
     ],
 };

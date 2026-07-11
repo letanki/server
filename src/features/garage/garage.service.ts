@@ -1,7 +1,7 @@
 import { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints, supplyPreviewResources, passPreviewResources } from "./garage.data";
+import { itemBlueprints, supplyPreviewResources, passPreviewResources, passPriceForRank } from "./garage.data";
 
 export class GarageService {
     private static readonly EQUIP_COOLDOWN_MS = 15 * 60 * 1000; // 15 min per equipment category (re-arm battles)
@@ -124,7 +124,8 @@ export class GarageService {
                 if (itemBlueprint.price < 0) throw new Error("Este passe não está à venda.");
                 if (user.rank < itemBlueprint.rank) throw new Error("Rank insuficiente para comprar este item.");
 
-                effectivePrice = itemBlueprint.price;
+                // Preço escala pelo rank do comprador (pro_battle) quando há priceByRank.
+                effectivePrice = passPriceForRank(itemBlueprint, user.rank);
                 if (effectivePrice !== expectedPrice) throw new Error("O preço do item não confere. Tente novamente.");
                 if (user.crystals < effectivePrice) throw new Error("Cristais insuficientes.");
 
@@ -283,13 +284,15 @@ export class GarageService {
             // Preview served by OUR resource server (downloaded to resources/passes/<id>/preview) with
             // our own idLow — never the official 1140/1141/1136.
             const previewIdLow = ResourceManager.getIdlowById(passPreviewResources[pass.id]);
+            // Preço pode escalar pelo rank do comprador (pro_battle: 139→9999). newbie mantém -1.
+            const price = pass.price < 0 ? pass.price : passPriceForRank(pass, userInventory.rank ?? 1);
             const item = {
                 id: pass.id,
                 name: pass.name,
                 description: pass.description,
                 isInventory: true,
                 index: pass.index,
-                next_price: pass.price,
+                next_price: price,
                 next_rank: pass.rank,
                 type: pass.type,
                 baseItemId: previewIdLow,
@@ -300,7 +303,7 @@ export class GarageService {
                 discount: { percent: 0, timeLeftInSeconds: -1751196680, timeToStartInSeconds: -1751196680 },
                 grouped: false,
                 isForRent: false,
-                price: pass.price,
+                price,
                 remainingTimeInSec: active ? Math.round((ms - Date.now()) / 1000) : -1,
             };
             // Active → depósito (com o tempo restante). Senão: só entra no mercado se for comprável

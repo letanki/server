@@ -247,6 +247,8 @@ export class GarageWorkflow {
             upScoreExpiresAt: client.user.upScoreExpiresAt,
             premiumExpiresAt: client.user.premiumExpiresAt,
             proBattleExpiresAt: client.user.proBattleExpiresAt,
+            // Rank do jogador — para passes com preço que escala por rank (pro_battle).
+            rank: client.user.rank,
         };
 
         const { garageItems, shopItems } = server.garageService.buildGarageData(userInventory);
