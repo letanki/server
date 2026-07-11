@@ -31,7 +31,8 @@ export const battleDataObject: IBattleData = {
     { battleMode: "CP", scoreLimit: 999, timeLimitInSec: 59940 },
     { battleMode: "AS", scoreLimit: 999, timeLimitInSec: 59940 },
   ],
-  proBattleTimeLeftInSec: 2591999,
+  // Placeholder — sobrescrito por usuário em LobbyWorkflow.sendBattleInfo com secondsLeft(proBattleExpiresAt).
+  proBattleTimeLeftInSec: 0,
   maps: [
     { enabled: true, additionalCrystalsPercent: 0, mapId: "map_zone", mapName: "Zona", maxPeople: 12, previewResource: "map/zone/summer/preview", maxRank: 30, minRank: 11, supportedModes: ["DM", "TDM", "CTF", "CP"], theme: "SUMMER" },
     { enabled: true, additionalCrystalsPercent: 0, mapId: "map_zone", mapName: "Zona", maxPeople: 12, previewResource: "map/zone/winter/preview", maxRank: 30, minRank: 11, supportedModes: ["DM", "TDM", "CTF", "CP"], theme: "WINTER" },

@@ -5,6 +5,9 @@ import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { AddUserToBattleDmPacket, AddUserTeamPacket, CreateBattleResponse, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
+import { SystemMessage } from "@/features/system/system.packets";
+import * as ProfilePackets from "@/features/profile/profile.packets";
+import { isProBattleActive, PRO_BATTLE_ENTER_PRICE } from "@/shared/models/passes";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -70,9 +73,30 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
             return;
         }
 
+        // Entrada em Batalha PRO: quem NÃO tem o passe paga PRO_BATTLE_ENTER_PRICE — mas só 1x por batalha
+        // (reentrar na mesma, após sair, é grátis). Portador do passe entra sempre grátis. Pré-checa os
+        // cristais aqui (bloqueia mantendo no lobby); a cobrança em si só ocorre APÓS entrar com sucesso,
+        // para não cobrar se addUserToBattle falhar (batalha cheia, restrição de equipamento, etc.).
+        const targetBattle = server.lobbyService.getBattleById(client.lastViewedBattleId);
+        const mustPayProEntry = !!targetBattle?.settings.proBattle && !isProBattleActive(client.user) && !targetBattle.paidEntryUserIds.has(client.user.id);
+        if (mustPayProEntry && client.user.crystals < PRO_BATTLE_ENTER_PRICE) {
+            client.sendPacket(new SystemMessage({ text: `Cristais insuficientes para entrar nesta Batalha PRO (custa ${PRO_BATTLE_ENTER_PRICE}).` }));
+            client.sendPacket(new BattleHaltPacket(client.lastViewedBattleId));
+            return;
+        }
+
         try {
             const battle = server.battleService.addUserToBattle(client.user, client.lastViewedBattleId, packet.battleTeam);
             client.currentBattle = battle;
+
+            // Entrou com sucesso → cobra a entrada da Batalha PRO e marca como pago nesta batalha.
+            if (mustPayProEntry) {
+                client.user.crystals -= PRO_BATTLE_ENTER_PRICE;
+                await client.user.save();
+                battle.paidEntryUserIds.add(client.user.id);
+                client.sendPacket(new ProfilePackets.UpdateCrystals({ crystals: client.user.crystals }));
+                logger.info(`User ${client.user.username} paid ${PRO_BATTLE_ENTER_PRICE} to enter PRO battle ${battle.battleId}.`);
+            }
 
             await BattleWorkflow.enterBattle(client, server, battle);
 

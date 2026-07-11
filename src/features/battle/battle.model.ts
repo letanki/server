@@ -191,6 +191,14 @@ export class Battle {
      */
     public readonly clients = new Set<GameClient>();
 
+    /**
+     * userIds que já pagaram a entrada nesta Batalha PRO (proBattle) sem ter o Passe de Batalha PRO.
+     * A cobrança é por BATALHA: quem pagou pode sair e reentrar na MESMA batalha de graça enquanto ela
+     * existir. Portadores do passe nunca entram aqui (entram grátis). Vive junto do objeto da batalha,
+     * então some quando a batalha é removida (uma nova batalha cobra de novo).
+     */
+    public readonly paidEntryUserIds = new Set<string>();
+
     constructor(settings: IBattleCreationSettings) {
         this.battleId = crypto.randomBytes(8).toString("hex");
         this.settings = settings;

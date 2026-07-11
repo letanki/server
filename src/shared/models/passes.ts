@@ -13,6 +13,11 @@ export function isActive(expiresAt: Date | null | undefined): boolean {
 export const isPremiumActive = (u: UserDocument): boolean => isActive(u.premiumExpiresAt);
 export const isNewbieActive = (u: UserDocument): boolean => isActive(u.newbieExpiresAt);
 export const isUpScoreActive = (u: UserDocument): boolean => isActive(u.upScoreExpiresAt);
+/** Passe de Batalha PRO ativo: permite CRIAR batalhas (com configurações próprias). */
+export const isProBattleActive = (u: UserDocument): boolean => isActive(u.proBattleExpiresAt);
+
+/** Custo em cristais para ENTRAR numa Batalha PRO sem ter o passe (cobrado 1x por batalha; ver Battle.paidEntryUserIds). */
+export const PRO_BATTLE_ENTER_PRICE = 150;
 
 /** Percentual de bônus de XP por passe (wiki + confirmação do dono). */
 export const XP_BONUS_PERCENT = { PREMIUM: 50, UP_SCORE: 30, NEWBIE: 50 } as const;

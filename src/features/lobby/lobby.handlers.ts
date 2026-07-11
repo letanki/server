@@ -1,5 +1,7 @@
 import { BattleMode, EquipmentConstraintsMode, IBattleCreationSettings, MapTheme } from "@/features/battle/battle.model";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
+import { SystemMessage } from "@/features/system/system.packets";
+import { isProBattleActive } from "@/shared/models/passes";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -18,6 +20,15 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
         // Server about to restart: refuse the create. The client ignores the string's value here.
         if (server.isRestartPending()) {
             client.sendPacket(new BattleHaltPacket("restart"));
+            return;
+        }
+
+        // Gating do Passe de Batalha PRO: criar uma «Batalha PRO» (proBattle=true) exige o passe ativo —
+        // sem exceção para staff. Batalhas normais (proBattle=false) qualquer um cria. Checagem
+        // autoritativa no servidor (o cliente esconde a opção, mas um cliente modificado poderia enviar).
+        if (packet.proBattle && !isProBattleActive(client.user)) {
+            client.sendPacket(new SystemMessage({ text: "Você precisa do Passe de Batalha PRO para criar uma Batalha PRO.\nAdquira-o na garagem." }));
+            logger.info(`User ${client.user.username} tried to create a PRO battle without the pro_battle pass.`);
             return;
         }
 

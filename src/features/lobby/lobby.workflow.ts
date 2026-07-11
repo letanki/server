@@ -18,7 +18,7 @@ import { ConfirmLayoutChange, SetLayout } from "@/features/system/system.packets
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { Achievement } from "@/shared/models/enums/achievement.enum";
-import { isNewbieActive, secondsLeft, NEWBIE_CRYSTAL_BONUS_PERCENT, XP_BONUS_PERCENT } from "@/shared/models/passes";
+import { isNewbieActive, isProBattleActive, secondsLeft, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
 import { ResourceId } from "@/generated/resourceTypes";
@@ -338,6 +338,10 @@ export class LobbyWorkflow {
     private static sendBattleInfo(client: GameClient): void {
         const battleData = JSON.parse(JSON.stringify(battleDataObject));
 
+        // Tempo restante do Passe de Batalha PRO do próprio usuário (0 sem passe) — o estático do
+        // battle.data.ts é só placeholder.
+        battleData.proBattleTimeLeftInSec = client.user ? secondsLeft(client.user.proBattleExpiresAt) : 0;
+
         battleData.maps.forEach((map: any) => {
             if (map.previewResource) {
                 try {
@@ -443,10 +447,12 @@ export class LobbyWorkflow {
             withoutBonuses: battle.settings.withoutBonuses,
             withoutCrystals: battle.settings.withoutCrystals,
             withoutSupplies: battle.settings.withoutSupplies,
-            proBattleEnterPrice: 150,
+            proBattleEnterPrice: PRO_BATTLE_ENTER_PRICE,
             timeLeftInSec: timeLeftInSec,
-            userPaidNoSuppliesBattle: true,
-            proBattleTimeLeftInSec: 1,
+            // Estado do passe PRO do próprio espectador: tempo restante do passe e se entra sem pagar —
+            // porque tem o passe OU já pagou a entrada nesta batalha (reentrada grátis). 0/false sem passe.
+            userPaidNoSuppliesBattle: client.user ? (isProBattleActive(client.user) || battle.paidEntryUserIds.has(client.user.id)) : false,
+            proBattleTimeLeftInSec: client.user ? secondsLeft(client.user.proBattleExpiresAt) : 0,
             parkourMode: battle.settings.parkourMode,
             equipmentConstraintsMode: EquipmentConstraintsMode[battle.settings.equipmentConstraintsMode],
             reArmorEnabled: battle.settings.reArmorEnabled,
