@@ -5,6 +5,9 @@ import { BattleEvents } from "./battle-events";
 import { Battle, BattleMode, IDomPointState } from "./battle.model";
 import { PointCaptureStartedPacket, PointCaptureStoppedPacket, PointScoreChangedPacket, PointStateChangedPacket, PointTankEnteredPacket, PointTankLeftPacket, SetCtfScorePacket } from "./battle.packets";
 import { RoundService } from "./round.service";
+import { pointCaptureScore } from "./scoring";
+import { awardScore } from "./score-award";
+import logger from "@/utils/logger";
 
 const DOM_TICK_MS = 1000; // capture loop interval (1s)
 const CAPTURE_RATE = 20; // meter change per second PER net player (matches official). net = blue - red
@@ -113,16 +116,19 @@ export class DominationService {
     }
 
     private _tickPoint(battle: Battle, point: IDomPointState): void {
-        // Count ACTIVE tanks of each team actually standing on the point right now.
-        let red = 0;
-        let blue = 0;
+        // ACTIVE tanks of each team actually standing on the point right now (kept as client lists so a
+        // capture/neutralization can split its reward among the allies who were on the point).
+        const redClients: GameClient[] = [];
+        const blueClients: GameClient[] = [];
         for (const c of battle.clients) {
             if (c.isDestroyed || c.battleState !== "active" || !c.user || !c.battlePosition) continue;
             if (!this._inRange(point, c.battlePosition)) continue;
             const team = battle.teamOf(c.user);
-            if (team === STATE_RED) red++;
-            else if (team === STATE_BLUE) blue++;
+            if (team === STATE_RED) redClients.push(c);
+            else if (team === STATE_BLUE) blueClients.push(c);
         }
+        const red = redClients.length;
+        const blue = blueClients.length;
 
         const prev = point.score;
         let targetRate: number;
@@ -154,6 +160,12 @@ export class DominationService {
         else if (prev < 0 && point.score >= 0) newState = STATE_NEUTRAL;
         else if (prev > 0 && point.score <= 0) newState = STATE_NEUTRAL;
         if (newState !== point.state) {
+            // Which team performed this? Capture → the new owner; neutralization (crossing 0) → the team
+            // pushing across it (opposite of the previous owner side). Split 2×enemy among that team's
+            // allies who were on the point. A decay-driven neutral (nobody on point) awards no one.
+            const actingTeam = newState === STATE_RED ? STATE_RED : newState === STATE_BLUE ? STATE_BLUE : (prev < 0 ? STATE_BLUE : STATE_RED);
+            this._awardPointCapture(battle, actingTeam, actingTeam === STATE_RED ? redClients : blueClients);
+
             point.state = newState as 0 | 1 | 2;
             battle.broadcast(new PointStateChangedPacket({ pointId: point.id, state: point.state }));
         }
@@ -172,6 +184,20 @@ export class DominationService {
             point.scoreChangeRate = broadcastRate;
             battle.broadcast(new PointScoreChangedPacket({ pointId: point.id, score: point.score, scoreChangeRate: broadcastRate }));
         }
+    }
+
+    /**
+     * On a capture/neutralization, splits `2 × enemy` (enemy = connected enemy-team players) among the
+     * acting team's allies who were on the point — `pointCaptureScore` gives the per-ally share. Each
+     * gets Score + XP via the shared funnel. No allies (decay-driven neutral) or no enemies → no award.
+     */
+    private _awardPointCapture(battle: Battle, actingTeam: number, allies: GameClient[]): void {
+        if (allies.length === 0) return;
+        const enemyTeamId = actingTeam === STATE_RED ? STATE_BLUE : STATE_RED;
+        const enemyCount = [...battle.clients].filter((c) => !c.isDestroyed && c.user && battle.teamOf(c.user) === enemyTeamId).length;
+        const per = Math.round(pointCaptureScore(enemyCount, allies.length));
+        if (per <= 0) return;
+        for (const c of allies) awardScore(battle, c, per).catch((e) => logger.error(`Point capture award failed: ${e}`));
     }
 
     private _inRange(point: IDomPointState, pos: IVector3): boolean {
