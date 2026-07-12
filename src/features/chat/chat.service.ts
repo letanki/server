@@ -12,6 +12,10 @@ export interface PopulatedChatMessage {
     isWarning: boolean;
 }
 
+// Máximo de mensagens mantidas no histórico persistido (bate com o `chatHistoryLimit` do config, que
+// limita a CARGA). Ao passar disso, o excedente mais antigo é apagado a cada nova mensagem.
+const CHAT_HISTORY_LIMIT = 70;
+
 export class ChatService {
     private userService: UserService;
 
@@ -66,6 +70,7 @@ export class ChatService {
         });
 
         await chatMessage.save();
+        await this._trimHistory();
 
         sourceUser.lastMessageTimestamp = new Date();
         await sourceUser.save();
@@ -77,5 +82,28 @@ export class ChatService {
             isSystemMessage: false,
             isWarning: false,
         };
+    }
+
+    /** Mantém só as `CHAT_HISTORY_LIMIT` mensagens mais recentes; apaga o excedente mais antigo. */
+    private async _trimHistory(): Promise<void> {
+        try {
+            const overflow = await ChatMessage.find().sort({ timestamp: -1 }).skip(CHAT_HISTORY_LIMIT).limit(1).select("timestamp").lean();
+            if (overflow.length > 0) {
+                await ChatMessage.deleteMany({ timestamp: { $lt: (overflow[0] as { timestamp: Date }).timestamp } });
+            }
+        } catch (error) {
+            logger.error("Failed to trim chat history", { error });
+        }
+    }
+
+    /** Remove do histórico TODAS as mensagens enviadas por um usuário. Retorna quantas foram apagadas. */
+    public async removeUserMessages(user: UserDocument): Promise<number> {
+        try {
+            const res = await ChatMessage.deleteMany({ sourceUser: user._id });
+            return res.deletedCount ?? 0;
+        } catch (error) {
+            logger.error(`Failed to remove chat messages of ${user.username}`, { error });
+            return 0;
+        }
     }
 }

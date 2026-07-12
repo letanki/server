@@ -35,6 +35,7 @@ const ChatMessageSchema = new Schema<IChatMessage>({
     timestamp: {
         type: Date,
         default: Date.now,
+        index: true, // usado no sort/skip do corte de histórico (mantém só as N mais recentes)
     },
 });
 

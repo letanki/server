@@ -37,7 +37,9 @@ export default class MuteCommand implements ICommand {
         await user.save();
         if (online?.user && online.user !== user) online.user.mutedUntil = user.mutedUntil;
 
-        // Limpa o spam já enviado do usuário silenciado do chat de todos (não só silencia o futuro).
+        // Limpa o spam já enviado do usuário silenciado: apaga do histórico (DB) e remove das telas de
+        // todos (não só silencia o futuro) — assim não reaparece para quem recarregar o chat.
+        await context.server.chatService.removeUserMessages(user);
         const removePacket = new RemoveUserChatMessagesPacket({ nickname: user.username });
         for (const c of context.server.getClients()) c.sendPacket(removePacket);
 
