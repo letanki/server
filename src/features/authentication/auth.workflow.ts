@@ -393,6 +393,10 @@ export class AuthWorkflow {
         // it pre-login so the client knows it before that packet (else the packet parse throws
         // "Resource not found" and the clan module/button is skipped).
         resourceIds.push("clan/podium");
+        // Imagem da janela de doação (type 13 localizada), referenciada pelo ShowDonationAlert pós-compra/
+        // resgate. Registrada pré-login para o cliente já conhecê-la quando o alerta chega (senão o
+        // descriptor da imagem resolve null → TypeError #1009 ao montar a janela).
+        resourceIds.push("ui/shop/donation_alert");
 
         const dependencies = {
             resources: ResourceManager.getBulkResources(resourceIds),

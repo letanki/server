@@ -4,7 +4,8 @@ import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
 import * as ShopPackets from "./shop.packets";
 import { ShowAlertMessage } from "@/features/system/system.packets";
-import { UpdateCrystals } from "@/features/profile/profile.packets";
+import { getPackageReward } from "./shop.service";
+import { applyDonationGrant } from "./shop.donation";
 import { promoCodesData } from "@/config/promo-codes.data";
 
 export class RequestShopDataHandler implements IPacketHandler<ShopPackets.RequestShopData> {
@@ -42,10 +43,24 @@ export class RequestPaymentWindowHandler implements IPacketHandler<ShopPackets.R
  */
 export class PurchaseShopItemHandler implements IPacketHandler<ShopPackets.PurchaseShopItem> {
     public readonly packetId = ShopPackets.PurchaseShopItem.getId();
-    public execute(client: GameClient, _server: GameServer, packet: ShopPackets.PurchaseShopItem): void {
-        logger.info(`Shop purchase attempt: item=${packet.itemId} method=${packet.paymentMethod} by ${client.user?.username}`);
-        client.sendPacket(new ShowAlertMessage({ text: "Pagamentos ainda não estão disponíveis neste servidor." }));
-        // TODO (tarefa 2): gerar a URL de checkout do provedor escolhido e responder com OpenPaymentUrl.
+    public async execute(client: GameClient, _server: GameServer, packet: ShopPackets.PurchaseShopItem): Promise<void> {
+        const user = client.user;
+        if (!user) return;
+        // TESTE: sem provedor de pagamento real, confirmamos a compra COMO SE tivesse sido paga —
+        // credita o pacote (cristais + bônus + dobro se abonement) e premium, e mostra a janela de doação.
+        // (TODO tarefa 2: gerar a URL de checkout do provedor e responder OpenPaymentUrl em vez disto.)
+        const reward = packet.itemId ? getPackageReward(packet.itemId) : null;
+        if (!reward) {
+            client.sendPacket(new ShowAlertMessage({ text: "Este item ainda não está disponível para compra." }));
+            return;
+        }
+        applyDonationGrant(client, user, {
+            donatedCrystals: reward.crystals,
+            packageBonusCrystals: reward.bonusCrystals,
+            premiumDays: reward.premiumDays,
+        });
+        await user.save();
+        logger.info(`[TESTE] ${user.username} "comprou" ${packet.itemId} (${packet.paymentMethod}): +${reward.crystals}+${reward.bonusCrystals} cristais, ${reward.premiumDays}d premium.`);
     }
 }
 
@@ -65,16 +80,16 @@ export class ActivatePromoCodeHandler implements IPacketHandler<ShopPackets.Acti
             return;
         }
 
-        if (reward.crystals) user.crystals += reward.crystals;
-        if (reward.premiumDays) {
-            const base = user.premiumExpiresAt && user.premiumExpiresAt > new Date() ? user.premiumExpiresAt.getTime() : Date.now();
-            user.premiumExpiresAt = new Date(base + reward.premiumDays * 24 * 60 * 60 * 1000);
-        }
+        // Concede como uma doação (cristais + dobro se abonement + premium em tempo real + ShowDonationAlert).
+        applyDonationGrant(client, user, {
+            donatedCrystals: reward.crystals ?? 0,
+            packageBonusCrystals: 0,
+            premiumDays: reward.premiumDays ?? 0,
+        });
         user.usedPromoCodes.push(code);
         await user.save();
 
         client.sendPacket(new ShopPackets.PromoCodeValid());
-        if (reward.crystals) client.sendPacket(new UpdateCrystals({ crystals: user.crystals }));
         logger.info(`User ${user.username} redeemed promo code ${code} (crystals=${reward.crystals ?? 0}, premiumDays=${reward.premiumDays ?? 0}).`);
     }
 }

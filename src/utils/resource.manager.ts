@@ -63,7 +63,8 @@ export class ResourceManager {
             versionhigh: versionHigh.toString(),
             versionlow: versionLow,
             lazy: id.includes("preview"),
-            alpha: files.includes("alpha.jpg"),
+            // Texturas normais usam "alpha.jpg"; localizadas (type 13) trazem "<lang>_alpha.jpg".
+            alpha: files.includes("alpha.jpg") || files.some((f) => /_alpha\.(jpg|png)$/.test(f)),
             type: resourceType,
         };
 

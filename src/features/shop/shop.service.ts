@@ -31,6 +31,31 @@ const pricingData: PricingData = {
     },
 };
 
+// Itens do shop (fonte única — usado no getShopData e no crédito da compra). additional_data:
+// crystalls_count = cristais base, bonus_crystalls = bônus do pacote, premium_duration = dias de premium.
+interface ShopItemAdditionalData { crystalls_count?: number; bonus_crystalls?: number; premium_duration?: number; price?: number; currency?: string; }
+const SHOP_ITEMS: { item_id: string; category_id: string; additional_data: ShopItemAdditionalData }[] = [
+    { item_id: "promocodes", category_id: "other", additional_data: {} },
+    { item_id: "premium_pack_1", category_id: "premium", additional_data: { premium_duration: 1 } },
+    { item_id: "crystalls_pack_1", category_id: "crystalls", additional_data: { crystalls_count: 1500, premium_duration: 0, bonus_crystalls: 0 } },
+    { item_id: "crystalls_pack_2", category_id: "crystalls", additional_data: { crystalls_count: 5000, premium_duration: 0, bonus_crystalls: 1250 } },
+    { item_id: "premium_pack_2", category_id: "premium", additional_data: { premium_duration: 7 } },
+    { item_id: "crystalls_pack_3", category_id: "crystalls", additional_data: { crystalls_count: 15000, premium_duration: 0, bonus_crystalls: 7500 } },
+    { item_id: "premium_pack_3", category_id: "premium", additional_data: { premium_duration: 30 } },
+    { item_id: "crystalls_pack_4", category_id: "crystalls", additional_data: { crystalls_count: 30000, premium_duration: 1, bonus_crystalls: 22500 } },
+    { item_id: "premium_pack_4", category_id: "premium", additional_data: { premium_duration: 90 } },
+    { item_id: "crystalls_pack_5", category_id: "crystalls", additional_data: { crystalls_count: 60000, premium_duration: 3, bonus_crystalls: 60000 } },
+    { item_id: "crystalls_pack_6", category_id: "crystalls", additional_data: { crystalls_count: 150000, premium_duration: 7, bonus_crystalls: 225000 } },
+];
+
+/** Recompensa de um pacote do shop por itemId (para creditar a compra). null se não for um pacote. */
+export function getPackageReward(itemId: string): { crystals: number; bonusCrystals: number; premiumDays: number } | null {
+    const item = SHOP_ITEMS.find((i) => i.item_id === itemId);
+    if (!item || item.category_id === "other") return null;
+    const ad = item.additional_data;
+    return { crystals: ad.crystalls_count ?? 0, bonusCrystals: ad.bonus_crystalls ?? 0, premiumDays: ad.premium_duration ?? 0 };
+}
+
 export class ShopService {
     private getPriceInfo(itemId: string, countryCode: string): PriceInfo | null {
         const countryPrices = pricingData[countryCode.toUpperCase()] || pricingData["US"];
@@ -57,19 +82,7 @@ export class ShopService {
                 },
                 { category_id: "other", header_text: { RU: "Другое", EN: "Others", pt_BR: "Outros", UA: "Інше" }, description: { RU: "Прочие товары", EN: "Miscellaneous staff", pt_BR: "Pessoal diverso", UA: "Інші товари" } },
             ],
-            items: [
-                { item_id: "promocodes", category_id: "other", additional_data: {} },
-                { item_id: "premium_pack_1", category_id: "premium", additional_data: { premium_duration: 1 } },
-                { item_id: "crystalls_pack_1", category_id: "crystalls", additional_data: { crystalls_count: 1500, premium_duration: 0, bonus_crystalls: 0 } },
-                { item_id: "crystalls_pack_2", category_id: "crystalls", additional_data: { crystalls_count: 5000, premium_duration: 0, bonus_crystalls: 1250 } },
-                { item_id: "premium_pack_2", category_id: "premium", additional_data: { premium_duration: 7 } },
-                { item_id: "crystalls_pack_3", category_id: "crystalls", additional_data: { crystalls_count: 15000, premium_duration: 0, bonus_crystalls: 7500 } },
-                { item_id: "premium_pack_3", category_id: "premium", additional_data: { premium_duration: 30 } },
-                { item_id: "crystalls_pack_4", category_id: "crystalls", additional_data: { crystalls_count: 30000, premium_duration: 1, bonus_crystalls: 22500 } },
-                { item_id: "premium_pack_4", category_id: "premium", additional_data: { premium_duration: 90 } },
-                { item_id: "crystalls_pack_5", category_id: "crystalls", additional_data: { crystalls_count: 60000, premium_duration: 3, bonus_crystalls: 60000 } },
-                { item_id: "crystalls_pack_6", category_id: "crystalls", additional_data: { crystalls_count: 150000, premium_duration: 7, bonus_crystalls: 225000 } },
-            ],
+            items: SHOP_ITEMS,
         };
 
         const shopForCountry = JSON.parse(JSON.stringify(baseShopStructure));

@@ -66,3 +66,7 @@ export type PromoCodeValid = InstanceType<typeof PromoCodeValid>;
 /** S->C: código promocional inválido. */
 export const PromoCodeInvalid = packetClass(defs.shop.PromoCodeInvalid);
 export type PromoCodeInvalid = InstanceType<typeof PromoCodeInvalid>;
+
+/** S->C: janela "compra concluída" (cristais/premium recebidos). Compras em sequência ACUMULAM. */
+export const ShowDonationAlert = packetClass(defs.shop.ShowDonationAlert);
+export type ShowDonationAlert = InstanceType<typeof ShowDonationAlert>;

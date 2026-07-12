@@ -63,6 +63,10 @@ export type EmailInfo = InstanceType<typeof EmailInfo>;
 export const PremiumInfo = packetClass(defs.profile.PremiumInfo);
 export type PremiumInfo = InstanceType<typeof PremiumInfo>;
 
+/** S->C: alerta de premium ativado. {returning} = true se já teve premium antes (reativação). */
+export const ShowPremiumAlert = packetClass(defs.profile.ShowPremiumAlert);
+export type ShowPremiumAlert = InstanceType<typeof ShowPremiumAlert>;
+
 export const UpdateCrystals = packetClass(defs.profile.UpdateCrystals);
 export type UpdateCrystals = InstanceType<typeof UpdateCrystals>;
 
@@ -72,5 +76,6 @@ export type UpdateScorePacket = InstanceType<typeof UpdateScorePacket>;
 export const UpdateRankPacket = packetClass(defs.profile.UpdateRank);
 export type UpdateRankPacket = InstanceType<typeof UpdateRankPacket>;
 
+/** S->C: atualiza EM TEMPO REAL o tempo de premium restante (segundos). Ativa/renova sem relogar. */
 export const UpdatePremiumTimePacket = packetClass(defs.profile.UpdatePremiumTime);
 export type UpdatePremiumTimePacket = InstanceType<typeof UpdatePremiumTimePacket>;
