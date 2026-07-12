@@ -20,11 +20,11 @@ export interface IThunderStaticShotPacket extends IPacket, IThunderStaticShotPac
 
 export interface IThunderTargetShotCommand extends IPacket {
     clientTime: number;
-    internalPosition: IVector3 | null;
+    hitLocalPosition: IVector3 | null;
     nicknameTarget: string | null;
     incarnationTarget: number;
-    positionTarget: IVector3 | null;
-    positionInWorld: IVector3 | null;
+    targetPosition: IVector3 | null;
+    hitGlobalPosition: IVector3 | null;
 }
 export interface IThunderTargetShotPacketData {
     nicknameShooter: string | null;

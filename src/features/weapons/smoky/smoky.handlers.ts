@@ -95,8 +95,19 @@ export class SmokyTargetShotCommandHandler implements IPacketHandler<SmokyPacket
             const critDamage = ItemUtils.getPropertyValue(turretMod, "CRITICAL_HIT_DAMAGE") ?? dmgFrom + dmgTo;
             const damage = isCritical ? critDamage : (dmgFrom + Math.random() * (dmgTo - dmgFrom)) * factor;
             await server.battleService.applyDamage(currentBattle, client, targetClient, damage, isCritical ? 1 : 0);
+            // Crítico: além do número amarelo (damageType 1), dispara o efeito visual na torreta do alvo.
+            if (isCritical) currentBattle.broadcast(new SmokyPackets.SmokyCriticalHitPacket({ target: targetClient.user!.username }), user.id);
         }
 
         logger.info(`Smoky from ${user.username} -> ${packet.targetUserId}: dist=${distance.toFixed(1)} factor=${factor.toFixed(2)} crit=${isCritical}`);
+    }
+}
+/** C→S: smoky disparou sem alvo → relaya o efeito visual do tiro para os outros jogadores. */
+export class SmokyShotNoTargetCommandHandler implements IPacketHandler<SmokyPackets.SmokyShotNoTargetCommandPacket> {
+    public readonly packetId = SmokyPackets.SmokyShotNoTargetCommandPacket.getId();
+    public execute(client: GameClient, _server: GameServer, _packet: SmokyPackets.SmokyShotNoTargetCommandPacket): void {
+        const { user, currentBattle } = client;
+        if (!user || !currentBattle || client.battleState !== "active") return;
+        currentBattle.broadcast(new SmokyPackets.SmokyShotNoTargetPacket({ nickname: user.username }), user.id);
     }
 }

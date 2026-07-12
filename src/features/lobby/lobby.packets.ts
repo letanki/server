@@ -120,6 +120,10 @@ export type InitNewbieBonusPacket = InstanceType<typeof InitNewbieBonusPacket>;
 export const InitNewsPacket = packetClass(defs.lobby.InitNews);
 export type InitNewsPacket = InstanceType<typeof InitNewsPacket>;
 
+/** S->C: atualiza os kills de um jogador no roster do lobby (preview de batalha). */
+export const UpdateUserKillsPacket = packetClass(defs.lobby.UpdateUserKills);
+export type UpdateUserKillsPacket = InstanceType<typeof UpdateUserKillsPacket>;
+
 // --- Team-mode battle-lobby roster (mirror the DM packets, with a `team` field; 0=red, 1=blue). ---
 
 // S->C (battle list): a player reserved a team slot in a battle.

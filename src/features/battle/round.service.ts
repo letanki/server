@@ -206,6 +206,7 @@ export class RoundService {
         // Lobby preview watchers: the scorer's individual score, and (team modes) the team score.
         if (killer.id !== victim.id) {
             this._sendToWatchers(battle, new LobbyPackets.UpdateUserScorePacket({ battleId: battle.battleId, nickname: killer.username, score: killerClient.battleScore }));
+            this._sendToWatchers(battle, new LobbyPackets.UpdateUserKillsPacket({ battleId: battle.battleId, nickname: killer.username, kills: killerClient.kills }));
             this._addFund(battle, FUND_PER_KILL);
         }
 

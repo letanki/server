@@ -119,7 +119,7 @@ export class ThunderTargetShotCommandHandler implements IPacketHandler<ThunderPa
             return;
         }
         // Relay the explosion visual on the hit tank.
-        const shotPacket = new ThunderPackets.ThunderTargetShotPacket({ nicknameShooter: user.username, nicknameTarget: packet.nicknameTarget, internalPosition: packet.internalPosition });
+        const shotPacket = new ThunderPackets.ThunderTargetShotPacket({ nicknameShooter: user.username, nicknameTarget: packet.nicknameTarget, internalPosition: packet.hitLocalPosition });
         currentBattle.broadcastRaw(shotPacket.write(), shotPacket.getId(), user.id);
 
         // Direct hit: centre the explosion on the TARGET's position so it sits at distance 0 (splash
@@ -129,10 +129,10 @@ export class ThunderTargetShotCommandHandler implements IPacketHandler<ThunderPa
         let directTarget = packet.nicknameTarget ? server.findClientByUsername(packet.nicknameTarget) : null;
         // Anti-cheat: se a vida (incarnation) ou a posição do alvo direto não confere, NÃO centra a
         // explosão nele (hit obsoleto/forjado) — cai no ponto de superfície reportado (splash normal).
-        if (directTarget && !isReportedHitValid(directTarget, { incarnation: packet.incarnationTarget, targetPosition: packet.positionTarget })) {
+        if (directTarget && !isReportedHitValid(directTarget, { incarnation: packet.incarnationTarget, targetPosition: packet.targetPosition })) {
             directTarget = null;
         }
-        const fallback = packet.positionInWorld ?? packet.positionTarget ?? null;
+        const fallback = packet.hitGlobalPosition ?? packet.targetPosition ?? null;
         const center = directTarget?.battlePosition ?? fallback;
         await detonateThunder(server, client, center, directTarget ? null : nudgeTowardShooter(client, fallback));
     }

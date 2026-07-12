@@ -50,8 +50,8 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         // Relay the shot visual to the other players (the beam).
         const shotPacket = new RailgunPackets.RailgunShotPacket({
             shooterNickname: user.username,
-            hitPosition: packet.position,
-            targets: packet.targets.map((target) => ({ nickname: target.nickname, position: target.position })),
+            staticHitPoint: packet.staticHitPoint,
+            targets: packet.targets.map((target) => ({ nickname: target.nickname, localHitPoint: target.localHitPoint })),
         });
         currentBattle.broadcastRaw(shotPacket.write(), shotPacket.getId(), user.id);
 
@@ -77,9 +77,10 @@ export class RailgunShotCommandHandler implements IPacketHandler<RailgunPackets.
         for (const target of packet.targets) {
             const targetClient = server.findClientByUsername(target.nickname);
             if (!targetClient || !targetClient.user || targetClient === client || targetClient.currentBattle !== currentBattle || targetClient.battleState !== "active") continue;
-            // Anti-cheat: valida a vida (incarnation) e a posição do alvo antes do dano — hit obsoleto ou
-            // alvo forjado não consome nem sequer um índice de perfuração (o `continue` pula o pierce).
-            if (!isReportedHitValid(targetClient, { incarnation: target.incarnation, targetPosition: target.position })) continue;
+            // Anti-cheat: valida a vida (incarnation) e a posição do CORPO do alvo (targetPosition = mundo;
+            // NÃO o localHitPoint) — hit obsoleto ou alvo forjado não consome nem um índice de perfuração.
+            // (A regressão do "elétrico" era usar o localHitPoint como posição-mundo; o def novo separa os dois.)
+            if (!isReportedHitValid(targetClient, { incarnation: target.incarnation, targetPosition: target.targetPosition })) continue;
 
             const rawDamage = twoShotMode ? XP_BP_DAMAGE_FRACTION * ItemUtils.getHullArmor(targetClient.user) : baseDamage;
             const damage = rawDamage * Math.pow(weakeningCoeff, pierceIndex);
@@ -102,5 +103,14 @@ export class StartChargingCommandHandler implements IPacketHandler<RailgunPacket
         client.railgunChargeStart = Date.now();
         const startChargingPacket = new RailgunPackets.StartChargingPacket({ nickname: user.username });
         currentBattle.broadcastRaw(startChargingPacket.write(), startChargingPacket.getId(), user.id);
+    }
+}
+/** C→S: railgun disparou sem alvo → relaya o efeito visual do tiro para os outros jogadores. */
+export class RailgunShotNoTargetCommandHandler implements IPacketHandler<RailgunPackets.RailgunShotNoTargetCommandPacket> {
+    public readonly packetId = RailgunPackets.RailgunShotNoTargetCommandPacket.getId();
+    public execute(client: GameClient, _server: GameServer, _packet: RailgunPackets.RailgunShotNoTargetCommandPacket): void {
+        const { user, currentBattle } = client;
+        if (!user || !currentBattle || client.battleState !== "active") return;
+        currentBattle.broadcast(new RailgunPackets.RailgunShotNoTargetPacket({ nickname: user.username }), user.id);
     }
 }

@@ -46,7 +46,7 @@ export class ShotgunShotPacket extends BasePacket {
         return encodeBody(defs.weapons.ShotgunShot, {
             nickname: this.nickname,
             direction: this.direction,
-            targets: this.targets.map((t) => ({ direction: this.direction, hit: t.hit, pellets: t.pellets & 0xff, nick: t.nick })),
+            targets: this.targets.map((t) => ({ direction: this.direction, localHitPoint: t.hit, pellets: t.pellets & 0xff, nick: t.nick })),
         });
     }
     public static getId(): number { return defs.weapons.ShotgunShot.id; }

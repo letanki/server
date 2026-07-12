@@ -16,3 +16,15 @@ export type SmokyTargetShotCommandPacket = InstanceType<typeof SmokyTargetShotCo
 
 export const SmokyTargetShotPacket = packetClass(defs.weapons.SmokyTargetShot);
 export type SmokyTargetShotPacket = InstanceType<typeof SmokyTargetShotPacket>;
+
+/** C→S: smoky disparou sem acertar nada (raycast não tocou tanque/cenário). */
+export const SmokyShotNoTargetCommandPacket = packetClass(defs.weapons.SmokyShotNoTargetCommand);
+export type SmokyShotNoTargetCommandPacket = InstanceType<typeof SmokyShotNoTargetCommandPacket>;
+
+/** S→C: relay do disparo sem alvo (para outros verem o efeito do tiro). */
+export const SmokyShotNoTargetPacket = packetClass(defs.weapons.SmokyShotNoTarget);
+export type SmokyShotNoTargetPacket = InstanceType<typeof SmokyShotNoTargetPacket>;
+
+/** S→C: efeito de crítico na torreta do tanque alvo (visual). */
+export const SmokyCriticalHitPacket = packetClass(defs.weapons.SmokyCriticalHit);
+export type SmokyCriticalHitPacket = InstanceType<typeof SmokyCriticalHitPacket>;

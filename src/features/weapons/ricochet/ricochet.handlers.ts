@@ -16,9 +16,9 @@ export class RicochetShotCommandHandler implements IPacketHandler<RicochetPacket
         }
         const shotPacket = new RicochetPackets.RicochetShotPacket({
             nickname: user.username,
-            x: packet.x,
-            y: packet.y,
-            z: packet.z,
+            directionX: packet.directionX,
+            directionY: packet.directionY,
+            directionZ: packet.directionZ,
         });
         const allParticipants = currentBattle.getAllParticipants();
         for (const participant of allParticipants) {

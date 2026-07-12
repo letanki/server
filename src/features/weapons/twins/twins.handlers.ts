@@ -12,7 +12,7 @@ export class TwinsShotCommandHandler implements IPacketHandler<TwinsPackets.Twin
     public execute(client: GameClient, server: GameServer, packet: TwinsPackets.TwinsShotCommandPacket): void {
         const { user, currentBattle } = client;
         if (!user || !currentBattle) return;
-        const relay = new TwinsPackets.TwinsShotPacket({ nickname: user.username, control: packet.control, direction: packet.direction });
+        const relay = new TwinsPackets.TwinsShotPacket({ nickname: user.username, barrel: packet.barrel, direction: packet.direction });
         currentBattle.broadcastRaw(relay.write(), relay.getId(), user.id);
     }
 }
