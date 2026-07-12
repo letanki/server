@@ -4,6 +4,7 @@ import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import { ClanView, ClanMemberView, ClanMissionView } from "./clan.packets";
+import { CLAN_MAX_MEMBERS, CLAN_MAX_DESCRIPTION } from "./clan.constants";
 import Clan, { ClanDocument, IClanMission } from "./clan.model";
 import { CLAN_MISSION_TEMPLATES, IClanMissionContribution, IClanMissionTemplate, MISSION_POINTS } from "./clan.missions.data";
 import { ClanPermissionFlag, ClanPosition, isValidPosition, outranks, positionHasPermission } from "./clan.roles";
@@ -34,8 +35,8 @@ function nextWeeklyReset(): Date {
 
 export const CLAN_CREATION_COST = 500000; // crystals to found a clan (matches InitUserClanModels)
 export const CLAN_MIN_RANK = 8; // Master Sergeant — the minimum rank to create/join/be invited to a clan (wiki)
-export const CLAN_MAX_MEMBERS = 16; // hard member cap per clan (wiki)
-export const CLAN_MAX_DESCRIPTION = 3000; // clan description character cap (wiki)
+// Compartilhadas com clan.packets via clan.constants (evita ciclo); re-exportadas aqui p/ compatibilidade.
+export { CLAN_MAX_MEMBERS, CLAN_MAX_DESCRIPTION } from "./clan.constants";
 const NOVICE_PROMOTE_MS = 24 * 60 * 60 * 1000; // a Novice auto-promotes to Private after 24h (checked lazily)
 
 /** The effective join floor for a clan: never below Master Sergeant, even if the clan's minRank is unset
@@ -531,7 +532,8 @@ export class ClanService {
         return { nick: requester.username, tag: clan.tag };
     }
 
-    /** Builds the wire view of a clan (for ShowForeignClanWindow). Stats default to 0 for now. */
+    /** Builds the wire view of a clan (para todas as janelas: my-clan/foreign/ratings/cards). Campos
+     *  derivados de dado real (membros, stats, rating, missões, minRank, recruiting, logo, block). */
     public async buildClanView(clan: ClanDocument): Promise<ClanView> {
         const members = await this.getMembers(clan);
         const leader = members.find((m) => String(m._id) === String(clan.leaderId));
@@ -561,10 +563,9 @@ export class ClanService {
     /** The 10-field member model (row) for a clan member — shared by the panel and the live member-update
      *  broadcast. `permission` = the member's stored clan position; `field1` = seconds in the clan. */
     public buildMemberView(clan: ClanDocument, m: UserDocument): ClanMemberView {
-        // kills/deaths/minesUsed come from the player's long-term stats (the client sums them across members
-        // into CLAN_TANKS_DESTROYED / CLAN_TANKS_LOST / CLAN_USED_MINES + a K/D ratio). `score` = the
-        // member's XP (personal score column). clanScore/weeklyClanScore are per-clan contribution columns
-        // we don't track yet, so they stay 0.
+        // Todos os campos vêm de dado REAL: kills/deaths/minesUsed dos stats de longo prazo do jogador
+        // (o client soma em CLAN_TANKS_DESTROYED/CLAN_TANKS_LOST/CLAN_USED_MINES + K/D); `score` = o XP
+        // pessoal; clanScore/weeklyClanScore = contribuição de missões do clã (clan.clanScore/weeklyClanScore).
         const counters = (m.stats as { counters?: Map<string, number> } | undefined)?.counters;
         const stat = (key: string): number => counters?.get(key) ?? 0;
         const uid = String(m._id);

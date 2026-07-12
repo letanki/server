@@ -2,6 +2,7 @@ import { BasePacket } from "@/packets/base.packet";
 import { packetClass } from "@/packets/packet-class";
 import { ResourceManager } from "@/utils/resource.manager";
 import { defs, encodeBody, decodeBody } from "protanki-protocol";
+import { CLAN_MAX_MEMBERS, CLAN_MAX_DESCRIPTION } from "./clan.constants";
 
 // IDs e schemas em `protanki-protocol` (defs.clan.*). A ESTRUTURA do fio (incl. o Long de 8 bytes =
 // i64, os models e os vetores) fica na lib; o server só mapeia ClanView/MemberModel → campos.
@@ -55,8 +56,8 @@ const lightClanModel = (v: ClanView, editable: boolean) => ({
     founder: v.leader,
     description: v.description,
     recruiting: v.recruiting,
-    maxDescriptionLength: 3000, // limite de caracteres da descrição (client)
-    maxMembers: 16, // CLAN_MAX_MEMBERS
+    maxDescriptionLength: CLAN_MAX_DESCRIPTION,
+    maxMembers: CLAN_MAX_MEMBERS,
     minRank: v.minRank,
     name: v.name,
     blockReason: v.blockReason || null,
@@ -389,8 +390,8 @@ export class ShowForeignClanWindowPacket extends BasePacket {
         const c = this.clan;
         return encodeBody(defs.clan.ShowForeignClanWindow, {
             blocked: c.blocked, creationDate: c.clanId.readBigInt64BE(0), founder: c.leader, description: c.description, recruiting: c.recruiting,
-            maxMembers: 16, joinHidden: this.viewer.joinHidden, minRank: c.minRank, name: c.name, blockReason: c.blockReason || null,
-            invitedYou: this.viewer.invitedYou, requestSent: this.viewer.requestSent, tag: c.tag, // maxMembers = CLAN_MAX_MEMBERS
+            maxMembers: CLAN_MAX_MEMBERS, joinHidden: this.viewer.joinHidden, minRank: c.minRank, name: c.name, blockReason: c.blockReason || null,
+            invitedYou: this.viewer.invitedYou, requestSent: this.viewer.requestSent, tag: c.tag,
             members: c.members.map(memberModel), logo: c.logo, score: c.rating,
         });
     }
