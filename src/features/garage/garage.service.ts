@@ -1,7 +1,8 @@
 import { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
-import { itemBlueprints, supplyPreviewResources, passPreviewResources, passPriceForRank } from "./garage.data";
+import { itemBlueprints, supplyPreviewResources, passPreviewResources, passPriceForRank, PREMIUM_PAINT_IDS } from "./garage.data";
+import { isActive, isPremiumActive, secondsLeft } from "@/shared/models/passes";
 
 export class GarageService {
     private static readonly EQUIP_COOLDOWN_MS = 15 * 60 * 1000; // 15 min per equipment category (re-arm battles)
@@ -167,7 +168,12 @@ export class GarageService {
                 break;
             }
             case "paint": {
-                if (!user.paints.includes(baseId)) throw new Error("Você não possui esta pintura.");
+                // Pinturas premium não ficam em `user.paints`: só podem ser equipadas com premium ATIVO.
+                if (PREMIUM_PAINT_IDS.has(baseId)) {
+                    if (!isPremiumActive(user)) throw new Error("Esta pintura requer assinatura premium ativa.");
+                } else if (!user.paints.includes(baseId)) {
+                    throw new Error("Você não possui esta pintura.");
+                }
                 user.equippedPaint = baseId;
                 break;
             }
@@ -227,9 +233,17 @@ export class GarageService {
             coloring: paint.coloring(),
         });
 
+        const premiumActive = isActive(userInventory.premiumExpiresAt);
+        const premiumSecs = secondsLeft(userInventory.premiumExpiresAt);
         itemBlueprints.paints.forEach((paintBlueprint) => {
-            const userHasPaint = userInventory.paints?.includes(paintBlueprint.id);
             const formattedPaint = formatPaint(paintBlueprint);
+            // Pintura premium: não é comprável nem fica em `user.paints`. Só aparece no DEPÓSITO enquanto o
+            // premium está ativo, mostrando o tempo restante do premium; expirado, some (nem vai ao mercado).
+            if (PREMIUM_PAINT_IDS.has(paintBlueprint.id)) {
+                if (premiumActive) garageItems.push({ ...formattedPaint, remainingTimeInSec: premiumSecs });
+                return;
+            }
+            const userHasPaint = userInventory.paints?.includes(paintBlueprint.id);
             if (userHasPaint) {
                 garageItems.push(formattedPaint);
             } else {

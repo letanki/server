@@ -36,12 +36,18 @@ export class ItemUtils {
     }
 
     /** The % damage reduction the user's EQUIPPED paint gives against a weapon's resistance property
-     *  (e.g. "RAILGUN_RESISTANCE"). 0 if the paint has no such protection. Values are the garage properts. */
+     *  (e.g. "RAILGUN_RESISTANCE"). 0 if the paint has no such protection. Values are the garage properts.
+     *  A paint's universal `ALL_RESISTANCE` (e.g. the premium paint's 15%) is ADDED to the weapon-specific
+     *  value, so it protects against every weapon. */
     public static getPaintResistancePercent(user: UserDocument, resistanceProperty: string): number {
         const paint = itemBlueprints.paints.find((p) => p.id === user.equippedPaint);
         if (!paint) return 0;
-        const prop = (paint.properts as any[]).find((pr) => pr.property === resistanceProperty);
-        return prop && prop.value != null ? parseFloat(prop.value) : 0;
+        const props = paint.properts as any[];
+        const read = (name: string) => {
+            const p = props.find((pr) => pr.property === name);
+            return p && p.value != null ? parseFloat(p.value) : 0;
+        };
+        return read(resistanceProperty) + read("ALL_RESISTANCE");
     }
 
     public static getHullArmor(user: UserDocument): number {

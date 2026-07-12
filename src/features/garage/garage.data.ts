@@ -37,6 +37,12 @@ export function passPriceForRank(pass: { price: number; priceByRank?: number[] }
     return pass.priceByRank[idx];
 }
 
+// Pinturas condicionadas ao PREMIUM: não são compradas com cristais nem ficam em `user.paints`. Enquanto
+// o premium está ATIVO elas aparecem no depósito (com o tempo restante do premium) e podem ser equipadas;
+// quando o premium expira, somem do depósito e, se estiverem equipadas, o sistema volta para a "green"
+// (ver buildGarageData/equipItem e a reconciliação de expiração).
+export const PREMIUM_PAINT_IDS = new Set<string>(["premium"]);
+
 export const itemBlueprints = {
     turrets: turretsData.map(toTurretBlueprint),
     hulls: hullsData.map(toHullBlueprint),
@@ -82,6 +88,30 @@ export const itemBlueprints = {
             price: 0,
             remainingTimeInSec: -1,
             coloring: () => ResourceManager.getIdlowById("paint/holiday/texture"),
+        },
+        {
+            // Pintura PREMIUM (ver PREMIUM_PAINT_IDS): não é comprável — fica disponível enquanto o
+            // usuário tem assinatura premium ATIVA. ALL_RESISTANCE 15 = -15% de dano de QUALQUER arma
+            // (somado no ItemUtils.getPaintResistancePercent). Dados oficiais (index 702, resources 3370/3371).
+            id: "premium",
+            name: "Pintura premium",
+            description: "A tinta especial com design único é uma excelente escolha para quem quer alcançar o máximo no jogo a qualquer custo.",
+            isInventory: false,
+            index: 702,
+            next_price: 0,
+            next_rank: 1,
+            type: 3,
+            baseItemId: () => ResourceManager.getIdlowById("paint/premium/preview"),
+            previewResourceId: () => ResourceManager.getIdlowById("paint/premium/preview"),
+            rank: 1,
+            category: "paint",
+            properts: [{ property: "ALL_RESISTANCE", value: "15", subproperties: null }],
+            discount: { percent: 0, timeLeftInSeconds: -1751858089, timeToStartInSeconds: -1751858089 },
+            grouped: false,
+            isForRent: false,
+            price: 0,
+            remainingTimeInSec: -1,
+            coloring: () => ResourceManager.getIdlowById("paint/premium/texture"),
         },
         {
             // Pintura ANIMADA (cicla-cor): coloring type 11 / image.tara (tira 1000x1, 1000 frames, 15fps).
