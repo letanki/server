@@ -3,6 +3,7 @@ import * as ProfilePackets from "@/features/profile/profile.packets";
 import { advanceQuestsInMemory } from "@/features/quests/quests.service";
 import { QuestCompletedNotification } from "@/features/quests/quests.packets";
 import { xpFromScore } from "@/shared/models/passes";
+import { applyRankUp } from "@/features/profile/rank.notify";
 import { Battle } from "./battle.model";
 import { UpdateBattleUserDMPacket, UpdateBattleUserTeamPacket } from "./battle.packets";
 
@@ -39,4 +40,6 @@ export async function awardScore(battle: Battle, client: GameClient, points: num
     client.sendPacket(new ProfilePackets.UpdateScorePacket({ score: user.experience }));
     if (questCompleted) client.sendPacket(new QuestCompletedNotification());
     broadcastUserStat(battle, client);
+    // Rank-up ao vivo: se o XP recém-ganho subiu o rank, notifica o próprio + os demais online (visual).
+    await applyRankUp(client.getServer(), user);
 }

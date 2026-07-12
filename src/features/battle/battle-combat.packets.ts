@@ -178,6 +178,11 @@ export type TurretDirectionPacket = InstanceType<typeof TurretDirectionPacket>;
 export const SelfDestructScheduledPacket = packetClass(defs.battle.SelfDestructScheduled);
 export type SelfDestructScheduledPacket = InstanceType<typeof SelfDestructScheduledPacket>;
 
+/** S->C: atualiza o rank de um jogador (tabela de stats da batalha + label do tanque). Broadcast para
+ *  todos que já carregaram o rank desse usuário (atualização visual de cache). */
+export const SetPlayerRankPacket = packetClass(defs.battle.SetPlayerRank);
+export type SetPlayerRankPacket = InstanceType<typeof SetPlayerRankPacket>;
+
 export class SetHealthPacket extends BasePacket implements BattleTypes.ISetHealth {
     static readonly schema = defs.battle.SetHealth.schema!;
     nickname: string | null; health: number;

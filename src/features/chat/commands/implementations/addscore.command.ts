@@ -3,6 +3,7 @@ import { CommandContext, ICommand } from "@/features/chat/commands/command.types
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { UpdateRankPacket, UpdateScorePacket } from "@/features/profile/profile.packets";
 import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.enum";
+import { broadcastPlayerRankToOthers } from "@/features/profile/rank.notify";
 
 export default class AddScoreCommand implements ICommand {
     name: string = "addscore";
@@ -63,6 +64,8 @@ export default class AddScoreCommand implements ICommand {
                 // The garage item lists are rank-dependent: a rank change (up OR down) with the garage
                 // open must fully reload it, or the client renders duplicated items.
                 GarageWorkflow.reloadGarage(context.executor, context.server);
+                // Atualiza o rank visual desse jogador para todos os demais online.
+                broadcastPlayerRankToOthers(context.server, updatedUser);
             }
         } catch (error: any) {
             context.reply(`Erro ao atualizar a pontuação: ${error.message}`);

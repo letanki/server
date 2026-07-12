@@ -6,6 +6,7 @@ import { UserDocument } from "@/shared/models/user.model";
 import { xpFromScore } from "@/shared/models/passes";
 import { killScore, killFlagCarrierScore, assistShares } from "@/features/battle/scoring";
 import { awardScore, broadcastUserStat } from "@/features/battle/score-award";
+import { applyRankUp } from "@/features/profile/rank.notify";
 import { IVector3 } from "@/shared/types/geom/ivector3";
 import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
@@ -249,6 +250,8 @@ export class CombatService {
             await killer.save();
             killerClient.sendPacket(new ProfilePackets.UpdateScorePacket({ score: killer.experience }));
             if (questCompleted) killerClient.sendPacket(new QuestCompletedNotification());
+            // Rank-up ao vivo pelo abate: notifica o próprio + atualiza o rank visual dos demais online.
+            await applyRankUp(killerClient.getServer(), killer);
         }
         this._broadcastUserStat(battle, killerClient, killer);
 

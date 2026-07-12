@@ -7,6 +7,7 @@ import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
 import logger from "@/utils/logger";
 import * as GaragePackets from "./garage.packets";
 import { GarageWorkflow } from "./garage.workflow";
+import { broadcastPlayerRankToOthers } from "@/features/profile/rank.notify";
 
 export class RequestGarageHandler implements IPacketHandler<GaragePackets.RequestGaragePacket> {
     public readonly packetId = GaragePackets.RequestGaragePacket.getId();
@@ -58,6 +59,8 @@ export class BuyItemHandler implements IPacketHandler<GaragePackets.BuyItemPacke
                         reward: 0,
                     }));
                     GarageWorkflow.reloadGarage(client, server);
+                    // Atualiza o rank visual desse jogador para todos os demais online.
+                    broadcastPlayerRankToOthers(server, client.user);
                 }
             } else if (result && "passId" in result) {
                 // Assinatura comprada: atualiza os cristais e recarrega a garagem (o passe vai pro

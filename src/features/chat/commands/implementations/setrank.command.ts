@@ -2,6 +2,7 @@ import { CommandContext, ICommand } from "@/features/chat/commands/command.types
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { UpdateRankPacket, UpdateScorePacket } from "@/features/profile/profile.packets";
 import { ChatModeratorLevel, hasModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
+import { broadcastPlayerRankToOthers } from "@/features/profile/rank.notify";
 
 /** Jumps straight to rank N by setting the experience to that rank's threshold. Self-use is public
  *  (sandbox server); targeting ANOTHER user requires Administrator (checked inside). */
@@ -59,6 +60,8 @@ export default class SetRankCommand implements ICommand {
                 // Rank-dependent garage lists don't rebuild in place — reload if they have it open.
                 GarageWorkflow.reloadGarage(online, server);
             }
+            // Atualiza o rank visual do alvo para todos os demais online.
+            broadcastPlayerRankToOthers(server, updated);
             context.reply(`${updated.username} agora é rank ${updated.rank} (${rankInfo.name ?? ""}).`);
         } catch (error: any) {
             context.reply(`Erro: ${error.message}`);

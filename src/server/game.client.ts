@@ -215,6 +215,11 @@ export class GameClient {
     this.sendPacket(new Protection(this.securityService.obtainKeys()), false);
   }
 
+  /** The server instance this client belongs to (for cross-client broadcasts from feature code). */
+  public getServer(): GameServer {
+    return this.server;
+  }
+
   public get isDestroyed(): boolean {
     return this.socket.destroyed;
   }
