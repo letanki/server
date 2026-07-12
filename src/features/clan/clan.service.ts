@@ -168,6 +168,12 @@ export class ClanService {
         return Clan.find({ joinRequests: user._id }).exec();
     }
 
+    /** Tags dos clãs que CONVIDARAM este usuário (convites pendentes) — para o InitUserClanModels. */
+    public async getInvitingClanTags(user: UserDocument): Promise<string[]> {
+        const clans = await Clan.find({ invites: user._id }).select("tag").exec();
+        return clans.map((c) => c.tag);
+    }
+
     /** Top clans by rating (for the clan leaderboard). */
     public getRatings(limit: number = 40): Promise<ClanDocument[]> {
         return Clan.find().sort({ rating: -1 }).limit(limit).exec();

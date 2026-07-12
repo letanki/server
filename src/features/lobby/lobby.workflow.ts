@@ -97,10 +97,25 @@ export class LobbyWorkflow {
             }
             pendingTags = pending.map((c) => c.tag);
         }
-        // Tag do PRÓPRIO clã do usuário → título "[TAG] nick" no painel (vai no campo `tag` do
-        // InitUserClanModels; era esse null que fazia a tag não aparecer no painel de quem tem clã).
-        const ownClanTag = await server.clanService.getTagForUser(user);
-        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags, ownClanTag));
+        // Dados reais do módulo de clã para o painel (antes eram todos placeholder):
+        //  - tag do PRÓPRIO clã → título "[TAG] nick"; convites recebidos; pedidos ao clã do dono;
+        //    cooldown de entrar/criar (após sair de um clã); e se pode criar (rank >= mínimo).
+        const ownClan = user.clanId ? await server.clanService.getClanById(user.clanId) : null;
+        const ownClanTag = ownClan ? ownClan.tag : null;
+        const incomingInviteTags = user.clanId ? [] : await server.clanService.getInvitingClanTags(user);
+        const joinRequestNicks = ownClan ? await server.clanService.getJoinRequestNicks(ownClan) : [];
+        let clanJoinCooldownSeconds = 0;
+        if (user.clanCooldownUntil && user.clanCooldownUntil > new Date()) {
+            clanJoinCooldownSeconds = Math.max(0, Math.round((user.clanCooldownUntil.getTime() - Date.now()) / 1000));
+        }
+        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket({
+            selfClanTag: ownClanTag,
+            outgoingRequestTags: pendingTags,
+            incomingInviteTags,
+            joinRequestNicks,
+            joinCooldownSeconds: clanJoinCooldownSeconds,
+            canCreateClan: user.rank >= LobbyPackets.InitUserClanModelsPacket.MIN_RANK_TO_CREATE,
+        }));
         // Janela do Passe Iniciante enquanto ativo (+50% XP + 100% cristais/batalha). A imagem da janela
         // é servida por NÓS (resources/passes/newbie/window, idLow local) — pré-carregamos no cliente e só
         // então disparamos o InitNewbieBonus (no callback do load), garantindo a imagem pronta.

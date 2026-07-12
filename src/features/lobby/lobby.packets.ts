@@ -83,29 +83,47 @@ export type SetBattleInviteSound = InstanceType<typeof SetBattleInviteSound>;
 // pois mandava 1 list<tag> onde o oficial tem 5 Vector<String> anuláveis).
 // NOTE: a tag do clã do próprio usuário vai num pacote SEPARADO (ClanNotifierData, id -117055417),
 // por isso `tag` aqui é null.
+export interface InitUserClanModelsData {
+    /** Tag do PRÓPRIO clã — vira o título "[TAG] nick" no painel (null = sem clã). */
+    selfClanTag?: string | null;
+    /** Tags dos clãs para os quais o usuário ENVIOU pedido de entrada (pendentes). */
+    outgoingRequestTags?: string[];
+    /** Tags dos clãs que CONVIDARAM o usuário (pendentes). */
+    incomingInviteTags?: string[];
+    /** Nicks com pedido de entrada pendente NO clã do usuário (visão do dono). */
+    joinRequestNicks?: string[];
+    /** Cooldown em segundos para entrar/criar clã (após sair de um clã). */
+    joinCooldownSeconds?: number;
+    /** Rank suficiente para criar clã (rank >= minRankToCreate). */
+    canCreateClan?: boolean;
+}
+
 export class InitUserClanModelsPacket extends BasePacket {
     static readonly CREATION_COST = 500000; // crystals to create a clan (0x7A120)
-    // outgoingRequestTags: tags dos clãs com pedido de entrada PENDENTE (só quando sem clã).
-    // selfClanTag: a tag do PRÓPRIO clã do usuário — vira o título "[TAG] nick" no painel (null = sem clã).
-    constructor(private readonly outgoingRequestTags: string[] = [], private readonly selfClanTag: string | null = null) { super(); }
+    static readonly MIN_RANK_TO_CREATE = 8;
+    constructor(private readonly data: InitUserClanModelsData = {}) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
+        const d = this.data;
+        const incomingInvites = d.incomingInviteTags ?? [];
+        const joinRequests = d.joinRequestNicks ?? [];
         return encodeBody(defs.lobby.InitUserClanModels, {
-            tag: this.selfClanTag,
+            tag: d.selfClanTag ?? null,
             giveBonusesToClan: true,
             clansEnabled: true,
-            joinCooldownSeconds: 0,
+            joinCooldownSeconds: d.joinCooldownSeconds ?? 0,
             unknownPanelFlag: true,
             uiLocked: true,
             createCost: InitUserClanModelsPacket.CREATION_COST,
-            notificationsCount: 0,
-            canCreateClan: true,
-            minRankToCreate: 8,
-            incomingInviteClanTags: [],
-            outgoingRequestClanTags: this.outgoingRequestTags,
+            // Badge = total de pendências (convites recebidos + pedidos ao clã do dono).
+            notificationsCount: incomingInvites.length + joinRequests.length,
+            canCreateClan: d.canCreateClan ?? true,
+            minRankToCreate: InitUserClanModelsPacket.MIN_RANK_TO_CREATE,
+            incomingInviteClanTags: incomingInvites,
+            outgoingRequestClanTags: d.outgoingRequestTags ?? [],
             viewedInviteClanTags: [],
             memberNotificationNicks: [],
-            joinRequestNicks: [],
+            joinRequestNicks: joinRequests,
             logoImageId: { high: 0, low: ResourceManager.getIdlowById("clan/podium") },
         });
     }
