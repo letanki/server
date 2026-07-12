@@ -33,18 +33,16 @@ export const EnterBattlePacket = packetClass(defs.battle.EnterBattle);
 export type EnterBattlePacket = InstanceType<typeof EnterBattlePacket>;
 
 /**
- * Server→client: refuses a battle join because the player's equipment doesn't satisfy the battle's
- * equipment-constraint mode (XP/BP — hornet/wasp + railgun >= m2). Body = optionalString(battleId) of
- * the battle the player tried to enter; the client keeps the player in the lobby and shows the
- * "equipment not allowed" message. Captured from the official server (id -10847382).
+ * Server→client: recusa a entrada porque o equipamento não atende a restrição da batalha (XP/BP —
+ * hornet/wasp + railgun >= m2). Corpo = optString(battleId); o cliente mantém o jogador no lobby e mostra
+ * "BATTLE_ENTER_ERROR_EQUIPMENT_NOT_MATCH_CONSTRAINTS". É um par DM/Team (variantes por modo): use o Dm
+ * em batalhas DM e o Team em batalhas de equipe.
  */
-export const EquipmentNotAllowedPacket = packetClass(defs.battle.EquipmentNotAllowed);
-export type EquipmentNotAllowedPacket = InstanceType<typeof EquipmentNotAllowedPacket>;
+export const EquipmentConstraintsNotMatchDmPacket = packetClass(defs.battle.EquipmentConstraintsNotMatchDm);
+export type EquipmentConstraintsNotMatchDmPacket = InstanceType<typeof EquipmentConstraintsNotMatchDmPacket>;
 
-/** S->C: alerta "BATTLE_ENTER_ERROR_EQUIPMENT_NOT_MATCH_CONSTRAINTS" ao tentar ENTRAR numa batalha com
- *  restrição de equipamento (XP/BP) que o loadout não atende. É o pacote OFICIAL desse cenário. */
-export const EquipmentConstraintsNotMatchPacket = packetClass(defs.battle.EquipmentConstraintsNotMatch);
-export type EquipmentConstraintsNotMatchPacket = InstanceType<typeof EquipmentConstraintsNotMatchPacket>;
+export const EquipmentConstraintsNotMatchTeamPacket = packetClass(defs.battle.EquipmentConstraintsNotMatchTeam);
+export type EquipmentConstraintsNotMatchTeamPacket = InstanceType<typeof EquipmentConstraintsNotMatchTeamPacket>;
 
 /**
  * Server→client: SYSTEM message line in the battle chat (id 606668848, body = optionalString(message)).

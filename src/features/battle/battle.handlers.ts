@@ -143,7 +143,10 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
             // fora das restrições ("BATTLE_ENTER_ERROR_EQUIPMENT_NOT_MATCH_CONSTRAINTS"); mantém o jogador
             // no lobby, ecoando o battleId que tentou entrar.
             if (error instanceof EquipmentConstraintError) {
-                client.sendPacket(new BattlePackets.EquipmentConstraintsNotMatchPacket({ battleId: client.lastViewedBattleId }));
+                // Par DM/Team: manda a variante do modo da batalha.
+                client.sendPacket(targetBattle?.isTeamMode()
+                    ? new BattlePackets.EquipmentConstraintsNotMatchTeamPacket({ battleId: client.lastViewedBattleId })
+                    : new BattlePackets.EquipmentConstraintsNotMatchDmPacket({ battleId: client.lastViewedBattleId }));
             }
             logger.warn(`Usuário ${client.user.username} falhou ao entrar na batalha ${client.lastViewedBattleId}`, {
                 error: error.message,
