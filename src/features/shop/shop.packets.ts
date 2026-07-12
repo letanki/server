@@ -46,3 +46,23 @@ export type ShopData = InstanceType<typeof ShopData>;
 
 export const ShowPaymentWindow = packetClass(defs.shop.ShowPaymentWindow);
 export type ShowPaymentWindow = InstanceType<typeof ShowPaymentWindow>;
+
+/** C->S: escolheu o pacote + método de pagamento → pede a compra. {itemId, paymentMethod}. */
+export const PurchaseShopItem = packetClass(defs.shop.PurchaseShopItem);
+export type PurchaseShopItem = InstanceType<typeof PurchaseShopItem>;
+
+/** S->C: o cliente abre a URL de checkout numa nova aba. {url}. */
+export const OpenPaymentUrl = packetClass(defs.shop.OpenPaymentUrl);
+export type OpenPaymentUrl = InstanceType<typeof OpenPaymentUrl>;
+
+/** C->S: ativar um código promocional. {code}. */
+export const ActivatePromoCode = packetClass(defs.shop.ActivatePromoCode);
+export type ActivatePromoCode = InstanceType<typeof ActivatePromoCode>;
+
+/** S->C: código promocional válido (fecha o diálogo). */
+export const PromoCodeValid = packetClass(defs.shop.PromoCodeValid);
+export type PromoCodeValid = InstanceType<typeof PromoCodeValid>;
+
+/** S->C: código promocional inválido. */
+export const PromoCodeInvalid = packetClass(defs.shop.PromoCodeInvalid);
+export type PromoCodeInvalid = InstanceType<typeof PromoCodeInvalid>;

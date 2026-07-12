@@ -12,6 +12,10 @@ export type SystemMessage = InstanceType<typeof SystemMessage>;
 export const ServerRestartWarning = packetClass(defs.system.ServerRestartWarning);
 export type ServerRestartWarning = InstanceType<typeof ServerRestartWarning>;
 
+/** S->C: modal genérico com botão OK. {text}. */
+export const ShowAlertMessage = packetClass(defs.system.ShowAlertMessage);
+export type ShowAlertMessage = InstanceType<typeof ShowAlertMessage>;
+
 export const Ping = packetClass(defs.system.Ping);
 export type Ping = InstanceType<typeof Ping>;
 

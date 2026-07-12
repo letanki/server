@@ -98,6 +98,8 @@ export interface UserAttributes {
     newbieBonusShown: boolean;
     /** Ids das notícias (news.data) que este usuário já viu — cada notícia aparece só 1x por pessoa. */
     seenNewsIds: string[];
+    /** Códigos promocionais já resgatados (cada código só pode ser usado 1x por conta). */
+    usedPromoCodes: string[];
     /** Passe Multiplicador de Pontos (up_score): +30% XP. Comprável na garagem, dura 30 dias. */
     upScoreExpiresAt: Date | null;
     /** Passe de Batalha PRO (pro_battle): criar batalhas próprias + Batalhas PRO. Comprável, dura 30 dias. */
@@ -171,6 +173,7 @@ const UserSchema = new Schema<UserDocument>({
     newbieExpiresAt: { type: Date, default: null },
     newbieBonusShown: { type: Boolean, default: false },
     seenNewsIds: { type: [String], default: [] },
+    usedPromoCodes: { type: [String], default: [] },
     upScoreExpiresAt: { type: Date, default: null },
     proBattleExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
