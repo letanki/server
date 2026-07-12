@@ -97,7 +97,10 @@ export class LobbyWorkflow {
             }
             pendingTags = pending.map((c) => c.tag);
         }
-        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags));
+        // Tag do PRÓPRIO clã do usuário → título "[TAG] nick" no painel (vai no campo `tag` do
+        // InitUserClanModels; era esse null que fazia a tag não aparecer no painel de quem tem clã).
+        const ownClanTag = await server.clanService.getTagForUser(user);
+        client.sendPacket(new LobbyPackets.InitUserClanModelsPacket(pendingTags, ownClanTag));
         // Janela do Passe Iniciante enquanto ativo (+50% XP + 100% cristais/batalha). A imagem da janela
         // é servida por NÓS (resources/passes/newbie/window, idLow local) — pré-carregamos no cliente e só
         // então disparamos o InitNewbieBonus (no callback do load), garantindo a imagem pronta.
@@ -132,10 +135,9 @@ export class LobbyWorkflow {
             await user.save();
         }
         this.sendPlayerVitals(user, client, server);
-        // Clan tag for the player's OWN top panel (the official sends SetClan for self after the panel).
-        // Without it the panel renders the nickname with no clan tag even when the player is in a clan.
-        const selfClanTag = await server.clanService.getTagForUser(user);
-        client.sendPacket(new ProfilePackets.ClanNotifierData(user.username, selfClanTag));
+        // Tag do próprio clã também no ClanNotifierData/SetClan (rende a tag ao lado do nick no chat).
+        // O TÍTULO do painel "[TAG] nick" vem do InitUserClanModels.tag acima; este complementa o chat.
+        client.sendPacket(new ProfilePackets.ClanNotifierData(user.username, ownClanTag));
         this.sendInitialSettings(client, server);
         this.sendAchievementTips(user, client);
 

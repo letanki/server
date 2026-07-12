@@ -85,12 +85,13 @@ export type SetBattleInviteSound = InstanceType<typeof SetBattleInviteSound>;
 // por isso `tag` aqui é null.
 export class InitUserClanModelsPacket extends BasePacket {
     static readonly CREATION_COST = 500000; // crystals to create a clan (0x7A120)
-    // Tags of the clans the user has a PENDING join request to (só quando o usuário não tem clã).
-    constructor(private readonly outgoingRequestTags: string[] = []) { super(); }
+    // outgoingRequestTags: tags dos clãs com pedido de entrada PENDENTE (só quando sem clã).
+    // selfClanTag: a tag do PRÓPRIO clã do usuário — vira o título "[TAG] nick" no painel (null = sem clã).
+    constructor(private readonly outgoingRequestTags: string[] = [], private readonly selfClanTag: string | null = null) { super(); }
     read(buffer: Buffer): void { throw new Error("This is a server-to-client packet only."); }
     write(): Buffer {
         return encodeBody(defs.lobby.InitUserClanModels, {
-            tag: null,
+            tag: this.selfClanTag,
             giveBonusesToClan: true,
             clansEnabled: true,
             joinCooldownSeconds: 0,
