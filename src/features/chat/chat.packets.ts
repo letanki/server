@@ -17,3 +17,7 @@ export type AntifloodSettings = InstanceType<typeof AntifloodSettings>;
 
 export const UnloadLobbyChatPacket = packetClass(defs.chat.UnloadLobbyChat);
 export type UnloadLobbyChatPacket = InstanceType<typeof UnloadLobbyChatPacket>;
+
+/** S->C: moderação — remove TODAS as mensagens do usuário do chat do lobby (limpa spam). */
+export const RemoveUserChatMessagesPacket = packetClass(defs.chat.RemoveUserChatMessages);
+export type RemoveUserChatMessagesPacket = InstanceType<typeof RemoveUserChatMessagesPacket>;

@@ -1,5 +1,6 @@
 import { CommandContext, ICommand } from "@/features/chat/commands/command.types";
 import { ChatModeratorLevel, chatModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
+import { RemoveUserChatMessagesPacket } from "@/features/chat/chat.packets";
 
 /** Silences a user's chat (lobby + battle) for N minutes; commands keep working. Persisted, so it
  *  survives relogin. Hierarchy guard like /kick. */
@@ -35,6 +36,11 @@ export default class MuteCommand implements ICommand {
         user.mutedUntil = new Date(Date.now() + minutes * 60000);
         await user.save();
         if (online?.user && online.user !== user) online.user.mutedUntil = user.mutedUntil;
+
+        // Limpa o spam já enviado do usuário silenciado do chat de todos (não só silencia o futuro).
+        const removePacket = new RemoveUserChatMessagesPacket({ nickname: user.username });
+        for (const c of context.server.getClients()) c.sendPacket(removePacket);
+
         context.reply(`${user.username} silenciado por ${minutes} minuto(s).`);
     }
 }
