@@ -139,10 +139,11 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
                 }
             }
         } catch (error: any) {
-            // Equipment-constraint rejection (XP/BP): tell the client so it shows "equipment not
-            // allowed" and keeps the player in the lobby, echoing the battleId they tried to enter.
+            // Equipment-constraint rejection (XP/BP): pacote OFICIAL do erro de ENTRADA com equipamento
+            // fora das restrições ("BATTLE_ENTER_ERROR_EQUIPMENT_NOT_MATCH_CONSTRAINTS"); mantém o jogador
+            // no lobby, ecoando o battleId que tentou entrar.
             if (error instanceof EquipmentConstraintError) {
-                client.sendPacket(new BattlePackets.EquipmentNotAllowedPacket({ battleId: client.lastViewedBattleId }));
+                client.sendPacket(new BattlePackets.EquipmentConstraintsNotMatchPacket({ battleId: client.lastViewedBattleId }));
             }
             logger.warn(`Usuário ${client.user.username} falhou ao entrar na batalha ${client.lastViewedBattleId}`, {
                 error: error.message,

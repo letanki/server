@@ -41,6 +41,11 @@ export type EnterBattlePacket = InstanceType<typeof EnterBattlePacket>;
 export const EquipmentNotAllowedPacket = packetClass(defs.battle.EquipmentNotAllowed);
 export type EquipmentNotAllowedPacket = InstanceType<typeof EquipmentNotAllowedPacket>;
 
+/** S->C: alerta "BATTLE_ENTER_ERROR_EQUIPMENT_NOT_MATCH_CONSTRAINTS" ao tentar ENTRAR numa batalha com
+ *  restrição de equipamento (XP/BP) que o loadout não atende. É o pacote OFICIAL desse cenário. */
+export const EquipmentConstraintsNotMatchPacket = packetClass(defs.battle.EquipmentConstraintsNotMatch);
+export type EquipmentConstraintsNotMatchPacket = InstanceType<typeof EquipmentConstraintsNotMatchPacket>;
+
 /**
  * Server→client: SYSTEM message line in the battle chat (id 606668848, body = optionalString(message)).
  * Confirmed IN-GAME (2026-07-06): renders as a system notice — the right channel for command replies,
