@@ -8,6 +8,10 @@ import * as SystemTypes from "./system.types";
 export const SystemMessage = packetClass(defs.system.SystemMessage);
 export type SystemMessage = InstanceType<typeof SystemMessage>;
 
+/** S->C: aviso de reinício do servidor (payload vazio). O cliente mostra o alerta e re-exibe no login. */
+export const ServerRestartWarning = packetClass(defs.system.ServerRestartWarning);
+export type ServerRestartWarning = InstanceType<typeof ServerRestartWarning>;
+
 export const Ping = packetClass(defs.system.Ping);
 export type Ping = InstanceType<typeof Ping>;
 

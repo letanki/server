@@ -1,5 +1,5 @@
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
-import { SystemMessage } from "@/features/system/system.packets";
+import { ServerRestartWarning, SystemMessage } from "@/features/system/system.packets";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
@@ -13,6 +13,11 @@ import { AuthWorkflow } from "./auth.workflow";
 export class CreateAccountHandler implements IPacketHandler<AuthPackets.CreateAccount> {
     public readonly packetId = AuthPackets.CreateAccount.getId();
     public async execute(client: GameClient, server: GameServer, packet: AuthPackets.CreateAccount): Promise<void> {
+        // Servidor em contagem de reinício: não cria conta — avisa o cliente.
+        if (server.isRestartPending()) {
+            client.sendPacket(new ServerRestartWarning());
+            return;
+        }
         if (!packet.nickname || !packet.password || packet.nickname.length < 3 || packet.password.length < 3) {
             client.sendPacket(new SystemMessage({ text: "Apelido ou senha inválidos." }));
             return;
@@ -48,6 +53,11 @@ export class CreateAccountHandler implements IPacketHandler<AuthPackets.CreateAc
 export class LoginHandler implements IPacketHandler<AuthPackets.Login> {
     public readonly packetId = AuthPackets.Login.getId();
     public async execute(client: GameClient, server: GameServer, packet: AuthPackets.Login): Promise<void> {
+        // Servidor em contagem de reinício: não autoriza o login — avisa o cliente.
+        if (server.isRestartPending()) {
+            client.sendPacket(new ServerRestartWarning());
+            return;
+        }
         if (!packet.username || !packet.password) {
             client.sendPacket(new AuthPackets.IncorrectPassword());
             return;
@@ -71,6 +81,11 @@ export class LoginHandler implements IPacketHandler<AuthPackets.Login> {
 export class LoginByTokenHandler implements IPacketHandler<AuthPackets.LoginByTokenRequestPacket> {
     public readonly packetId = AuthPackets.LoginByTokenRequestPacket.getId();
     public async execute(client: GameClient, server: GameServer, packet: AuthPackets.LoginByTokenRequestPacket): Promise<void> {
+        // Servidor em contagem de reinício: não autoriza o login por token — avisa o cliente.
+        if (server.isRestartPending()) {
+            client.sendPacket(new ServerRestartWarning());
+            return;
+        }
         if (!packet.hash) {
             client.sendPacket(new SystemMessage({ text: "Token de login inválido." }));
             return;
