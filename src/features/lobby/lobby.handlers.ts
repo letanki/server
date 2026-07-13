@@ -1,10 +1,10 @@
 import { BattleMode, EquipmentConstraintsMode, IBattleCreationSettings, MapTheme } from "@/features/battle/battle.model";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { SystemMessage } from "@/features/system/system.packets";
-import { isProBattleActive } from "@/shared/models/passes";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
+import { isProBattleActive } from "@/shared/models/passes";
 import logger from "@/utils/logger";
 import * as LobbyPackets from "./lobby.packets";
 import { LobbyWorkflow } from "./lobby.workflow";

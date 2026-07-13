@@ -25,6 +25,7 @@ import { ChatModeratorLevel } from "@/shared/models/enums/chat-moderator-level.e
 import { isNewbieActive, isProBattleActive, isCrystalAbonementActive, NEWBIE_CRYSTAL_BONUS_PERCENT, PRO_BATTLE_ENTER_PRICE, secondsLeft, XP_BONUS_PERCENT } from "@/shared/models/passes";
 import { UserDocument, UserDocumentWithFriends } from "@/shared/models/user.model";
 import { FormatUtils } from "@/utils/format.utils";
+import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 import { ResourceManager } from "@/utils/resource.manager";
 import * as LobbyPackets from "./lobby.packets";
@@ -80,6 +81,10 @@ export class LobbyWorkflow {
             logger.info(`Punished user ${user.username} attempted to login`, { client: client.getRemoteAddress() });
             return false;
         }
+
+        // Reconciliação lazy no login: se o premium expirou (possivelmente offline), reverte a pintura
+        // premium equipada para green e persiste, antes de qualquer envio de premium/equipamento.
+        await ItemUtils.reconcilePremiumEquipment(user);
 
         client.sendPacket(new HideLoginForm());
         // Clan module must be initialized BEFORE the lobby panel (LobbyData / official "InitPanel",
@@ -258,11 +263,7 @@ export class LobbyWorkflow {
     }
 
     private static sendPlayerVitals(user: UserDocument, client: GameClient, server: GameServer): void {
-        let premiumSecondsLeft = 0;
-        if (user.premiumExpiresAt && user.premiumExpiresAt > new Date()) {
-            premiumSecondsLeft = Math.round((user.premiumExpiresAt.getTime() - Date.now()) / 1000);
-        }
-        client.sendPacket(new PremiumInfo({ lifeTimeInSeconds: premiumSecondsLeft }));
+        client.sendPacket(new PremiumInfo({ lifeTimeInSeconds: secondsLeft(user.premiumExpiresAt) }));
 
         // Duração do abonement de Dobro de Cristais em MILISSEGUNDOS (o cliente espera ms — captura ativa
         // ~86399992 = 24h). -1 quando não há abonement temporizado (captura inativa: -1 / false).

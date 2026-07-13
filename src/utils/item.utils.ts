@@ -1,7 +1,25 @@
-import { itemBlueprints } from "@/features/garage/garage.data";
+import { itemBlueprints, PREMIUM_PAINT_IDS } from "@/features/garage/garage.data";
 import { UserDocument } from "@/shared/models/user.model";
+import { isPremiumActive } from "@/shared/models/passes";
+import logger from "@/utils/logger";
 
 export class ItemUtils {
+    /**
+     * Reconciliação LAZY do estado derivado do premium: se a pintura equipada é premium-gated
+     * (PREMIUM_PAINT_IDS) e o premium NÃO está mais ativo, volta para a "green". Persiste apenas quando
+     * muda (evento raro — 1x por expiração), então o banco vai ficando honesto pra leitores externos
+     * (site de perfil, preview de rank) sempre que o nosso servidor toca o usuário. Ponto único: chamar
+     * onde o premium/equipamento é lido (login/lobby, garagem, perfil, spawn de batalha). Retorna o user.
+     */
+    public static async reconcilePremiumEquipment(user: UserDocument): Promise<UserDocument> {
+        if (PREMIUM_PAINT_IDS.has(user.equippedPaint) && !isPremiumActive(user)) {
+            user.equippedPaint = "green";
+            await user.save();
+            logger.info(`Premium expirado: pintura premium de ${user.username} revertida para green.`);
+        }
+        return user;
+    }
+
     public static getItemModification(user: UserDocument, itemType: "hull" | "turret") {
         const baseId = itemType === "hull" ? user.equippedHull : user.equippedTurret;
         const inventory = itemType === "hull" ? user.hulls : user.turrets;

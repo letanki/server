@@ -1,5 +1,6 @@
 import { GameServer } from "@/server/game.server";
 import { UserDocument } from "@/shared/models/user.model";
+import { ItemUtils } from "@/utils/item.utils";
 import logger from "@/utils/logger";
 
 export interface FullUserInfo {
@@ -15,6 +16,11 @@ export class ProfileService {
             logger.warn(`User info requested for non-existent user: ${username}`);
             return null;
         }
+
+        // Ponto central de "solicitar a info do usuário" (inclui premium): reconcilia LAZY o estado
+        // derivado do premium (pintura premium equipada → green quando expira) e persiste se mudou, para
+        // que qualquer leitor — inclusive o perfil de OUTRO jogador — veja o banco já corrigido.
+        await ItemUtils.reconcilePremiumEquipment(targetUser);
 
         const targetClient = server.findClientByUsername(username);
         const isOnline = !!targetClient;
