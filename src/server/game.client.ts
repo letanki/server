@@ -172,6 +172,13 @@ export class GameClient {
   public machinegunHeat: number = 0;
   public machinegunHeatTime: number = 0;
   public lastMachinegunShot: number = 0;
+  // Isida (feixe cura/dano). O cliente quase não manda IsisStart (manda TICK contínuo + STOP ao soltar),
+  // então o "jato ligado" é detectado pela CONTINUIDADE dos ticks: `isisLastBeamAt` = último sinal de jato
+  // (tick/pos); se a lacuna passa de ISIS_GAP_MS, ou vem um STOP (zera), começa um NOVO jato e o âncora de
+  // 500ms recomeça (`isisLastEffectAt`). Assim o dano exige 500ms de espaço SEGURADO continuamente e tapear
+  // nunca acumula, sem depender do IsisStart.
+  public isisLastBeamAt: number = 0;
+  public isisLastEffectAt: number = 0;
   public isJoiningBattle: boolean = false;
   public currentHealth: number = 0;
   // Active medkit/repair-kit regeneration timer (gradual heal). Cleared on death/respawn/disconnect
