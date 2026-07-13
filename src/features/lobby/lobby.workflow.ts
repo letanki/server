@@ -452,6 +452,14 @@ export class LobbyWorkflow {
         return 0;
     }
 
+    /** Nome de EXIBIÇÃO do mapa da batalha (ex.: "Zona"), do battle.data por mapId+tema. Usado no convite
+     *  de batalha (ShowBattleInvite.mapName). Cai no mapId cru se não achar a entrada. */
+    public static getMapName(battle: Battle): string {
+        const themeStr = MapTheme[battle.settings.mapTheme];
+        const mapInfo = battleDataObject.maps.find((m) => m.mapId === battle.settings.mapId && m.theme === themeStr);
+        return mapInfo?.mapName ?? battle.settings.mapId;
+    }
+
     public static async sendBattleDetails(client: GameClient, server: GameServer, battle: Battle): Promise<void> {
         client.sendPacket(new LobbyPackets.SelectBattlePacket(battle.battleId));
 

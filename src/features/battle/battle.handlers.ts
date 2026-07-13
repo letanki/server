@@ -585,15 +585,17 @@ export class SendBattleInviteHandler implements IPacketHandler<BattlePackets.Sen
             targetClient.sendPacket(new CreateBattleResponse({ jsonData: JSON.stringify(LobbyWorkflow.buildBattleListEntry(battle)) }));
         }
 
+        const targetRank = targetClient.user?.rank ?? 1;
+        const playerCount = battle.users.length + battle.usersBlue.length + battle.usersRed.length;
         targetClient.sendPacket(new BattlePackets.ShowBattleInvitePacket({
             inviterNickname: inviter.username,
-            flag1: battle.settings.privateBattle,
-            flag2: battle.settings.proBattle,
+            availableAtYourRank: targetRank >= battle.settings.minRank && targetRank <= battle.settings.maxRank,
+            hasFreeSlots: playerCount < battle.settings.maxPeopleCount,
             battleId: battle.battleId,
-            battleName: battle.settings.name,
+            mapName: LobbyWorkflow.getMapName(battle),
             battleMode: battle.settings.battleMode,
-            flag3: battle.settings.parkourMode,
-            flag4: false,
+            showIcon: true, // sempre 1 nas capturas oficiais (mostra o ícone/preview da batalha no convite)
+            privateBattle: battle.settings.privateBattle,
         }));
         logger.info(`${inviter.username} invited ${packet.targetNickname} to battle ${packet.battleId}`);
     }
