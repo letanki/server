@@ -6,6 +6,7 @@ import { isReportedHitValid } from "@/features/weapons/hit-validation";
 import { awardScore } from "@/features/battle/score-award";
 import { HEAL_SCORE_PER_SEC } from "@/features/battle/scoring";
 import { SetHealthPacket, DamageIndicatorPacket } from "@/features/battle/battle.packets";
+import { SUPPLY_SLOT, SupplyService } from "@/features/battle/supply.service";
 import * as IsidaPackets from "./isida.packets";
 
 // A Isida aplica dano/cura em "períodos" de 1s (garage: DAMAGE_PER_PERIOD / ISIS_HEALING_PER_PERIOD = por
@@ -129,11 +130,14 @@ export class IsisTargetTickCommandHandler implements IPacketHandler<IsidaPackets
 
         const turretMod = ItemUtils.getItemModification(user, "turret");
         const periodFactor = ISIS_TICK_MS / 1000;
+        // Dobro de Dano dobra também a CURA da isida (aliado e auto-cura), assim como dobra o dano no
+        // applyDamage — mesmo efeito do supply para o atirador.
+        const healMul = SupplyService.hasEffect(client, SUPPLY_SLOT.DOUBLE_DAMAGE) ? 2 : 1;
 
         if (ally) {
             // Cura aliado + pontua o atirador (HEAL_SCORE_PER_SEC).
             const healPerSec = ItemUtils.getPropertyValue(turretMod, "ISIS_HEALING_PER_SECOND", "ISIS_HEALING_PER_PERIOD") ?? 0;
-            const healed = applyHeal(currentBattle, targetClient, healPerSec * periodFactor);
+            const healed = applyHeal(currentBattle, targetClient, healPerSec * periodFactor * healMul);
             if (healed > 0) {
                 showHealIndicator(currentBattle, client, targetClient.user.username, healed);
                 await awardScore(currentBattle, client, HEAL_SCORE_PER_SEC * periodFactor);
@@ -150,7 +154,7 @@ export class IsisTargetTickCommandHandler implements IPacketHandler<IsidaPackets
 
         const selfHealPct = ItemUtils.getPropertyValue(turretMod, "ISIS_SELF_HEALING_PERCENT") ?? 0;
         if (selfHealPct > 0 && client.battleState === "active") {
-            const selfHealed = applyHeal(currentBattle, client, (dmg * selfHealPct) / 100);
+            const selfHealed = applyHeal(currentBattle, client, ((dmg * selfHealPct) / 100) * healMul);
             showHealIndicator(currentBattle, client, user.username, selfHealed);
         }
     }
