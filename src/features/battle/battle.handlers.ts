@@ -8,6 +8,7 @@ import { BattleHaltPacket } from "@/features/system/halt.packets";
 import { SystemMessage } from "@/features/system/system.packets";
 import * as ProfilePackets from "@/features/profile/profile.packets";
 import { isProBattleActive, PRO_BATTLE_ENTER_PRICE } from "@/shared/models/passes";
+import { chatModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
 import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
@@ -452,12 +453,17 @@ export class SendBattleChatMessageHandler implements IPacketHandler<BattlePacket
                 sendTo([...battle.spectators], new BattlePackets.BattleSpectatorMessagePacket({ message: packet.message, uid: user.username }));
                 return;
             }
-            // Spectators' copy carries the sender as the "*nick" sentinel — the spectator-name client
-            // patch detects the marker, treats the line as spectator (no scoreboard lookup) and renders
-            // "nick: msg" (white). Players keep the plain nickname-null line → "Espectador: msg".
-            sendTo([...battle.spectators], new BattlePackets.BattleChatMessagePacket({ nickname: `*${user.username}`, message: packet.message, team: senderTeamId }));
+            // The "*nick" sentinel: the spectator-name client patch detects the marker, treats the line as
+            // spectator (no scoreboard lookup) and renders "nick: msg" (white). Recipients that should SEE
+            // the spectator's name get the sentinel; everyone else gets the plain nickname-null line →
+            // "Espectador: msg". Spectators always see the name; among players, STAFF (any cargo) do too.
+            const named = new BattlePackets.BattleChatMessagePacket({ nickname: `*${user.username}`, message: packet.message, team: senderTeamId });
+            const anonymous = new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId });
             const players = [...battle.users, ...battle.usersBlue, ...battle.usersRed];
-            sendTo(players, new BattlePackets.BattleChatMessagePacket({ nickname: null, message: packet.message, team: senderTeamId }));
+            const staffPlayers = players.filter((p) => chatModeratorPower(p.chatModeratorLevel) > 0);
+            const regularPlayers = players.filter((p) => chatModeratorPower(p.chatModeratorLevel) <= 0);
+            sendTo([...battle.spectators, ...staffPlayers], named);
+            sendTo(regularPlayers, anonymous);
             return;
         }
 
