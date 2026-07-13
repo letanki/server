@@ -114,6 +114,7 @@ hullsData.push(
     xtHullVariant("viking", "Viking XT", 630, "O exclusivo Viking XT se destaca pelo seu visual. O padrão característico da armadura é feito no estilo nórdico severo."),
     xtHullVariant("wasp", "Vespa XT", 640, "A exclusiva Vespa XT mantém toda a agilidade do modelo original, com uma carenagem única reservada aos pilotos mais rápidos do campo de batalha."),
     xtHullVariant("titan", "Titã XT", 650, "O Titã XT de elite veste uma blindagem com padrão exclusivo. Debaixo dela, a mesma liga lendária que segura o meio de qualquer batalha."),
+    xtHullVariant("hunter", "Caçador XT", 660, "O exclusivo Caçador XT mantém o equilíbrio lendário do original sob uma blindagem dourada de elite — reservada a quem já provou seu valor no campo de batalha."),
 );
 
 const byId = new Map(hullsData.map((h) => [h.id, h]));
