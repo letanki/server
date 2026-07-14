@@ -109,8 +109,19 @@ export class GameClient {
 
   private timeCheckerStartTime: number = 0;
   private initialClientTime: number = 0;
+  private timeCheckServerBaseline: number = 0;
   private timeCheckSentTimestamp: number = 0;
   private lastTimeCheckPing: number = 0;
+  // Speed-hack detection: strikes de checagens CONSECUTIVAS com o relógio do cliente adiantado além do
+  // tolerável. Só confirma (e age) após SPEEDHACK_MAX_STRIKES seguidas — um pico isolado (lag de join)
+  // nunca dispara.
+  private speedHackStrikes: number = 0;
+  // Amostra confiável só com ping baixo: durante um lag (ex.: o join, ping ~500ms) a medição de tempo
+  // fica distorcida, então essas amostras são IGNORADAS (nem viram baseline, nem strike).
+  private static readonly SPEEDHACK_MAX_PING_MS = 300;
+  // Drift = quanto o relógio do cliente está ADIANTADO vs o servidor no mesmo intervalo. Acima disto conta strike.
+  private static readonly SPEEDHACK_DRIFT_MS = 250;
+  private static readonly SPEEDHACK_MAX_STRIKES = 2;
   private timeCheckTimeout: NodeJS.Timeout | null = null;
   private lastDataReceivedAt: number = Date.now();
   private livenessTimer: NodeJS.Timeout | null = null;
@@ -458,6 +469,8 @@ export class GameClient {
     }
     this.timeCheckerStartTime = 0;
     this.initialClientTime = 0;
+    this.timeCheckServerBaseline = 0;
+    this.speedHackStrikes = 0;
   }
 
   /** Battle heartbeat watchdog: with the ~1s TimeChecker cadence, no inbound data for IDLE_TIMEOUT_MS
@@ -484,23 +497,45 @@ export class GameClient {
     this.sendPacket(new TimeCheckerPacket({ value1: serverTime, value2: this.lastTimeCheckPing }));
   }
 
-  public handleTimeCheckerResponse(clientTime: number, serverTime: number): void {
+  /** Processa a resposta do TimeChecker e devolve `true` quando um speed hack é CONFIRMADO (drift
+   *  sustentado). O chamador (handler) decide a ação — remover da partida com aviso. */
+  public handleTimeCheckerResponse(clientTime: number, serverTime: number): boolean {
     this.lastTimeCheckPing = Date.now() - this.timeCheckSentTimestamp;
+    const reliable = this.lastTimeCheckPing <= GameClient.SPEEDHACK_MAX_PING_MS;
+    let confirmed = false;
 
+    // Baseline: capturado UMA vez, e só numa amostra confiável (ping baixo). Enquanto o join/lag mantém o
+    // ping alto, adiamos o baseline — assim a origem dos dois relógios (servidor e cliente) fica alinhada
+    // no mesmo instante limpo, sem o offset que gerava o falso "speed hack" logo na entrada.
     if (this.initialClientTime === 0) {
-      this.initialClientTime = clientTime;
+      if (reliable) {
+        this.initialClientTime = clientTime;
+        this.timeCheckServerBaseline = serverTime;
+      }
     } else {
-      const deltaServer = serverTime;
+      // Ambos os deltas medidos a partir do MESMO baseline → num cliente honesto o drift fica ~0.
+      const deltaServer = serverTime - this.timeCheckServerBaseline;
       const deltaClient = clientTime - this.initialClientTime;
-      const diff = Math.abs(deltaServer - deltaClient);
+      const drift = deltaClient - deltaServer; // positivo = relógio do cliente ADIANTADO (direção do speed hack)
 
-      logger.info(`TimeChecker for ${this.user?.username}: deltaServer=${deltaServer}, deltaClient=${deltaClient}, diff=${diff}ms, ping=${this.lastTimeCheckPing}ms`);
+      logger.info(`TimeChecker for ${this.user?.username}: deltaServer=${deltaServer}, deltaClient=${deltaClient}, drift=${drift}ms, ping=${this.lastTimeCheckPing}ms, strikes=${this.speedHackStrikes}`);
 
-      if (diff > 100) {
-        logger.warn(`Potential speed hack detected for user ${this.user?.username}. Time difference: ${diff}ms`);
+      // Amostras não confiáveis (pico de lag) não contam nem a favor nem contra — só as ignora.
+      if (reliable) {
+        if (drift > GameClient.SPEEDHACK_DRIFT_MS) {
+          this.speedHackStrikes++;
+          if (this.speedHackStrikes >= GameClient.SPEEDHACK_MAX_STRIKES) {
+            logger.warn(`Speed hack CONFIRMED for ${this.user?.username} (drift=${drift}ms por ${this.speedHackStrikes} checagens seguidas).`);
+            this.speedHackStrikes = 0;
+            confirmed = true;
+          }
+        } else {
+          this.speedHackStrikes = 0; // drift voltou ao normal → não é sustentado
+        }
       }
     }
 
     this.timeCheckTimeout = setTimeout(() => this.sendTimeCheckerPacket(), 1000);
+    return confirmed;
   }
 }

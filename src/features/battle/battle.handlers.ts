@@ -5,7 +5,7 @@ import { CommandContext } from "@/features/chat/commands/command.types";
 import { GarageWorkflow } from "@/features/garage/garage.workflow";
 import { AddUserToBattleDmPacket, AddUserTeamPacket, CreateBattleResponse, NotifyFriendOfBattlePacket, OnReserveSlotTeamPacket, ReservePlayerSlotDmPacket, UnloadBattleListPacket } from "@/features/lobby/lobby.packets";
 import { BattleHaltPacket } from "@/features/system/halt.packets";
-import { SystemMessage } from "@/features/system/system.packets";
+import { SystemMessage, ShowAlertMessage } from "@/features/system/system.packets";
 import * as ProfilePackets from "@/features/profile/profile.packets";
 import { isProBattleActive, PRO_BATTLE_ENTER_PRICE } from "@/shared/models/passes";
 import { chatModeratorPower } from "@/shared/models/enums/chat-moderator-level.enum";
@@ -157,38 +157,45 @@ export class EnterBattleHandler implements IPacketHandler<BattlePackets.EnterBat
     }
 }
 
+/**
+ * Remove um cliente ONLINE da batalha e o leva para o lobby (ou garagem). É o núcleo do ExitFromBattle,
+ * reusado pelo kick de anti-cheat (speed hack). Faz o anúncio da remoção do tanque, finaliza a saída,
+ * descarrega a batalha no cliente e reseta o estado dele.
+ */
+export async function exitClientFromBattle(client: GameClient, server: GameServer, destination: "lobby" | "garage" = "lobby"): Promise<void> {
+    const user = client.user;
+    const battle = client.currentBattle;
+    const isSpectator = client.isSpectator;
+    if (!user || !battle) return;
+
+    if (!isSpectator) {
+        server.battleService.announceTankRemoval(user, battle, client.battlePosition);
+    }
+    await server.battleService.finalizeBattleExit(user, battle, client.friendsCache, isSpectator);
+
+    client.sendPacket(new BattlePackets.UnloadSpaceBattlePacket());
+
+    client.currentBattle = null;
+    client.isSpectator = false;
+    client.battleState = "suicide";
+    client.stopTimeChecker();
+
+    if (destination === "garage") {
+        GarageWorkflow.enterGarage(client, server);
+    } else {
+        if (client.getState() === "battle_lobby") {
+            client.sendPacket(new UnloadBattleListPacket());
+        }
+        LobbyWorkflow.returnToLobby(client, server, false);
+    }
+}
+
 export class ExitFromBattleHandler implements IPacketHandler<BattlePackets.ExitFromBattlePacket> {
     public readonly packetId = BattlePackets.ExitFromBattlePacket.getId();
 
     public async execute(client: GameClient, server: GameServer, packet: BattlePackets.ExitFromBattlePacket): Promise<void> {
-        const user = client.user;
-        const battle = client.currentBattle;
-        const isSpectator = client.isSpectator;
-
-        if (!user || !battle) {
-            return;
-        }
-
-        if (!isSpectator) {
-            server.battleService.announceTankRemoval(user, battle, client.battlePosition);
-        }
-        await server.battleService.finalizeBattleExit(user, battle, client.friendsCache, isSpectator);
-
-        client.sendPacket(new BattlePackets.UnloadSpaceBattlePacket());
-
-        client.currentBattle = null;
-        client.isSpectator = false;
-        client.battleState = "suicide";
-        client.stopTimeChecker();
-
-        if (packet.layout === 0) {
-            if (client.getState() === "battle_lobby") {
-                client.sendPacket(new UnloadBattleListPacket());
-            }
-            LobbyWorkflow.returnToLobby(client, server, false);
-        } else if (packet.layout === 1) {
-            GarageWorkflow.enterGarage(client, server);
-        }
+        if (!client.user || !client.currentBattle) return;
+        await exitClientFromBattle(client, server, packet.layout === 1 ? "garage" : "lobby");
     }
 }
 
@@ -544,8 +551,15 @@ export class SuicidePacketHandler implements IPacketHandler<BattlePackets.Suicid
 export class TimeCheckerResponseHandler implements IPacketHandler<BattlePackets.TimeCheckerResponsePacket> {
     public readonly packetId = BattlePackets.TimeCheckerResponsePacket.getId();
 
-    public execute(client: GameClient, server: GameServer, packet: BattlePackets.TimeCheckerResponsePacket): void {
-        client.handleTimeCheckerResponse(packet.clientTime, packet.serverTime);
+    public async execute(client: GameClient, server: GameServer, packet: BattlePackets.TimeCheckerResponsePacket): Promise<void> {
+        const speedHackConfirmed = client.handleTimeCheckerResponse(packet.clientTime, packet.serverTime);
+        if (!speedHackConfirmed) return;
+
+        // Speed hack confirmado (drift sustentado): remove da partida e avisa — não desconecta do servidor.
+        const nickname = client.user?.username;
+        await exitClientFromBattle(client, server, "lobby");
+        client.sendPacket(new ShowAlertMessage({ text: "Você foi removido da partida: detectamos comportamento de speed hack." }));
+        logger.warn(`User ${nickname} removido da partida por speed hack.`);
     }
 }
 
