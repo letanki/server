@@ -15,7 +15,7 @@ import { BonusService } from "./bonus.service";
 import { SupplyService } from "./supply.service";
 import { MineService } from "./mine.service";
 import { DominationService } from "./domination.service";
-import { evictMapData, getMapCeilingBox, getMapGeometries } from "@/maps/mapData";
+import { evictMapData, getMapGeometries } from "@/maps/mapData";
 import { evictMapCollision } from "@/maps/mapCollision";
 import logger from "@/utils/logger";
 import { StatsService } from "@/features/stats/stats.service";
@@ -217,13 +217,7 @@ export class BattleService {
         const geometries = getMapGeometries(currentBattle.mapResourceId);
         if (geometries.length === 0) return;
 
-        // Parkour mode has no upper limit — climbing high is the point. Skip the ceiling kill/kick box so only
-        // the side and floor zones still destroy the tank.
-        const ceiling = currentBattle.settings.parkourMode ? getMapCeilingBox(currentBattle.mapResourceId) : null;
-
         for (const box of geometries) {
-            if (box === ceiling) continue;
-
             const isInside =
                 battlePosition.x >= box.minX &&
                 battlePosition.x <= box.maxX &&
@@ -232,10 +226,20 @@ export class BattleService {
                 battlePosition.z >= box.minZ &&
                 battlePosition.z <= box.maxZ;
 
-            if (isInside) {
-                await this.handleSpecialGeometryAction(client, box.action);
-                break;
+            if (!isInside) continue;
+
+            // Parkour: subir e ir pros lados é o jogo — só se MORRE caindo no VOID (coluna sem NENHUMA
+            // construção abaixo). Qualquer zona de kill/kick com qualquer estrutura embaixo (chão, rampa,
+            // parede ou prédio — inclusive áreas "inacessíveis" muradas) é ignorada; só a queda no vazio mata.
+            if (currentBattle.settings.parkourMode) {
+                const supported = this.collision.hasSupportBelow(
+                    currentBattle.mapResourceId, battlePosition.x, battlePosition.y, battlePosition.z,
+                );
+                if (supported) continue; // há construção embaixo → não é queda no void → ignora
             }
+
+            await this.handleSpecialGeometryAction(client, box.action);
+            break;
         }
     }
 

@@ -29,6 +29,23 @@ export class CollisionService {
         return best;
     }
 
+    /** Is there ANY construction (not just a floor to stand on) in the column at (x,y) that reaches the
+     *  tank's height or below? True if any collision box whose XY contains (x,y) starts at/below `z`
+     *  (a wall/building whose top may even be ABOVE the tank still counts), or a ramp surface sits at/below
+     *  `z`. False only over the true VOID — an empty column with no collision at all. Used by parkour so a
+     *  tank explodes ONLY when it actually falls into nothing, never while over/beside any structure. */
+    public hasSupportBelow(mapResourceId: string, x: number, y: number, z: number): boolean {
+        const { boxes, triangles } = getMapCollision(mapResourceId);
+        for (const b of boxes) {
+            if (x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && b.minZ <= z) return true;
+        }
+        for (const t of triangles) {
+            const tz = this._triZAt(t, x, y);
+            if (tz !== null && tz <= z + 1) return true;
+        }
+        return false;
+    }
+
     /** Is there ANY collision (floor, wall, structure, ramp) genuinely BETWEEN the two points? The
      *  straight line is trimmed at both ends (OCCLUSION_TRIM) so the surface a point rests on doesn't
      *  count; only geometry the line passes THROUGH blocks. */
