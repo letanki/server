@@ -106,6 +106,10 @@ export interface UserAttributes {
     proBattleExpiresAt: Date | null;
     rank: number;
     nextRankScore: number;
+    /** Rating exibido no topo do painel do lobby (LobbyData.rating). Cosmético — não liga ao MMR ranqueado. */
+    rating: number;
+    /** Classificação/posição no topo do painel do lobby (LobbyData.place). Cosmético. */
+    place: number;
     /** Competitive matchmaking — LEGACY single-mode stats (kept only to seed rankedModes once). */
     ranked: {
         mmr: number;
@@ -178,6 +182,8 @@ const UserSchema = new Schema<UserDocument>({
     proBattleExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 },
     nextRankScore: { type: Number, default: 100 },
+    rating: { type: Number, default: 0, min: 0 },
+    place: { type: Number, default: 0, min: 0 },
     ranked: {
         type: new mongoose.Schema(
             {
