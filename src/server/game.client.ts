@@ -78,6 +78,7 @@ export class GameClient {
     this.godMode = false;
     this.speedMultiplier = 1;
     this.relayPosition = true;
+    this.flyZTarget = null;
     if (this.flyTimer) { clearInterval(this.flyTimer); this.flyTimer = null; }
     this.kills = 0;
     this.deaths = 0;
@@ -214,8 +215,10 @@ export class GameClient {
   // rebroadcast to others — used with /tpothers and /tpself so a visual offset doesn't snap back.
   // Reset on battle change.
   public relayPosition: boolean = true;
-  // Staff /flyto: interval that steps the tank toward a target each tick. While set, Move/FullMove
-  // from the client are ignored (fly owns position). Cleared on battle change / /flyto stop.
+  // Staff /flyto: locks/glides only Z (height). XY still come from the client's Move/FullMove.
+  // flyZTarget set => active; flyTimer steps Z toward the target. Cleared on battle change / stop.
+  public flyZTarget: number | null = null;
+  public flyZSpeed: number = 800;
   public flyTimer: ReturnType<typeof setInterval> | null = null;
   public equipmentChangedInGarage: boolean = false;
   // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose

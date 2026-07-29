@@ -75,60 +75,64 @@ export function teleportTank(client: GameClient, target: IVector3, options: Tele
     }, intervalMs);
 }
 
-/** Cancels an in-progress /flyto glide. */
+/** Cancels /flyto height lock. Returns true if something was active. */
 export function stopFly(client: GameClient): boolean {
-    if (!client.flyTimer) return false;
-    clearInterval(client.flyTimer);
-    client.flyTimer = null;
-    return true;
+    const was = client.flyZTarget !== null || client.flyTimer !== null;
+    client.flyZTarget = null;
+    if (client.flyTimer) {
+        clearInterval(client.flyTimer);
+        client.flyTimer = null;
+    }
+    return was;
 }
 
 /**
- * Glides the tank toward `target` at `speed` units/sec, stepping every FLY_TICK_MS with MovePackets
- * (velocity + position) so it looks like walking through the air. While active, client Move/FullMove
- * are ignored (see battle.handlers). Replaces any previous fly on this client.
+ * Locks/glides only the tank's Z (height) to `targetZ` at `speed` u/s. XY keep coming from the
+ * client's Move/FullMove (see battle.handlers — Z is overwritten there). A tick keeps climbing even
+ * while standing still. Replaces any previous /flyto on this client.
  */
-export function flyTankTo(client: GameClient, target: IVector3, speed = DEFAULT_FLY_SPEED): void {
+export function flyTankToZ(client: GameClient, targetZ: number, speed = DEFAULT_FLY_SPEED): void {
     const battle = client.currentBattle;
     if (!client.user || !battle || !client.battlePosition) return;
     const battleId = battle.battleId;
     stopFly(client);
+    client.flyZTarget = targetZ;
+    client.flyZSpeed = speed;
 
     const tick = (): void => {
         const b = client.currentBattle;
-        if (!client.user || !b || b.battleId !== battleId || !client.battlePosition) {
+        const target = client.flyZTarget;
+        if (!client.user || !b || b.battleId !== battleId || !client.battlePosition || target === null) {
             stopFly(client);
             return;
         }
         const pos = client.battlePosition;
-        const dx = target.x - pos.x;
-        const dy = target.y - pos.y;
-        const dz = target.z - pos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= FLY_ARRIVE) {
-            b.broadcast(new MovePacket({
-                nickname: client.user.username,
-                angularVelocity: ZERO,
-                control: 0,
-                linearVelocity: ZERO,
-                orientation: client.battleOrientation ?? ZERO,
-                position: { ...target },
-            }));
-            client.battlePosition = { ...target };
-            stopFly(client);
+        const dz = target - pos.z;
+        if (Math.abs(dz) <= FLY_ARRIVE) {
+            if (pos.z !== target) {
+                const locked = { x: pos.x, y: pos.y, z: target };
+                b.broadcast(new MovePacket({
+                    nickname: client.user.username,
+                    angularVelocity: ZERO,
+                    control: 0,
+                    linearVelocity: ZERO,
+                    orientation: client.battleOrientation ?? ZERO,
+                    position: locked,
+                }));
+                client.battlePosition = locked;
+            }
+            // Stay locked: keep the timer so idle clients don't sink; Move handler also forces Z.
             return;
         }
-        const step = Math.min(speed * (FLY_TICK_MS / 1000), dist);
-        const inv = 1 / dist;
-        const vx = dx * inv * speed;
-        const vy = dy * inv * speed;
-        const vz = dz * inv * speed;
-        const next = { x: pos.x + dx * inv * step, y: pos.y + dy * inv * step, z: pos.z + dz * inv * step };
+        const step = Math.min(client.flyZSpeed * (FLY_TICK_MS / 1000), Math.abs(dz));
+        const nextZ = pos.z + Math.sign(dz) * step;
+        const next = { x: pos.x, y: pos.y, z: nextZ };
+        const vz = Math.sign(dz) * client.flyZSpeed;
         b.broadcast(new MovePacket({
             nickname: client.user.username,
             angularVelocity: ZERO,
             control: 0,
-            linearVelocity: { x: vx, y: vy, z: vz },
+            linearVelocity: { x: 0, y: 0, z: vz },
             orientation: client.battleOrientation ?? ZERO,
             position: next,
         }));
@@ -138,3 +142,10 @@ export function flyTankTo(client: GameClient, target: IVector3, speed = DEFAULT_
     tick();
     client.flyTimer = setInterval(tick, FLY_TICK_MS);
 }
+
+/** Effective Z while /flyto is active (locked target, or current if still climbing). */
+export function flyZOr(client: GameClient, fallbackZ: number): number {
+    if (client.flyZTarget === null) return fallbackZ;
+    return client.battlePosition?.z ?? client.flyZTarget;
+}
+

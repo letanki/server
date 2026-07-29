@@ -13,6 +13,7 @@ import { LobbyWorkflow } from "@/features/lobby/lobby.workflow";
 import { GameClient } from "@/server/game.client";
 import { GameServer } from "@/server/game.server";
 import { IPacketHandler } from "@/shared/interfaces/ipacket-handler";
+import { flyZOr } from "@/features/battle/teleport.util";
 import User, { UserDocument } from "@/shared/models/user.model";
 import logger from "@/utils/logger";
 import { Battle, BattleMode } from "./battle.model";
@@ -207,28 +208,28 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
             return;
         }
 
-        if (client.flyTimer) {
-            client.battleOrientation = packet.orientation;
-            client.turretControl = packet.control;
-            await server.battleService.checkPlayerPosition(client);
-            return;
-        }
-
-        client.battlePosition = packet.position;
         client.battleOrientation = packet.orientation;
         client.turretControl = packet.control;
 
+        // /flyto: keep client XY/velocity, force Z from the height lock (client gravity would pull down).
+        const position = client.flyZTarget !== null
+            ? { x: packet.position.x, y: packet.position.y, z: flyZOr(client, packet.position.z) }
+            : packet.position;
+        const linearVelocity = client.flyZTarget !== null
+            ? { x: packet.linearVelocity.x, y: packet.linearVelocity.y, z: 0 }
+            : packet.linearVelocity;
+        client.battlePosition = position;
+
         const battle = client.currentBattle;
 
-        // /relay off: server still tracks position (combat/mines) but others keep whatever visual they have.
         if (client.relayPosition) {
             const fullMovePacket = new BattlePackets.FullMovePacket({
                 nickname: client.user.username,
                 angularVelocity: packet.angularVelocity,
                 control: packet.control,
-                linearVelocity: packet.linearVelocity,
+                linearVelocity,
                 orientation: packet.orientation,
-                position: packet.position,
+                position,
                 direction: packet.direction,
             });
             battle.broadcastRaw(fullMovePacket.write(), fullMovePacket.getId(), client.user.id);
@@ -246,17 +247,16 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
             return;
         }
 
-        if (client.flyTimer) {
-            // Keep orientation/turret from the client if useful, but position belongs to /flyto.
-            client.battleOrientation = packet.orientation;
-            client.turretControl = packet.control;
-            await server.battleService.checkPlayerPosition(client);
-            return;
-        }
-
-        client.battlePosition = packet.position;
         client.battleOrientation = packet.orientation;
         client.turretControl = packet.control;
+
+        const position = client.flyZTarget !== null
+            ? { x: packet.position.x, y: packet.position.y, z: flyZOr(client, packet.position.z) }
+            : packet.position;
+        const linearVelocity = client.flyZTarget !== null
+            ? { x: packet.linearVelocity.x, y: packet.linearVelocity.y, z: 0 }
+            : packet.linearVelocity;
+        client.battlePosition = position;
 
         const battle = client.currentBattle;
 
@@ -265,9 +265,9 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
                 nickname: client.user.username,
                 angularVelocity: packet.angularVelocity,
                 control: packet.control,
-                linearVelocity: packet.linearVelocity,
+                linearVelocity,
                 orientation: packet.orientation,
-                position: packet.position,
+                position,
             });
             battle.broadcastRaw(movePacket.write(), movePacket.getId(), client.user.id);
         }
