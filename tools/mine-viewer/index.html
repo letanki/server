@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>LT mine hitbox viewer</title>
+<!--
+  Simulador de MINA por carroceria (abra direto no navegador; Three.js vem de CDN). Replica a math do
+  servidor CORRIGIDO (mine.service.ts):
+    - raycastGroundZ  : maior topo de colisão em (x,y) no/abaixo de z.
+    - _snapToGround   : assenta a mina NO CHÃO (igual à bandeira e ao que o cliente desenha — o cliente
+                        ignora o z do pacote e faz o próprio raycast). Não flutua mais.
+    - checkTriggers   : footprint (hull + MINE_FOOTPRINT) + janela vertical estendida por RIDE_HEIGHT p/
+                        baixo (a mina no chão fica ~RIDE_HEIGHT abaixo da origem do tanque que passa).
+  Terreno: uma "borda" (ledge) sintética — plataforma alta à esquerda, chão baixo à direita — reproduzindo
+  o cenário `___ ----|.____`. Ajuste as alturas, dirija o tanque (posX), pule, e SOLTE minas — elas caem no
+  chão. Ao mover o tanque, as minas que o gatilho dele pegaria acendem VERDE. Suba o RIDE_HEIGHT demais e o
+  tanque na plataforma volta a pegar a mina de baixo (o bug). (Linha de visão do mapa não é simulada.)
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font: 13px/1.45 system-ui, sans-serif; background: #14161a; color: #d7dae0; }
+  #panel { position: fixed; top: 0; left: 0; bottom: 0; width: 310px; overflow-y: auto; background: #1c1f26; padding: 12px; box-sizing: border-box; z-index: 2; }
+  #panel h1 { font-size: 15px; margin: 0 0 8px; }
+  #panel section { margin-bottom: 10px; border-top: 1px solid #30343d; padding-top: 8px; }
+  #panel label { display: block; margin: 6px 0 1px; }
+  #panel select { width: 100%; background: #0f1114; color: #d7dae0; border: 1px solid #3a3f4a; border-radius: 3px; padding: 3px 4px; box-sizing: border-box; }
+  #panel input[type=range] { width: 100%; }
+  #panel button { background: #2f6fed; color: #fff; border: 0; border-radius: 4px; padding: 6px 10px; cursor: pointer; margin: 6px 4px 0 0; font-weight: 600; }
+  #panel button.sec { background: #3a3f4a; font-weight: 400; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .row > span { width: 16px; color: #8a90a0; }
+  .val { font-family: Consolas, monospace; color: #9aa4b8; float: right; }
+  #verdict { font-size: 16px; font-weight: 700; text-align: center; padding: 8px; border-radius: 6px; margin-top: 4px; }
+  #verdict.boom { background: #14361c; color: #7aff9c; } #verdict.safe { background: #23262e; color: #9aa4b8; }
+  #mines { font-family: Consolas, monospace; font-size: 11px; white-space: pre-wrap; color: #9aa4b8; max-height: 150px; overflow-y: auto; margin-top: 6px; }
+  #mines .float { color: #ffcf6b; }
+  #canvas-wrap { position: absolute; inset: 0 0 0 310px; }
+  .legend span { display: inline-block; width: 11px; height: 11px; margin-right: 5px; border-radius: 2px; vertical-align: middle; }
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  } }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>Mina — simulador de soltura/gatilho</h1>
+
+  <section>
+    <label>Carroceria (hull)</label>
+    <select id="hull"></select>
+    <div id="hullinfo" class="val" style="float:none;margin-top:3px;"></div>
+  </section>
+
+  <section>
+    <label>Terreno (borda)</label>
+    <div class="row"><span>Alto</span><input type="range" id="topZ" min="0" max="1500" step="10" value="800"><span class="val" id="topZv"></span></div>
+    <div class="row"><span>Baixo</span><input type="range" id="botZ" min="-500" max="800" step="10" value="0"><span class="val" id="botZv"></span></div>
+    <div class="row"><span>Borda</span><input type="range" id="edgeX" min="-800" max="800" step="10" value="0"><span class="val" id="edgeXv"></span></div>
+  </section>
+
+  <section>
+    <label>Gatilho — altura de repouso (RIDE_HEIGHT)</label>
+    <div class="row"><span>Ride</span><input type="range" id="ride" min="0" max="300" step="5" value="120"><span class="val" id="ridev"></span></div>
+    <div style="color:#8a90a0;margin-top:2px;">A mina fica NO CHÃO (visual do cliente). A janela do gatilho estende esse tanto p/ baixo para pegar a mina no chão. Alto demais = tanque numa borda acima pega a mina de baixo.</div>
+  </section>
+
+  <section>
+    <label>Tanque</label>
+    <div class="row"><span>X</span><input type="range" id="posX" min="-1500" max="1500" step="10" value="-500"><span class="val" id="posXv"></span></div>
+    <div class="row"><span>Pulo</span><input type="range" id="jump" min="0" max="1200" step="10" value="0"><span class="val" id="jumpv"></span></div>
+    <div class="row"><span>P</span><input type="range" id="rx" min="-90" max="90" step="1" value="0"><span class="val" id="rxv"></span></div>
+    <div class="row"><span>R</span><input type="range" id="ry" min="-90" max="90" step="1" value="0"><span class="val" id="ryv"></span></div>
+    <div class="row"><span>Y</span><input type="range" id="rz" min="-180" max="180" step="1" value="0"><span class="val" id="rzv"></span></div>
+    <div style="color:#8a90a0;margin-top:2px;">Pulo = altura acima do chão (a mina cai no chão de qualquer jeito)</div>
+  </section>
+
+  <section>
+    <button id="drop">💣 Soltar mina</button>
+    <button id="clear" class="sec">Limpar minas</button>
+    <button id="resetview" class="sec">Câmera</button>
+    <div id="verdict" class="safe">—</div>
+    <div id="mines"></div>
+  </section>
+
+  <section class="legend">
+    <div><span style="background:#cfd6e4;outline:1px solid #888;"></span>hitbox físico do hull</div>
+    <div><span style="background:#3fae54;"></span>volume de gatilho (footprint + janela Z)</div>
+    <div><span style="background:#e6b800;"></span>mina assentada · <span style="background:#33dd66;"></span>pegaria o tanque atual</div>
+    <div><span style="background:#6b74e6;"></span>terreno · linha pontilhada = soltura → assentamento</div>
+  </section>
+</div>
+<div id="canvas-wrap"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// ---- Dados do servidor ----
+const MINE_FOOTPRINT = 20, MINE_HEIGHT = 30, RIDE = 89; // RIDE = altura de repouso aprox. (só p/ desenhar o tanque no chão)
+const HULLS = {
+  dictator:{halfX:181.5,halfY:321.8,zMin:0,zMax:231}, hornet:{halfX:138.6,halfY:256,zMin:0,zMax:162},
+  hornet_xt:{halfX:138.6,halfY:256,zMin:0,zMax:162}, hunter:{halfX:165,halfY:262,zMin:0,zMax:181.7},
+  mammoth:{halfX:184.9,halfY:311,zMin:0,zMax:177.9}, mammoth_xt:{halfX:184.9,halfY:311,zMin:0,zMax:177.9},
+  titan:{halfX:165,halfY:305.3,zMin:0,zMax:198}, titan_xt:{halfX:165,halfY:305.3,zMin:0,zMax:198},
+  viking:{halfX:171.4,halfY:270.3,zMin:0,zMax:145.1}, viking_xt:{halfX:171.4,halfY:270.3,zMin:0,zMax:145.1},
+  wasp:{halfX:132,halfY:231,zMin:0,zMax:181.5}, wasp_xt:{halfX:132,halfY:231,zMin:0,zMax:181.5},
+};
+
+// ---- Terreno sintético (borda): plataforma alta em x<edgeX, chão baixo em toda parte ----
+let TERR = { topZ:800, botZ:0, edgeX:0 };
+const HALF = 2000, SLAB = 80;
+// raycastGroundZ: maior topo de colisão em (x,y) no/abaixo de fromZ (réplica). Aqui: laje baixa (sempre) e
+// laje alta (só x<edgeX). Retorna null se nada abaixo.
+function raycastGroundZ(x, y, fromZ) {
+  let best = null;
+  const slabs = [{ top: TERR.botZ }];
+  if (x <= TERR.edgeX) slabs.push({ top: TERR.topZ });
+  for (const s of slabs) if (s.top <= fromZ + 1 && (best === null || s.top > best)) best = s.top;
+  return best;
+}
+// _snapToGround: assenta a mina NO CHÃO sob seu (x,y) — igual à bandeira e ao que o cliente desenha.
+// Ignora a altura do placer (a origem do tanque que passa por cima é compensada no gatilho por RIDE_HEIGHT).
+function snapToGround(pos) {
+  const groundAtMine = raycastGroundZ(pos.x, pos.y, pos.z);
+  if (groundAtMine === null) return { ...pos };
+  return { x: pos.x, y: pos.y, z: groundAtMine };
+}
+
+// ---- Rotação + gatilho (réplica de checkTriggers) ----
+function rot(rx, ry, rz) {
+  const sX=Math.sin(rx),cX=Math.cos(rx),sY=Math.sin(ry),cY=Math.cos(ry),sZ=Math.sin(rz),cZ=Math.cos(rz);
+  return { ma:cZ*cY,mb:cZ*sY*sX-sZ*cX,mc:cZ*sY*cX+sZ*sX, me:sZ*cY,mf:sZ*sY*sX+cZ*cX,mg:sZ*sY*cX-cZ*sX, mi:-sY,mj:cY*sX,mk:cY*cX };
+}
+function evaluate(hull, r, dx, dy, dz, ride) {
+  const localX=r.ma*dx+r.me*dy+r.mi*dz, localY=r.mb*dx+r.mf*dy+r.mj*dz, localZ=r.mc*dx+r.mg*dy+r.mk*dz;
+  const reachX=hull.halfX+MINE_FOOTPRINT, reachY=hull.halfY+MINE_FOOTPRINT;
+  const horiz=Math.abs(localX)<reachX && Math.abs(localY)<reachY;
+  const upright=r.mk>=0.5, hh=hull.zMax-hull.zMin;
+  const zLow=upright?hull.zMin-ride-MINE_HEIGHT:hull.zMin-hh-ride-MINE_HEIGHT, zHigh=upright?hull.zMax+MINE_HEIGHT:hull.zMax+hh+MINE_HEIGHT;
+  return { localX, localY, localZ, reachX, reachY, zLow, zHigh, horiz, vert: localZ>=zLow&&localZ<=zHigh, explode: horiz&&localZ>=zLow&&localZ<=zHigh };
+}
+
+// ---- Cena (Z-up) ----
+const wrap = document.getElementById("canvas-wrap");
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x14161a);
+const camera = new THREE.PerspectiveCamera(55, 1, 1, 40000); camera.up.set(0,0,1);
+const renderer = new THREE.WebGLRenderer({ antialias:true }); wrap.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+const dl = new THREE.DirectionalLight(0xffffff, 0.5); dl.position.set(600,900,1400); scene.add(dl);
+const axes = new THREE.AxesHelper(300); scene.add(axes);
+
+const terrainGroup = new THREE.Group(); scene.add(terrainGroup);
+const tank = new THREE.Group(); scene.add(tank);
+let hullMesh, trigMesh;
+const mineGroup = new THREE.Group(); scene.add(mineGroup);
+const mines = []; // { drop:{x,y,z}, pos:{x,y,z} }
+
+function slab(x0,x1,top,color) {
+  const g = new THREE.BoxGeometry(x1-x0, 2*HALF, SLAB); g.translate((x0+x1)/2, 0, top - SLAB/2);
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, transparent:true, opacity:0.6 }));
+}
+function rebuildTerrain() {
+  terrainGroup.clear();
+  terrainGroup.add(slab(-HALF, HALF, TERR.botZ, 0x4a527a));          // chão baixo (toda extensão)
+  terrainGroup.add(slab(-HALF, TERR.edgeX, TERR.topZ, 0x6b74e6));    // plataforma alta (x<edge)
+}
+function edges(sx,sy,sz,cz,color){ const g=new THREE.BoxGeometry(sx,sy,sz); g.translate(0,0,cz); return new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({color})); }
+function solid(sx,sy,sz,cz,color,op){ const g=new THREE.BoxGeometry(sx,sy,sz); g.translate(0,0,cz); return new THREE.Mesh(g, new THREE.MeshBasicMaterial({color,transparent:true,opacity:op,depthWrite:false})); }
+
+// ---- estado / UI ----
+const el = id => document.getElementById(id);
+const hullSel = el("hull");
+Object.keys(HULLS).forEach(h=>{const o=document.createElement("option");o.value=o.textContent=h;hullSel.appendChild(o);});
+hullSel.value = "wasp";
+
+function tankState() {
+  const h = HULLS[hullSel.value];
+  TERR.topZ=+el("topZ").value; TERR.botZ=+el("botZ").value; TERR.edgeX=+el("edgeX").value;
+  const posX=+el("posX").value, jump=+el("jump").value;
+  const ground = raycastGroundZ(posX, 0, 1e9) ?? TERR.botZ;   // chão sob o tanque
+  const z = ground + RIDE + jump;                             // origem do tanque
+  const r = rot(+el("rx").value*Math.PI/180, +el("ry").value*Math.PI/180, +el("rz").value*Math.PI/180);
+  return { h, posX, jump, ground, pos:{x:posX,y:0,z}, r };
+}
+
+function rebuildTank(h){
+  if(hullMesh) tank.remove(hullMesh);
+  hullMesh = edges(2*h.halfX, 2*h.halfY, h.zMax-h.zMin, (h.zMin+h.zMax)/2, 0xcfd6e4); tank.add(hullMesh);
+  el("hullinfo").textContent = `halfX ${h.halfX} · halfY ${h.halfY} · zMax ${h.zMax}`;
+}
+
+function refresh() {
+  const s = tankState();
+  ["topZ","botZ","edgeX","posX","jump","rx","ry","rz","ride"].forEach(id=>el(id+"v").textContent=el(id).value);
+  rebuildTerrain();
+
+  // orienta e posiciona o tanque
+  const r = s.r;
+  const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(r.ma,r.me,r.mi), new THREE.Vector3(r.mb,r.mf,r.mj), new THREE.Vector3(r.mc,r.mg,r.mk));
+  tank.quaternion.setFromRotationMatrix(m);
+  tank.position.set(s.pos.x, s.pos.y, s.pos.z);
+  // volume de gatilho do tanque atual
+  if(trigMesh) tank.remove(trigMesh);
+  const ride=+el("ride").value; const ev0 = evaluate(s.h, r, 0,0,0, ride);
+  trigMesh = solid(2*ev0.reachX, 2*ev0.reachY, ev0.zHigh-ev0.zLow, (ev0.zLow+ev0.zHigh)/2, 0x3fae54, 0.16); tank.add(trigMesh);
+
+  // minas: desenha + testa contra o tanque atual (como vítima)
+  mineGroup.clear();
+  let hits = 0; let list = "";
+  mines.forEach((mine, i) => {
+    const ev = evaluate(s.h, r, mine.pos.x - s.pos.x, mine.pos.y - s.pos.y, mine.pos.z - s.pos.z, ride);
+    if (ev.explode) hits++;
+    const sph = new THREE.Mesh(new THREE.SphereGeometry(26,20,14), new THREE.MeshBasicMaterial({ color: ev.explode?0x33dd66:0xe6b800 }));
+    sph.position.set(mine.pos.x, mine.pos.y, mine.pos.z); mineGroup.add(sph);
+    // linha soltura -> assentamento (mostra o "flutuar")
+    const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(mine.drop.x,mine.drop.y,mine.drop.z), new THREE.Vector3(mine.pos.x,mine.pos.y,mine.pos.z)]),
+      new THREE.LineDashedMaterial({ color:0x8a90a0, dashSize:24, gapSize:16 })); ln.computeLineDistances(); mineGroup.add(ln);
+    const dzToTank = Math.round(s.pos.z - mine.pos.z); // quanto a origem do tanque atual está acima da mina
+    list += `#${i+1} no chão z=${mine.pos.z.toFixed(0)} (soltou de z=${mine.drop.z.toFixed(0)}) — tanque ${dzToTank>=0?'+'+dzToTank:dzToTank} acima${ev.explode?' <span class="float">PEGA</span>':''}\n`;
+  });
+  const v = el("verdict");
+  v.textContent = mines.length ? `${hits}/${mines.length} mina(s) pegariam este tanque` : "solte uma mina";
+  v.className = hits>0 ? "boom" : "safe";
+  el("mines").innerHTML = list || "(nenhuma mina)";
+}
+
+function dropMine() {
+  const s = tankState();
+  const drop = { x: s.pos.x, y: s.pos.y, z: s.pos.z };      // solta na posição (origem) do tanque
+  const pos = snapToGround(drop);                          // assenta NO CHÃO (igual bandeira/cliente)
+  mines.push({ drop, pos });
+  refresh();
+}
+
+["topZ","botZ","edgeX","posX","jump","rx","ry","rz","ride"].forEach(id=>el(id).addEventListener("input", refresh));
+hullSel.addEventListener("change", ()=>{ rebuildTank(HULLS[hullSel.value]); refresh(); });
+el("drop").addEventListener("click", dropMine);
+el("clear").addEventListener("click", ()=>{ mines.length=0; refresh(); });
+el("resetview").addEventListener("click", resetView);
+
+function resetView(){ controls.target.set(0,0,TERR.topZ/2); camera.position.set(1600,-2200,1600); controls.update(); }
+function resize(){ const w=wrap.clientWidth, h=wrap.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+window.addEventListener("resize", resize);
+
+rebuildTank(HULLS[hullSel.value]); resetView(); resize(); refresh();
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>

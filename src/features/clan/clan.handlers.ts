@@ -197,8 +197,19 @@ export class LeaveClanHandler implements IPacketHandler<ClanPackets.LeaveClanPac
     public async execute(client: GameClient, server: GameServer): Promise<void> {
         if (!client.user) return;
         const username = client.user.username;
-        const result = await server.clanService.leaveClan(client.user);
-        if (!result) return;
+        logger.info(`[clan-leave] ${username} requested leave (clanId=${client.user.clanId ?? "null"}).`);
+        let result;
+        try {
+            result = await server.clanService.leaveClan(client.user);
+        } catch (error: any) {
+            logger.error(`[clan-leave] leaveClan threw for ${username}: ${error?.message}`, { stack: error?.stack });
+            return;
+        }
+        if (!result) {
+            logger.warn(`[clan-leave] leaveClan returned null for ${username} (not in a clan / clan gone).`);
+            return;
+        }
+        logger.info(`[clan-leave] ${username} left OK (wasLeader=${result.wasLeader}, disbanded=${result.disbanded}); sending leaver packets.`);
         // Leaver: close the window, notify, start the cooldown, clear their clan tag.
         client.sendPacket(new ClanPackets.CloseClanWindowPacket());
         client.sendPacket(new ClanPackets.MemberStatusNotifyPacket({ username }));

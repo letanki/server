@@ -465,6 +465,12 @@ export class BattleService {
         this._evictMapCachesIfUnused(battle.mapResourceId);
     }
 
+    /** Topo do chão sob (x,y) no/abaixo de z (ou null sobre o vazio). Delega ao CollisionService — usado por
+     *  ferramentas de debug (ex.: /pos mostra a altura de repouso do tanque = z − este chão). */
+    public groundZAt(mapResourceId: string, x: number, y: number, z: number): number | null {
+        return this.collision.raycastGroundZ(mapResourceId, x, y, z);
+    }
+
     /** Frees a map's cached data (battle data + collision) once no active battle uses it anymore. */
     private _evictMapCachesIfUnused(mapResourceId: string): void {
         if (this.server.lobbyService.getBattles().some((b) => b.mapResourceId === mapResourceId)) return;

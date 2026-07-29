@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>LT equipment viewer</title>
+<!--
+  Carrega o MODELO REAL (.3ds + textura) de uma carroceria da nossa resource e desenha o HITBOX de colisão
+  em volta + a ORIGEM (base do modelo) + o battlePosition (onde o servidor referencia o tanque, ~RIDE_HEIGHT
+  acima) + a MINA no chão + o VOLUME DE GATILHO. Serve pra ver o descasamento: o hitbox do servidor é
+  ancorado no battlePosition, que fica ~metade da altura ACIMA da base do modelo — por isso a mina no chão
+  precisa do RIDE_HEIGHT pra ser alcançada.
+
+  IMPORTANTE: sirva a PARTIR DA RAIZ do repo (as texturas/.3ds são buscadas por HTTP):
+    cd LT-Server && python -m http.server 8778
+    abra  http://localhost:8778/tools/equipment-viewer/index.html
+-->
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;font:13px/1.45 system-ui,sans-serif;background:#14161a;color:#d7dae0;}
+  #panel{position:fixed;top:0;left:0;bottom:0;width:290px;overflow-y:auto;background:#1c1f26;padding:12px;box-sizing:border-box;z-index:2;}
+  #panel h1{font-size:15px;margin:0 0 8px;}
+  #panel section{margin-bottom:10px;border-top:1px solid #30343d;padding-top:8px;}
+  #panel label{display:block;margin:6px 0 2px;}
+  #panel select{width:100%;background:#0f1114;color:#d7dae0;border:1px solid #3a3f4a;border-radius:3px;padding:3px 4px;box-sizing:border-box;}
+  #panel .chk{display:flex;align-items:center;gap:6px;margin:4px 0;cursor:pointer;}
+  #info{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;color:#9aa4b8;}
+  #status{font-size:12px;color:#ffcf6b;min-height:16px;}
+  #canvas-wrap{position:absolute;inset:0 0 0 290px;}
+  .legend span{display:inline-block;width:11px;height:11px;margin-right:5px;border-radius:2px;vertical-align:middle;}
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  } }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>Visualizador de equipamento</h1>
+  <section>
+    <label>Carroceria</label>
+    <select id="hull"></select>
+    <label>Modificação</label>
+    <select id="mod"><option>0</option><option>1</option><option>2</option><option selected>3</option></select>
+    <div id="status"></div>
+  </section>
+  <section>
+    <label class="chk"><input type="checkbox" id="showModel" checked> modelo (textura)</label>
+    <label class="chk"><input type="checkbox" id="showBox" checked> hitbox do hull</label>
+    <label class="chk"><input type="checkbox" id="showTrig" checked> volume de gatilho da mina</label>
+    <label class="chk"><input type="checkbox" id="showMine" checked> mina no chão</label>
+  </section>
+  <section>
+    <div id="info"></div>
+  </section>
+  <section class="legend">
+    <div><span style="background:#cfd6e4;outline:1px solid #888;"></span>hitbox (halfX/halfY/zMin..zMax)</div>
+    <div><span style="background:#3fae54;"></span>volume de gatilho da mina</div>
+    <div><span style="background:#ff5555;"></span>battlePosition (ref. do servidor)</div>
+    <div><span style="background:#e6b800;"></span>mina · <span style="background:#4a527a;"></span>chão (z=0)</div>
+  </section>
+</div>
+<div id="canvas-wrap"></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TDSLoader } from "three/addons/loaders/TDSLoader.js";
+
+const MINE_FOOTPRINT=20, MINE_HEIGHT=30, RIDE_DEFAULT=120;
+const HULLS={
+  dictator:{halfX:181.5,halfY:321.8,zMin:0,zMax:231}, hornet:{halfX:138.6,halfY:256,zMin:0,zMax:162},
+  hunter:{halfX:165,halfY:262,zMin:0,zMax:181.7}, mammoth:{halfX:184.9,halfY:311,zMin:0,zMax:177.9},
+  titan:{halfX:165,halfY:305.3,zMin:0,zMax:198}, viking:{halfX:171.4,halfY:270.3,zMin:0,zMax:145.1},
+  wasp:{halfX:132,halfY:231,zMin:0,zMax:181.5},
+};
+// repouso medido (/pos). hunter/titan ainda não medidos → default.
+const RIDE={ wasp:89, viking:77, mammoth:96, dictator:114, hornet:82 };
+const rideFor=(h)=>RIDE[h] ?? RIDE_DEFAULT;
+
+const wrap=document.getElementById("canvas-wrap");
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x14161a);
+const camera=new THREE.PerspectiveCamera(50,1,1,40000); camera.up.set(0,0,1);
+const renderer=new THREE.WebGLRenderer({antialias:true}); wrap.appendChild(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
+scene.add(new THREE.AmbientLight(0xffffff,0.9));
+const dl=new THREE.DirectionalLight(0xffffff,0.6); dl.position.set(400,700,1200); scene.add(dl);
+scene.add(new THREE.AxesHelper(200));
+const grid=new THREE.GridHelper(2000,20,0x3a3f4a,0x24272e); grid.rotation.x=Math.PI/2; scene.add(grid); // chão z=0
+
+const el=id=>document.getElementById(id);
+const hullSel=el("hull");
+Object.keys(HULLS).forEach(h=>{const o=document.createElement("option");o.value=o.textContent=h;hullSel.appendChild(o);});
+hullSel.value="wasp";
+
+let modelGroup=null, boxMesh=null, trigMesh=null, mineMesh=null, bpMesh=null;
+const tds=new TDSLoader();
+const texLoader=new THREE.TextureLoader();
+
+function clearObj(o){ if(o){scene.remove(o); o.traverse?.(c=>{c.geometry?.dispose?.(); if(c.material){(Array.isArray(c.material)?c.material:[c.material]).forEach(m=>m.dispose?.());}});} }
+
+function drawOverlays(hull, ride){
+  clearObj(boxMesh); clearObj(trigMesh); clearObj(mineMesh); clearObj(bpMesh);
+  // hitbox do hull: [±halfX, ±halfY, zMin..zMax] com a BASE do modelo no chão (z=0). zMin≈0 = base.
+  const bg=new THREE.BoxGeometry(2*hull.halfX,2*hull.halfY,hull.zMax-hull.zMin); bg.translate(0,0,(hull.zMin+hull.zMax)/2);
+  boxMesh=new THREE.LineSegments(new THREE.EdgesGeometry(bg), new THREE.LineBasicMaterial({color:0xcfd6e4}));
+  boxMesh.visible=el("showBox").checked; scene.add(boxMesh);
+  // battlePosition: onde o servidor referencia o tanque = ride acima do chão (perto do centro do modelo).
+  bpMesh=new THREE.Mesh(new THREE.SphereGeometry(14,16,12), new THREE.MeshBasicMaterial({color:0xff5555}));
+  bpMesh.position.set(0,0,ride); scene.add(bpMesh);
+  // volume de gatilho da mina (frame do servidor): zLow=zMin-ride-MINE_HEIGHT .. zHigh=zMax+MINE_HEIGHT,
+  // RELATIVO ao battlePosition. Em mundo (bp em z=ride): de (ride+zLow) a (ride+zHigh).
+  const zLow=hull.zMin-ride-MINE_HEIGHT, zHigh=hull.zMax-ride+MINE_HEIGHT; // caixa relativa à origem (janela única)
+  const wLow=ride+zLow, wHigh=ride+zHigh;
+  const tg=new THREE.BoxGeometry(2*(hull.halfX+MINE_FOOTPRINT),2*(hull.halfY+MINE_FOOTPRINT),wHigh-wLow); tg.translate(0,0,(wLow+wHigh)/2);
+  trigMesh=new THREE.Mesh(tg, new THREE.MeshBasicMaterial({color:0x3fae54,transparent:true,opacity:0.14,depthWrite:false}));
+  trigMesh.visible=el("showTrig").checked; scene.add(trigMesh);
+  // mina no chão (z=0)
+  mineMesh=new THREE.Mesh(new THREE.SphereGeometry(22,18,12), new THREE.MeshBasicMaterial({color:0xe6b800}));
+  mineMesh.position.set(0,0,0); mineMesh.visible=el("showMine").checked; scene.add(mineMesh);
+
+  el("info").textContent =
+    `hull ${hullSel.value}  half ${hull.halfX}×${hull.halfY}  zMax ${hull.zMax}\n`+
+    `RIDE_HEIGHT (repouso) = ${ride}${RIDE[hullSel.value]===undefined?" (default)":""}\n`+
+    `battlePosition em z=${ride} (base do modelo em z=0)\n`+
+    `gatilho: z ${wLow.toFixed(0)}..${wHigh.toFixed(0)}  → alcança a mina no chão (z=0): ${wLow<=0&&wHigh>=0?"SIM":"NÃO"}`;
+}
+
+async function load(){
+  clearObj(modelGroup); modelGroup=null;
+  const hull=hullSel.value, mod=el("mod").value, ride=rideFor(hull);
+  drawOverlays(HULLS[hull], ride);
+  const base=`../../resources/hull/${hull}/m${mod}/model/v1`;
+  el("status").textContent="carregando modelo…";
+  try{
+    const obj=await tds.loadAsync(`${base}/object.3ds`);
+    const tex=await texLoader.loadAsync(`${base}/details.jpg`).catch(()=>null);
+    if(tex){ tex.colorSpace=THREE.SRGBColorSpace; tex.flipY=false; }
+    obj.traverse(c=>{ if(c.isMesh){ const m=new THREE.MeshLambertMaterial({color:0xffffff, map:tex||null}); c.material=m; } });
+    // base do modelo (menor z) no chão (z=0), centrado em X/Y
+    const bb=new THREE.Box3().setFromObject(obj); const c=bb.getCenter(new THREE.Vector3());
+    obj.position.x-=c.x; obj.position.y-=c.y; obj.position.z-=bb.min.z;
+    obj.visible=el("showModel").checked;
+    modelGroup=obj; scene.add(obj);
+    el("status").textContent="";
+  }catch(e){ el("status").textContent="falha ao carregar .3ds ("+e.message+"). Servindo da RAIZ do repo?"; }
+}
+
+function resetView(){ const h=HULLS[hullSel.value]; controls.target.set(0,0,h.zMax/2); camera.position.set(700,-900,600); controls.update(); }
+function resize(){ const w=wrap.clientWidth,ht=wrap.clientHeight; renderer.setSize(w,ht); camera.aspect=w/ht; camera.updateProjectionMatrix(); }
+window.addEventListener("resize",resize);
+hullSel.addEventListener("change",()=>{load(); resetView();});
+el("mod").addEventListener("change",load);
+el("showModel").addEventListener("change",()=>{ if(modelGroup)modelGroup.visible=el("showModel").checked; });
+el("showBox").addEventListener("change",()=>{ if(boxMesh)boxMesh.visible=el("showBox").checked; });
+el("showTrig").addEventListener("change",()=>{ if(trigMesh)trigMesh.visible=el("showTrig").checked; });
+el("showMine").addEventListener("change",()=>{ if(mineMesh)mineMesh.visible=el("showMine").checked; });
+
+resize(); resetView(); load();
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>

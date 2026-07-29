@@ -28,6 +28,28 @@ const MINE_FOOTPRINT = 20;
 // without missing pitched/rolled hulls. Lower it if mines fire from too far above/below; raise it if flat-
 // ground mines get missed.
 const MINE_HEIGHT = 30;
+// Altura de repouso por carroceria: quão acima do chão fica a ORIGEM (battlePosition.z) de um tanque PARADO
+// em terreno plano. Medida em jogo com /pos (campo "repouso"). Como a mina é guardada NO CHÃO (ver
+// _snapToGround), a origem do tanque que passa por cima fica ~esse tanto acima dela; a janela vertical do
+// gatilho estende esse valor pra BAIXO para pegar a mina no chão. Por carroceria = preciso e o mais APERTADO
+// possível (hull pequeno → janela menor → não pega mina de bordas baixas). XT compartilha a geometria/física
+// da base. Hulls sem entrada usam RIDE_HEIGHT_DEFAULT. Manter pequeno (≠ o DOWN=600 da bandeira) evita que um
+// tanque numa borda acima dispare a mina lá embaixo.
+const RIDE_HEIGHT_DEFAULT = 90; // placeholder p/ hull sem entrada (~mediana dos medidos; passa ereto E capotado)
+// Repouso medido em jogo (/pos, chão plano, parado). É a distância entre o chão (onde a mina fica) e o
+// battlePosition do tanque (~centro do casco). NÃO deriva limpo de zMax/2 — por isso a tabela medida.
+const HULL_RIDE_HEIGHT: Record<string, number> = {
+    wasp: 89,
+    viking: 77,
+    mammoth: 96,
+    dictator: 114,
+    hornet: 82,
+    // TODO medir: hunter, titan (usam RIDE_HEIGHT_DEFAULT até lá).
+};
+/** Altura de repouso da carroceria (com fallback base sem _xt e depois o default). */
+function rideHeightFor(hullId: string): number {
+    return HULL_RIDE_HEIGHT[hullId] ?? HULL_RIDE_HEIGHT[hullId.replace(/_xt$/, "")] ?? RIDE_HEIGHT_DEFAULT;
+}
 const HULL_FALLBACK = { halfX: 165, halfY: 270, zMin: 0, zMax: 180 }; // unknown hull → mid-size box (matches CtfService)
 // Mine damage = flat RANDOM real-HP roll, per the official wiki ("Mine — Damage to opponents 120-240 hp").
 // Confirmed by a clean single-mine capture: Giovana's wasp (180 HP) was ONE-SHOT by a SINGLE mine (health
@@ -84,11 +106,13 @@ export class MineService {
 
     /** Places a mine at an explicit world position, owned by `client`'s user, and returns its id (or null if
      *  it can't be placed). Shared by placeMine (own position) and the debug "mine around me" command. */
-    public placeMineAt(client: GameClient, battle: Battle, position: IVector3): string | null {
+    public placeMineAt(client: GameClient, battle: Battle, position: IVector3, snap: boolean = true): string | null {
         const user = client.user;
         if (!user || client.battleState !== "active" || battle.settings.withoutMines) return null;
         const id = `${++battle.mineCounter}`;
-        const pos = this._snapToGround(client, battle, position);
+        // `snap=false` (debug /mineup): guarda a posição CRUA, sem re-basear no chão — para observar se o
+        // CLIENTE assenta a mina no chão (ignorando o Z do pacote) ou a mostra flutuando no Z enviado.
+        const pos = snap ? this._snapToGround(client, battle, position) : { ...position };
         battle.activeMines.set(id, { id, owner: user.username, ownerTeam: battle.teamOf(user), position: pos, armed: false });
         battle.broadcast(new PutMinePacket({ id, position: pos, owner: user.username }));
         // A placed mine always arms after the same short delay — parkour included. Parkour's ONLY mine
@@ -98,24 +122,16 @@ export class MineService {
         return id;
     }
 
-    /** Re-bases a placement onto the ground beneath its (x,y). A mine is stored at TANK-CENTRE height (that's
-     *  what checkTriggers compares against a passing tank's battlePosition.z), so we take the ground under the
-     *  mine and add the PLACER's own height above its ground. For a normal drop (mine at the placer's exact
-     *  position) this reproduces the placer's z unchanged; for a mine dropped over lower/higher terrain — the
-     *  /mine debug scatter, or a mine dropped mid-jump — it lands the mine at the height a tank driving there
-     *  will actually have, instead of floating at the placer's flat z (which never matched, so it never fired).
-     *  Over the void (no ground) the position is kept as given. */
-    private _snapToGround(client: GameClient, battle: Battle, position: IVector3): IVector3 {
-        const map = battle.mapResourceId;
-        const groundAtMine = this.collision.raycastGroundZ(map, position.x, position.y, position.z);
-        if (groundAtMine === null) return { ...position };
-        const p = client.battlePosition;
-        let offset = 0;
-        if (p) {
-            const groundAtPlacer = this.collision.raycastGroundZ(map, p.x, p.y, p.z);
-            if (groundAtPlacer !== null) offset = p.z - groundAtPlacer;
-        }
-        return { x: position.x, y: position.y, z: groundAtMine + offset };
+    /** Assenta a mina no CHÃO sob seu (x,y) — exatamente como o servidor faz com a bandeira (CtfService.
+     *  dropFlag) e como o CLIENTE renderiza a mina (o cliente faz o próprio raycast do chão e IGNORA o z do
+     *  pacote — ver [[client-mine-rendering]]). Guardar no chão faz a colisão do servidor bater com o visual
+     *  do cliente; a altura do TANQUE que passa por cima (~RIDE_HEIGHT acima do chão) é compensada na janela
+     *  vertical do gatilho (checkTriggers). Antes usávamos a altura do placer, que virava a altura do PULO ao
+     *  soltar no ar e flutuava a mina lá em cima. Sobre o vazio (sem chão) mantém a posição dada. */
+    private _snapToGround(_client: GameClient, battle: Battle, position: IVector3): IVector3 {
+        const groundZ = this.collision.raycastGroundZ(battle.mapResourceId, position.x, position.y, position.z);
+        if (groundZ === null) return { ...position };
+        return { x: position.x, y: position.y, z: groundZ };
     }
 
     private _arm(battle: Battle, id: string): void {
@@ -144,6 +160,7 @@ export class MineService {
         // when pitch=roll=0) and transform each mine offset into the hull's local frame with its transpose
         // (world→local), then test the real per-hull box + the mine footprint.
         const hull = hullCollision[user.equippedHull] ?? HULL_FALLBACK;
+        const rideHeight = rideHeightFor(user.equippedHull); // hoisted: altura de repouso da carroceria (janela vertical)
         const ori = client.battleOrientation;
         const rx = ori?.x ?? 0, ry = ori?.y ?? 0, rz = ori?.z ?? 0;
         const sinX = Math.sin(rx), cosX = Math.cos(rx);
@@ -167,20 +184,16 @@ export class MineService {
             const localY = mb * dx + mf * dy + mj * dz;   // along hull length  (model Y)
             const localZ = mc * dx + mg * dy + mk * dz;   // up through the hull (model Z; 0 = belly/origin)
             if (Math.abs(localX) >= reachX || Math.abs(localY) >= reachY) continue;
-            // Vertical: the hull box is ASYMMETRIC — it spans [zMin=0 (belly at the origin), zMax (top)],
-            // i.e. only ABOVE the origin. `mk` (= cosY·cosX) is the world-up component of the hull's local
-            // up axis: 1 = upright, 0 = on its side, −1 = upside down.
-            // • Upright / on a ramp (mk ≥ 0.5): keep the tight belly→top window so a tank sitting ABOVE a
-            //   floor mine (up on a ramp) maps to a large NEGATIVE localZ and is correctly ignored (the old
-            //   "dies on the ramp without being on the ground" fix stays intact).
-            // • CAPSIZED / heavily tilted (mk < 0.5): the tank rests on its side/roof, so relative to the
-            //   belly-origin a mine it's physically sitting on can land BELOW zMin or ABOVE zMax (its top/
-            //   turret side is what's on the ground). Widen the window symmetrically by the hull height so
-            //   a flipped tank still sets mines off. The tight horizontal footprint still gates it.
-            const upright = mk >= 0.5;
-            const hullHeight = hull.zMax - hull.zMin;
-            const zLow = upright ? hull.zMin - MINE_HEIGHT : hull.zMin - hullHeight - MINE_HEIGHT;
-            const zHigh = upright ? hull.zMax + MINE_HEIGHT : hull.zMax + hullHeight + MINE_HEIGHT;
+            // Vertical: caixa do casco RELATIVA ao battlePosition (a origem do corpo rígido — confirmado no
+            // cliente decompilado: TankBody aplica a posição 1:1 na origem, um ponto FIXO no casco). A mina
+            // fica no chão (ver _snapToGround), ~rideHeight abaixo da origem; o topo do casco fica em
+            // zMax−rideHeight. Como a caixa está ancorada na origem, uma janela ÚNICA basta — a rotação já
+            // embutida em localZ resolve ereto/inclinado/capotado, sem ramo especial (a margem MINE_HEIGHT
+            // cobre o capotado: zMax ≤ 2·rideHeight+MINE_HEIGHT em todos os hulls). Um tanque numa borda ACIMA
+            // da mina mapeia para um localZ bem abaixo de zLow e é ignorado — é o que impede a mina de baixo
+            // de pegar quem está em cima.
+            const zLow = hull.zMin - rideHeight - MINE_HEIGHT;
+            const zHigh = hull.zMax - rideHeight + MINE_HEIGHT;
             if (localZ < zLow || localZ > zHigh) continue;
             // Line-of-sight: the box alone can't tell "physically ON the mine" from "separated by thin
             // geometry" (a floor slab, a low wall the hull overhangs). If any collision surface lies
