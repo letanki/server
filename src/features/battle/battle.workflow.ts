@@ -435,7 +435,7 @@ export class BattleWorkflow {
             fogColor: gc.fogColor,
             fogFarLimit: gc.farLimit,
             fogNearLimit: gc.nearLimit,
-            gravity: gc.gravity,
+            gravity: battle.gravityOverride ?? gc.gravity,
             skyboxRevolutionSpeed: gc.skyboxRevolutionSpeed,
         };
 

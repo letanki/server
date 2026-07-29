@@ -144,6 +144,12 @@ export class Battle {
      *  the playable shell (parkour exploration/tests). Persists across round restarts; fresh battles
      *  start with bounds ON. checkPlayerPosition skips the boundary boxes while true. */
     public boundsDisabled: boolean = false;
+    /**
+     * Staff /gravity: override da gravidade enviada no InitMap (map_graphic_data.gravity). Null = tema
+     * padrão. O cliente só lê isso na entrada da batalha — quem já está dentro precisa sair e entrar
+     * de novo (não há pacote para mudar a física ao vivo).
+     */
+    public gravityOverride: number | null = null;
     /** Staff toggle (/pause): combat freeze — no damage/kills, no flag/mine/zone interactions. Movement
      *  still relays and the round clock keeps ticking (only gameplay interactions are held). */
     public paused: boolean = false;
