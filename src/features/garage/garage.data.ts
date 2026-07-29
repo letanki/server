@@ -1984,6 +1984,28 @@ export const itemBlueprints = {
             remainingTimeInSec: -1,
             coloring: () => ResourceManager.getIdlowById("paint/galaxy/texture"),
         },
+        {
+            // ALL_RESISTANCE 15 = −15% de dano de qualquer arma (ItemUtils.getPaintResistancePercent).
+            id: "ascension_ii",
+            name: "ASCENÇÃO II",
+            description: "Uma pintura lendária que eleva a proteção do tanque a um novo patamar. Reduz em 15% o dano recebido de qualquer arma.",
+            isInventory: false,
+            index: 7100,
+            next_price: 10000,
+            next_rank: 1,
+            type: 3,
+            baseItemId: () => ResourceManager.getIdlowById("paint/ascension_ii/preview"),
+            previewResourceId: () => ResourceManager.getIdlowById("paint/ascension_ii/preview"),
+            rank: 1,
+            category: "paint",
+            properts: [{ property: "ALL_RESISTANCE", value: "15", subproperties: null }],
+            discount: { percent: 0, timeLeftInSeconds: -1751858089, timeToStartInSeconds: -1751858089 },
+            grouped: false,
+            isForRent: false,
+            price: 10000,
+            remainingTimeInSec: -1,
+            coloring: () => ResourceManager.getIdlowById("paint/ascension_ii/texture"),
+        },
     ],
     // Supplies (consumables). category "inventory", type 4. previewResourceId/baseItemId are the
     // client's built-in inventory icon ids (small fixed numbers), not CDN resource idLows. The 5

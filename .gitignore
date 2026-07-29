@@ -172,3 +172,5 @@ scripts/patch-supplies-center.js
 library-mod.swf
 # Documentação interna / notas de revisão — não versionar.
 docs-internal/
+# Staging local de pinturas novas (copiar para resources/paint/<id>/ antes de commit).
+npaint no commit/
