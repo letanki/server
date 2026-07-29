@@ -33,10 +33,10 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
         }
 
         try {
-            // Mapeamento explícito pacote → settings. Os campos do schema chegam como number/string
-            // crus, então coagimos os enums (o wire manda o .value numérico) e a string anulável do
-            // nome/mapa. As opções não enviadas por este pacote do client ficam desligadas (mesmo
-            // comportamento do cast anterior, onde ficavam undefined/falsy) — mas agora type-checado.
+            // Mapeamento explícito pacote → settings. Enums chegam como number no wire; name/mapId
+            // podem vir null. As opções without*/randomGold/etc. VÊM no CreateBattleRequest — o cliente
+            // as envia quando o criador (com Passe PRO) as marca no formulário; ignorá-las deixava
+            // sempre suprimentos/bônus/minas ligados mesmo com a opção desligada na UI.
             const settings: IBattleCreationSettings = {
                 name: packet.name ?? "",
                 privateBattle: packet.privateBattle,
@@ -54,19 +54,19 @@ export class CreateBattleHandler implements IPacketHandler<LobbyPackets.CreateBa
                 equipmentConstraintsMode: packet.equipmentConstraintsMode as EquipmentConstraintsMode,
                 reArmorEnabled: packet.reArmorEnabled,
                 mapTheme: packet.mapTheme as MapTheme,
-                withoutBonuses: false,
-                withoutCrystals: false,
-                withoutSupplies: false,
-                withoutUpgrades: false,
-                reducedResistances: false,
-                esportDropTiming: false,
-                withoutGoldBoxes: false,
-                withoutGoldSiren: false,
-                withoutGoldZone: false,
-                withoutMedkit: false,
-                withoutMines: false,
-                randomGold: false,
-                dependentCooldownEnabled: false,
+                withoutBonuses: !!packet.withoutBonuses,
+                withoutCrystals: !!packet.withoutCrystals,
+                withoutSupplies: !!packet.withoutSupplies,
+                withoutUpgrades: !!packet.withoutUpgrades,
+                reducedResistances: !!packet.reducedResistances,
+                esportDropTiming: !!packet.esportDropTiming,
+                withoutGoldBoxes: !!packet.withoutGoldBoxes,
+                withoutGoldSiren: !!packet.withoutGoldSiren,
+                withoutGoldZone: !!packet.withoutGoldZone,
+                withoutMedkit: !!packet.withoutMedkit,
+                withoutMines: !!packet.withoutMines,
+                randomGold: !!packet.randomGold,
+                dependentCooldownEnabled: !!packet.dependentCooldownEnabled,
             };
             const battle = server.lobbyService.createBattle(settings, client.user);
 
