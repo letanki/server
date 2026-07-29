@@ -98,7 +98,8 @@ export const mapThemeConfigs: Record<MapTheme, IMapThemeConfig> = {
             ...baseGraphicConfig,
             lightColor: 7829351,
             shadowColor: 5926009,
-            gravity: 300,
+            // Valor bem específico p/ achar no Cheat Engine (scan Double) em mapas SPACE.
+            gravity: 299.102930198,
             skyboxRevolutionSpeed: 0.005,
         },
     },
