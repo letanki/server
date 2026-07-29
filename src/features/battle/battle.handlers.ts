@@ -207,6 +207,13 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
             return;
         }
 
+        if (client.flyTimer) {
+            client.battleOrientation = packet.orientation;
+            client.turretControl = packet.control;
+            await server.battleService.checkPlayerPosition(client);
+            return;
+        }
+
         client.battlePosition = packet.position;
         client.battleOrientation = packet.orientation;
         client.turretControl = packet.control;
@@ -236,6 +243,14 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
 
     public async execute(client: GameClient, server: GameServer, packet: BattlePackets.MoveCommandPacket): Promise<void> {
         if (!client.user || !client.currentBattle) {
+            return;
+        }
+
+        if (client.flyTimer) {
+            // Keep orientation/turret from the client if useful, but position belongs to /flyto.
+            client.battleOrientation = packet.orientation;
+            client.turretControl = packet.control;
+            await server.battleService.checkPlayerPosition(client);
             return;
         }
 

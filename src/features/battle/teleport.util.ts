@@ -5,6 +5,9 @@ import { MovePacket } from "./battle.packets";
 const ZERO = { x: 0, y: 0, z: 0 };
 const DEFAULT_SEND_COUNT = 15;
 const DEFAULT_INTERVAL_MS = 10;
+const FLY_TICK_MS = 50;
+const FLY_ARRIVE = 5; // units — snap + stop when this close
+const DEFAULT_FLY_SPEED = 800; // units/sec (~walk-fast through air)
 
 /** Who receives the MovePacket burst that snaps the tank on screen. */
 export type TeleportAudience = "all" | "others" | "self";
@@ -70,4 +73,68 @@ export function teleportTank(client: GameClient, target: IVector3, options: Tele
         }
         sent++;
     }, intervalMs);
+}
+
+/** Cancels an in-progress /flyto glide. */
+export function stopFly(client: GameClient): boolean {
+    if (!client.flyTimer) return false;
+    clearInterval(client.flyTimer);
+    client.flyTimer = null;
+    return true;
+}
+
+/**
+ * Glides the tank toward `target` at `speed` units/sec, stepping every FLY_TICK_MS with MovePackets
+ * (velocity + position) so it looks like walking through the air. While active, client Move/FullMove
+ * are ignored (see battle.handlers). Replaces any previous fly on this client.
+ */
+export function flyTankTo(client: GameClient, target: IVector3, speed = DEFAULT_FLY_SPEED): void {
+    const battle = client.currentBattle;
+    if (!client.user || !battle || !client.battlePosition) return;
+    const battleId = battle.battleId;
+    stopFly(client);
+
+    const tick = (): void => {
+        const b = client.currentBattle;
+        if (!client.user || !b || b.battleId !== battleId || !client.battlePosition) {
+            stopFly(client);
+            return;
+        }
+        const pos = client.battlePosition;
+        const dx = target.x - pos.x;
+        const dy = target.y - pos.y;
+        const dz = target.z - pos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist <= FLY_ARRIVE) {
+            b.broadcast(new MovePacket({
+                nickname: client.user.username,
+                angularVelocity: ZERO,
+                control: 0,
+                linearVelocity: ZERO,
+                orientation: client.battleOrientation ?? ZERO,
+                position: { ...target },
+            }));
+            client.battlePosition = { ...target };
+            stopFly(client);
+            return;
+        }
+        const step = Math.min(speed * (FLY_TICK_MS / 1000), dist);
+        const inv = 1 / dist;
+        const vx = dx * inv * speed;
+        const vy = dy * inv * speed;
+        const vz = dz * inv * speed;
+        const next = { x: pos.x + dx * inv * step, y: pos.y + dy * inv * step, z: pos.z + dz * inv * step };
+        b.broadcast(new MovePacket({
+            nickname: client.user.username,
+            angularVelocity: ZERO,
+            control: 0,
+            linearVelocity: { x: vx, y: vy, z: vz },
+            orientation: client.battleOrientation ?? ZERO,
+            position: next,
+        }));
+        client.battlePosition = next;
+    };
+
+    tick();
+    client.flyTimer = setInterval(tick, FLY_TICK_MS);
 }
