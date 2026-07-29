@@ -77,6 +77,7 @@ export class GameClient {
     this.activeEffects = [];
     this.godMode = false;
     this.speedMultiplier = 1;
+    this.relayPosition = true;
     this.kills = 0;
     this.deaths = 0;
     this.battleScore = 0;
@@ -208,6 +209,10 @@ export class GameClient {
   // Staff /speed: movement-spec speed multiplier applied by broadcastMovementSpec (composes with
   // nitro/freeze). 1 = normal. Reset on battle change.
   public speedMultiplier: number = 1;
+  // Staff /relay: when false, Move/FullMove still update battlePosition on the server but are NOT
+  // rebroadcast to others — used with /tpothers and /tpself so a visual offset doesn't snap back.
+  // Reset on battle change.
+  public relayPosition: boolean = true;
   public equipmentChangedInGarage: boolean = false;
   // Loadout (base ids) captured when the garage was OPENED. On garage exit, only the categories whose
   // equipped base changed vs this snapshot arm the re-arm 15-min cooldown (so the player can freely swap

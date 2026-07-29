@@ -213,17 +213,19 @@ export class FullMoveCommandHandler implements IPacketHandler<BattlePackets.Full
 
         const battle = client.currentBattle;
 
-        const fullMovePacket = new BattlePackets.FullMovePacket({
-            nickname: client.user.username,
-            angularVelocity: packet.angularVelocity,
-            control: packet.control,
-            linearVelocity: packet.linearVelocity,
-            orientation: packet.orientation,
-            position: packet.position,
-            direction: packet.direction,
-        });
-
-        battle.broadcastRaw(fullMovePacket.write(), fullMovePacket.getId(), client.user.id);
+        // /relay off: server still tracks position (combat/mines) but others keep whatever visual they have.
+        if (client.relayPosition) {
+            const fullMovePacket = new BattlePackets.FullMovePacket({
+                nickname: client.user.username,
+                angularVelocity: packet.angularVelocity,
+                control: packet.control,
+                linearVelocity: packet.linearVelocity,
+                orientation: packet.orientation,
+                position: packet.position,
+                direction: packet.direction,
+            });
+            battle.broadcastRaw(fullMovePacket.write(), fullMovePacket.getId(), client.user.id);
+        }
 
         await server.battleService.checkPlayerPosition(client);
     }
@@ -243,16 +245,17 @@ export class MoveCommandHandler implements IPacketHandler<BattlePackets.MoveComm
 
         const battle = client.currentBattle;
 
-        const movePacket = new BattlePackets.MovePacket({
-            nickname: client.user.username,
-            angularVelocity: packet.angularVelocity,
-            control: packet.control,
-            linearVelocity: packet.linearVelocity,
-            orientation: packet.orientation,
-            position: packet.position,
-        });
-
-        battle.broadcastRaw(movePacket.write(), movePacket.getId(), client.user.id);
+        if (client.relayPosition) {
+            const movePacket = new BattlePackets.MovePacket({
+                nickname: client.user.username,
+                angularVelocity: packet.angularVelocity,
+                control: packet.control,
+                linearVelocity: packet.linearVelocity,
+                orientation: packet.orientation,
+                position: packet.position,
+            });
+            battle.broadcastRaw(movePacket.write(), movePacket.getId(), client.user.id);
+        }
 
         await server.battleService.checkPlayerPosition(client);
     }
