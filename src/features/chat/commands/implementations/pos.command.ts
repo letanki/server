@@ -16,11 +16,11 @@ export default class PosCommand implements ICommand {
             context.reply("Você precisa estar em uma batalha, em campo.");
             return;
         }
-        // Altura de repouso = z da origem do tanque − topo do chão embaixo. Meça em CHÃO PLANO e parado para
-        // calibrar o RIDE_HEIGHT das minas por carroceria (o gatilho da mina estende a janela vertical esse tanto).
+        const fmt = (n: number) => n.toFixed(6);
         const ground = context.server.battleService.groundZAt(battle.mapResourceId, pos.x, pos.y, pos.z);
-        const ride = ground !== null ? Math.round(pos.z - ground) : null;
+        const ride = ground !== null ? (pos.z - ground).toFixed(6) : null;
         const hull = client.user ? `${client.user.equippedHull}_m${client.user.hulls.get(client.user.equippedHull) ?? 0}` : "?";
-        context.reply(`Posição: x=${Math.round(pos.x)} y=${Math.round(pos.y)} z=${Math.round(pos.z)} | hull=${hull} | repouso=${ride ?? "(vazio)"}`);
+        // Valores com casas decimais (o que o servidor recebeu no último Move/FullMove — não lê a memória do cliente).
+        context.reply(`Posição: x=${fmt(pos.x)} y=${fmt(pos.y)} z=${fmt(pos.z)} | hull=${hull} | repouso=${ride ?? "(vazio)"}`);
     }
 }
